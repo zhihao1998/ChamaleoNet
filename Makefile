@@ -13,7 +13,7 @@ SRC_PATH := src
 DBG_PATH := debug
 
 # compile macros
-TARGET_NAME := main
+TARGET_NAME := tsdn
 ifeq ($(OS),Windows_NT)
 	TARGET_NAME := $(addsuffix .exe,$(TARGET_NAME))
 endif
@@ -46,7 +46,7 @@ $(DBG_PATH)/%.o: $(SRC_PATH)/%.c*
 	$(CC) $(COBJFLAGS) $(DBGFLAGS) -o $@ $<
 
 $(TARGET_DEBUG): $(OBJ_DEBUG)
-	$(CC) $(CFLAGS) $(DBGFLAGS) $(OBJ_DEBUG) -o $@
+	$(CC) -o $@ $(DBGFLAGS) $(OBJ_DEBUG) $(CFLAGS)
 
 # phony rules
 .PHONY: makedir
