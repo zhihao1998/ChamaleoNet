@@ -97,9 +97,9 @@ int SameConn(tcp_addrblock *ptpa1, tcp_addrblock *ptpa2, int *pdir)
     if (ptpa1->hash != ptpa2->hash)
         return (0);
 
-    // /* OK, they hash the same, are they REALLY the same function */
-    // *pdir = WhichDir(ptpa1, ptpa2);
-    // return (*pdir != 0);
+    /* OK, they hash the same, are they REALLY the same function */
+    *pdir = WhichDir(ptpa1, ptpa2);
+    return (*pdir != 0);
 }
 
 static tcp_packet **
@@ -156,8 +156,8 @@ NewTTP_2(struct ip *pip, struct tcphdr *ptcp, void *plast)
                 inet_ntoa(pip->ip_dst),
                 ntohs(ptcp->th_dport),
                 ptp->payload_len,
-                (char) ptp->ppayload[0],
-                (char) ptp->ppayload[1]);
+                (char)ptp->ppayload[0],
+                (char)ptp->ppayload[1]);
     }
     return (&ttp[num_tcp_packets]);
 }
@@ -213,6 +213,19 @@ FindTTP(struct ip *pip, struct tcphdr *ptcp, void *plast, int *pdir)
                 *pptph_head = ptph;
             }
             *pdir = dir;
+
+            if (debug > 1)
+            {
+                fprintf(fp_stdout, "found a existing TCP SYN packet from %s:%d to %s:%d with %d bytes of payload %c%c...\n",
+                        inet_ntoa(ptp->addr_pair.a_address.un.ip4),
+                        ptp->addr_pair.a_port,
+                        inet_ntoa(ptp->addr_pair.b_address.un.ip4),
+                        ptp->addr_pair.b_port,
+                        ptp->payload_len,
+                        (char)ptp->ppayload[0],
+                        (char)ptp->ppayload[1]);
+            }
+
             return (pptph_head);
         }
         ptph_last = ptph;
@@ -220,10 +233,10 @@ FindTTP(struct ip *pip, struct tcphdr *ptcp, void *plast, int *pdir)
 
     /* Didn't find it, make a new one, if possible */
 
-    if (debug > 1)
-    {
-        fprintf(fp_stdout, "tracing a new TCP flow\n");
-    }
+    // if (debug > 1)
+    // {
+    //     fprintf(fp_stdout, "tracing a new TCP flow\n");
+    // }
 
     temp_ttp = NewTTP_2(pip, ptcp, plast);
     if (temp_ttp == NULL) /* not enough memory to store the new flow */
