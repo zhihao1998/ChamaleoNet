@@ -28,14 +28,6 @@ struct tp_list_elem
 struct tp_list_elem *tplist_alloc (void);
 void tplist_release (struct tp_list_elem *rel_tplist);
 
-segment *segment_alloc (void);
-void segment_release (segment *);
-void segment_list_info (void);
-
-quadrant *quadrant_alloc (void);
-void quadrant_release (quadrant *);
-void quadrant_list_info (void);
-
 tcp_packet *tp_alloc (void);
 void tp_release (tcp_packet * relesased_tcp_packet);
 

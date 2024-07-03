@@ -210,7 +210,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 	/* TCP */
 
 	if ((ptcp = gettcp(pip, &plast)) != NULL)
-	{
+	{	
 		tcp_handle(pip, ptcp, plast, &dir, pckt_time);
 	}
 

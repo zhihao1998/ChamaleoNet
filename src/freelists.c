@@ -119,7 +119,6 @@ tp_alloc(void)
 void tp_release(tcp_packet *released_tcp_packet)
 {
   struct tp_list_elem *new_tplist_elem;
-  seqspace *sstemp1, *sstemp2;
 
 #ifdef MEMDEBUG
   IN_USE_TP--;
@@ -180,110 +179,6 @@ void tp_list_list()
   fprintf(fp_stdout, "\n");
 }
 
-/* garbage collector for the segment list */
-
-static segment *segment_flist = NULL; /* Pointer to the top of      */
-                                      /* the 'segment' free list.  */
-segment *
-segment_alloc(void)
-{
-  segment *pseg;
-
-#ifdef MEMDEBUG
-  IN_USE_SEGMENT++;
-#endif
-  if (segment_flist == NULL)
-  {
-    pseg = (segment *)MallocZ(sizeof(segment));
-#ifdef MEMDEBUG
-    TOT_SEGMENT++;
-#endif
-  }
-  else
-  {
-    pseg = segment_flist;
-    segment_flist = segment_flist->next;
-  }
-  pseg->next = NULL;
-  return pseg;
-}
-
-void segment_release(segment *rel_segment)
-{
-#ifdef MEMDEBUG
-  IN_USE_SEGMENT--;
-#endif
-  memset(rel_segment, 0, sizeof(segment));
-  rel_segment->next = segment_flist;
-  segment_flist = rel_segment;
-}
-
-void segment_list_info()
-{
-  segment *pseg;
-  int i = 0;
-
-  pseg = segment_flist;
-  while (pseg != NULL)
-  {
-    i++;
-    pseg = pseg->next;
-  }
-  fprintf(fp_stdout, "Segments in flist: %d\n", i);
-}
-
-/* garbage collector for the Quadrant */
-
-static quadrant *quadrant_flist = NULL; /* Pointer to the top of      */
-                                        /* the 'quadrant' free list.  */
-
-quadrant *
-quadrant_alloc(void)
-{
-  quadrant *pquad;
-
-#ifdef MEMDEBUG
-  IN_USE_QUADRANT++;
-#endif
-  if (quadrant_flist == NULL)
-  {
-    pquad = (quadrant *)MallocZ(sizeof(quadrant));
-#ifdef MEMDEBUG
-    TOT_QUADRANT++;
-#endif
-  }
-  else
-  {
-    pquad = quadrant_flist;
-    quadrant_flist = quadrant_flist->next;
-  }
-  pquad->next = NULL;
-  return pquad;
-}
-
-void quadrant_release(quadrant *rel_quadrant)
-{
-#ifdef MEMDEBUG
-  IN_USE_QUADRANT--;
-#endif
-  memset(rel_quadrant, 0, sizeof(quadrant));
-  rel_quadrant->next = quadrant_flist;
-  quadrant_flist = rel_quadrant;
-}
-
-void quadrant_list_info()
-{
-  quadrant *pquad;
-  int i = 0;
-
-  pquad = quadrant_flist;
-  while (pquad != NULL)
-  {
-    i++;
-    pquad = pquad->next;
-  }
-  fprintf(fp_stdout, "Quadrants in flist: %d\n", i);
-}
 
 /* garbage collector for the ptp_snap list */
 

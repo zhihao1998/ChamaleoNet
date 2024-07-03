@@ -14,7 +14,8 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-#define MAX_TCP_PACKETS 180000
+// #define MAX_TCP_PACKETS 180000
+#define MAX_TCP_PACKETS 20
 /* Each time the garbage collection is fired, it scans MAX_TCP_PACKETS_BURST tcp flows */
 // #define MAX_TCP_PACKETS_BURST (MAX_TCP_PACKETS / GARBAGE_SPLIT_RATIO)
 

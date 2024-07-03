@@ -120,14 +120,13 @@ gettcp(struct ip *pip, void **pplast)
 }
 
 /*
- * get_payload:  return a pointer to a payload.
+ * get_ppayload:  return a pointer to a payload.
  * Skips either ip and TCP headers
  */
 char *
-get_payload(struct tcphdr *ptcp, void **pplast)
+get_ppayload(struct tcphdr *ptcp, void **pplast)
 {
   char *ppayload;
-  /* OK, it starts here */
   void *payload_start = ((char *)ptcp + 4 * ptcp->th_off);
   ppayload = (char *)payload_start;
   return (ppayload);

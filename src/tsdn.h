@@ -101,8 +101,9 @@ void InitGlobals(void);
 /* TCP realated */
 int tcp_handle(struct ip *, struct tcphdr *ptcp, void *plast, int *dir, struct timeval *pckt_time);
 struct tcphdr *gettcp (struct ip *pip, void **pplast);
-char *get_payload(struct tcphdr *ptcp, void **pplast);
+char *get_ppayload(struct tcphdr *ptcp, void **pplast);
 void trace_init (void);
+void print_ttp();
 
 /* Return Values for tcp_flow_stat() and udp_flow_stat() */
 #define FLOW_STAT_NULL  0

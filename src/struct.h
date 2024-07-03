@@ -17,6 +17,8 @@ typedef u_char Bool;
 #define FALSE 0
 #define BOOL2STR(b) (b) ? "TRUE" : "FALSE"
 
+#define MAX_PAYLOAD_LENGTH 1500
+
 typedef struct segment
 {
   seqnum seq_firstbyte; /* seqnumber of first byte */
@@ -34,21 +36,6 @@ typedef struct segment
   struct segment *prev;
 } segment;
 
-typedef struct quadrant
-{
-  segment *seglist_head;
-  segment *seglist_tail;
-  Bool full;
-  u_long no_of_segments;
-  struct quadrant *prev;
-  struct quadrant *next;
-} quadrant;
-
-typedef struct seqspace
-{
-  quadrant *pquad[4];
-} seqspace;
-
 /* type for an IP address */
 /* IP address can be either IPv4 or IPv6 */
 typedef struct ipaddr
@@ -62,6 +49,8 @@ typedef struct ipaddr
 #endif
   } un;
 } ipaddr;
+
+typedef struct tcphdr tcphdr;
 
 typedef struct
 {
@@ -82,11 +71,14 @@ typedef struct tcp_packet
   Bool internal_dst;
 
   /* connection information */
-  timeval first_time;
+  timeval arrival_time;
 
   /* payload information */
-  u_char *ppayload; /* start of the tcp payload */
   int payload_len;
+  u_char payload[MAX_PAYLOAD_LENGTH]; /* start of the tcp payload */
+
+  /* location in the ttp array */
+  int loc_ttp;
 } tcp_packet;
 
 
