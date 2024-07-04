@@ -14,8 +14,8 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-// #define MAX_TCP_PACKETS 180000
-#define MAX_TCP_PACKETS 20
+#define MAX_TCP_PACKETS 180000
+// #define MAX_TCP_PACKETS 200
 /* Each time the garbage collection is fired, it scans MAX_TCP_PACKETS_BURST tcp flows */
 // #define MAX_TCP_PACKETS_BURST (MAX_TCP_PACKETS / GARBAGE_SPLIT_RATIO)
 
@@ -32,3 +32,7 @@ Increase this number on high speed network will help ...*/
 /* lists sorted by most recent access.					*/
 /* oughta be prime  and larger than MAX_TCP_PACKETS */
 #define HASH_TABLE_SIZE 2000003
+
+/* TCP_IDLE_TIME in milliseconds: timeout to consider a TCP flow closed if no
+segments are observed since TCP_IDLE_TIME */
+#define TCP_IDLE_TIME 20

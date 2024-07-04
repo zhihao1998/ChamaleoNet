@@ -7,7 +7,7 @@ int search_count = 0;
 extern unsigned long int fcount;
 extern unsigned long int f_TCP_count;
 
-int num_tcp_packets = -1;                   /* how many packets we've allocated */
+int num_tcp_packets = -1;                  /* how many packets we've allocated */
 tcp_packet **ttp = NULL;                   /* array of pointers to allocated packets */
 struct tp_list_elem *tp_list_start = NULL; /* starting point of the linked list */
 struct tp_list_elem *tp_list_curr = NULL;  /* current insert point of the linked list */
@@ -232,15 +232,145 @@ CreateTTP(ptp_snap **pptph_head, struct ip *pip, struct tcphdr *ptcp, void *plas
     return (ptph);
 }
 
+void FreeTTP(tcp_packet *ptp_temp)
+{
+    int j = 0;
+    hash hval;
+    ptp_snap **pptph_head, **pptph_tmp;
+    ptp_snap *ptph_prev, *ptph, *ptph_tmp;
+
+    /* free up hash element->.. */
+    hval = ptp_temp->addr_pair.hash % GLOBALS.Hash_Table_Size;
+    pptph_head = &ptp_hashtable[hval];
+    j = 0;
+    ptph_prev = *pptph_head;
+    for (ptph = *pptph_head; ptph; ptph = ptph->next)
+    {
+        j++;
+        if (ptp_temp->addr_pair.hash == ptph->addr_pair.hash)
+        {
+            ptph_tmp = ptph;
+            if (j == 1)
+            {
+                /* it is the top of the list */
+                ptp_hashtable[hval] = ptph->next;
+            }
+            else
+            {
+                /* it is in the middle of the list */
+                ptph_prev->next = ptph->next;
+            }
+            ptph_release(ptph_tmp);
+            break;
+        }
+        ptph_prev = ptph;
+    }
+    ttp[ptp_temp->loc_ttp] = NULL;
+    tp_release(ptp_temp);
+}
+
+void periodic_scanning()
+{
+    struct timeval tv_scan_start;
+    struct timeval tv_scan_end;
+    gettimeofday(&tv_scan_start, NULL);
+
+    tcp_packet *ptp;
+    int ix, dir, j;
+    extern ptp_snap **ptp_hashtable;
+    ptp_snap *ptph_tmp, *ptph, *ptph_prev;
+    ptp_snap **pptph_head = NULL;
+    double elapsed_time;
+    extern host_status **active_host_hashtable;
+    hash hval;
+    int freed_pkt_num = 0;
+
+    for (ix = 0; ix < GLOBALS.Max_TCP_Packets; ix += 1)
+    {
+        ptp = ttp[ix];
+        if (ptp == NULL)
+            continue;
+        elapsed_time = elapsed(ptp->arrival_time, current_time) / US_PER_MS;
+        if (elapsed_time > GLOBALS.TCP_Idle_Time)
+        {
+            hval = ptp->addr_pair.b_address.un.ip4.s_addr % GLOBALS.Hash_Table_Size;
+            if (active_host_hashtable[hval] != NULL)
+            {
+                if (debug > 2)
+                {
+                    printf("packet %s at index %d expired with %.2fms, host active -> add entry to BFSW \n", inet_ntoa(ptp->addr_pair.a_address.un.ip4), ix, elapsed_time);
+                    // printf("arrival_time: %ld.%ld, current_time: %ld.%ld \n",
+                    //        ptp->arrival_time.tv_sec, ptp->arrival_time.tv_usec,
+                    //        current_time.tv_sec, current_time.tv_usec);
+                }
+            }
+            else
+            {
+                if (debug > 2)
+                {
+                    printf("packet %s at index %d expired with %.2fms, host inactive -> forward to honeypot \n", inet_ntoa(ptp->addr_pair.a_address.un.ip4), ix, elapsed_time);
+                    // printf("arrival_time: %ld.%ld, current_time: %ld.%ld \n",
+                    //        ptp->arrival_time.tv_sec, ptp->arrival_time.tv_usec,
+                    //        current_time.tv_sec, current_time.tv_usec);
+                }
+            }
+            FreeTTP(ptp);
+            freed_pkt_num++;
+        }
+    }
+    gettimeofday(&tv_scan_end, NULL);
+    printf("Scanning %d and freeing %d packets in ttp cost %.5f ms \n",
+           ix,
+           freed_pkt_num,
+           (double)(tv_scan_end.tv_usec - tv_scan_start.tv_usec) / US_PER_MS);
+}
+
+void UpdateActiveHost(struct ip *pip, struct timeval *pckt_time)
+{
+    /* Only update when src host of a SYNACK/RST packet is internal */
+    if (!internal_ip(pip->ip_src))
+        return;
+
+    extern host_status **active_host_hashtable;
+    host_status **pphosth;
+    host_status *new_phost;
+    hash hval;
+
+    /* Here we just use ip_address to calculate hash */
+    hval = pip->ip_src.s_addr % GLOBALS.Hash_Table_Size;
+    pphosth = &active_host_hashtable[hval];
+
+    if (*pphosth == NULL)
+    {
+        new_phost = (host_status *)MMmalloc(sizeof(host_status), "UpdateActiveHost");
+        /* not considering the hash conflict temporaily, since hash table is big enough */
+        *pphosth = new_phost;
+        (*pphosth)->hval = hval;
+        (*pphosth)->ip_addr.addr_vers = 4;
+        (*pphosth)->ip_addr.un.ip4 = pip->ip_src;
+        (*pphosth)->last_time = (*pckt_time);
+    }
+    else
+    {
+        (*pphosth)->last_time = (*pckt_time);
+    }
+}
+
+// Bool FindActiveHost(struct ip *pip)
+// {
+//     extern host_status **active_host_hashtable;
+//     hash hval = pip->ip_src.s_addr % GLOBALS.Hash_Table_Size;
+//     return ((active_host_hashtable[hval] != NULL));
+// }
+
 int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struct timeval *pckt_time)
-{   
+{
     ptp_snap **ptph_ptr;
     ptp_snap **pptph_head, **pptph_tmp;
     ptp_snap *ptph, *ptph_prev, *ptph_tmp;
     tcp_packet *ptp_temp;
     int new_tcp_flow = 1;
-    int j = 0;
-    hash hval;
+
     char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
     /* make sure we have enough of the packet */
     if ((unsigned long)ptcp + sizeof(struct tcphdr) - 1 > (unsigned long)plast)
@@ -253,6 +383,8 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         (unsigned long)plast);
         return (FLOW_STAT_SHORT);
     }
+
+    periodic_scanning();
 
     /* SYN Packet in TCP flow */
     if (SYN_SET(ptcp) && !ACK_SET(ptcp))
@@ -286,7 +418,7 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
         {
             /* Didn't find it, make a new one, if possible */
             ptph_tmp = CreateTTP(ptph_ptr, pip, ptcp, plast, pckt_time);
-            if (debug > 2)
+            if (debug > 3)
             {
                 ptp_temp = ptph_tmp->ptp;
                 inet_ntop(AF_INET, &ptp_temp->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN);
@@ -329,35 +461,7 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                                 ptp_temp->payload[1],
                                 ptp_temp->arrival_time.tv_sec);
                     }
-
-                    /* free up hash element->.. */
-                    hval = ptp_temp->addr_pair.hash % GLOBALS.Hash_Table_Size;
-                    pptph_head = &ptp_hashtable[hval];
-                    j = 0;
-                    ptph_prev = *pptph_head;
-                    for (ptph = *pptph_head; ptph; ptph = ptph->next)
-                    {
-                        j++;
-                        if (ptp_temp->addr_pair.hash == ptph->addr_pair.hash)
-                        {
-                            ptph_tmp = ptph;
-                            if (j == 1)
-                            {
-                                /* it is the top of the list */
-                                ptp_hashtable[hval] = ptph->next;
-                            }
-                            else
-                            {
-                                /* it is in the middle of the list */
-                                ptph_prev->next = ptph->next;
-                            }
-                            ptph_release(ptph_tmp);
-                            break;
-                        }
-                        ptph_prev = ptph;
-                    }
-                    ttp[ptp_temp->loc_ttp] = NULL;
-                    tp_release(ptp_temp);
+                    FreeTTP(ptp_temp);
                     new_tcp_flow = 0;
                 }
             }
@@ -376,6 +480,7 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         ntohs(ptcp->th_sport));
             }
         }
+        UpdateActiveHost(pip, pckt_time);
     }
     else
     {
@@ -391,6 +496,7 @@ void trace_init(void)
 {
     static Bool initted = FALSE;
     extern ptp_snap **ptp_hashtable;
+    extern host_status **active_host_hashtable;
 
     if (initted)
         return;
@@ -399,6 +505,7 @@ void trace_init(void)
 
     /* initialize the hash table */
     ptp_hashtable = (ptp_snap **)MallocZ(GLOBALS.Hash_Table_Size * sizeof(ptp_snap *));
+    active_host_hashtable = (host_status **)MallocZ(GLOBALS.Hash_Table_Size * sizeof(host_status *));
 
     /* create an array to hold any pairs that we might create */
     ttp = (tcp_packet **)MallocZ(GLOBALS.Max_TCP_Packets * sizeof(tcp_packet *));
@@ -409,7 +516,7 @@ void print_ttp()
 {
     int p;
 
-    for (p = 0; p < GLOBALS.Max_TCP_Packets; p++)
+    for (p = 0; p < 20; p++)
     {
         fprintf(fp_stdout, "[%2d]", p);
         if (ttp[p] != NULL)
@@ -417,4 +524,65 @@ void print_ttp()
         else
             fprintf(fp_stdout, "->[NULL]\n");
     }
+}
+
+void free_packets(int free_num)
+{
+    struct timeval tv_scan_start;
+    struct timeval tv_scan_end;
+    gettimeofday(&tv_scan_start, NULL);
+
+    tcp_packet *ptp;
+    int ix, dir, j;
+    extern ptp_snap **ptp_hashtable;
+    ptp_snap *ptph_tmp, *ptph, *ptph_prev;
+    ptp_snap **pptph_head = NULL;
+    double elapsed_time;
+    extern host_status **active_host_hashtable;
+    hash hval;
+    int freed_pkt_num = 0;
+
+    for (ix = 0; ix < GLOBALS.Max_TCP_Packets; ix += 1)
+    {
+        ptp = ttp[ix];
+        if (ptp == NULL)
+            continue;
+        elapsed_time = elapsed(ptp->arrival_time, current_time) / US_PER_MS;
+        if (elapsed_time > GLOBALS.TCP_Idle_Time)
+        {
+            hval = ptp->addr_pair.b_address.un.ip4.s_addr % GLOBALS.Hash_Table_Size;
+            if (active_host_hashtable[hval] != NULL)
+            {
+                // if (debug > 2)
+                // {
+                //     printf("packet %s at index %d expired with %.2fms, host active -> add entry to BFSW \n", inet_ntoa(ptp->addr_pair.a_address.un.ip4), ix, elapsed_time);
+                //     // printf("arrival_time: %ld.%ld, current_time: %ld.%ld \n",
+                //     //        ptp->arrival_time.tv_sec, ptp->arrival_time.tv_usec,
+                //     //        current_time.tv_sec, current_time.tv_usec);
+                // }
+            }
+            else
+            {
+                // if (debug > 2)
+                // {
+                //     printf("packet %s at index %d expired with %.2fms, host inactive -> forward to honeypot \n", inet_ntoa(ptp->addr_pair.a_address.un.ip4), ix, elapsed_time);
+                //     // printf("arrival_time: %ld.%ld, current_time: %ld.%ld \n",
+                //     //        ptp->arrival_time.tv_sec, ptp->arrival_time.tv_usec,
+                //     //        current_time.tv_sec, current_time.tv_usec);
+                // }
+            }
+            FreeTTP(ptp);
+            freed_pkt_num++;
+        }
+        else
+        {
+            FreeTTP(ptp);
+            freed_pkt_num++;
+        }
+    }
+    gettimeofday(&tv_scan_end, NULL);
+    printf("Scanning %d and freeing %d packets in ttp cost %.5f ms \n",
+           ix,
+           freed_pkt_num,
+           (double)(tv_scan_end.tv_usec - tv_scan_start.tv_usec) / US_PER_MS);
 }

@@ -90,6 +90,13 @@ typedef struct ptp_snap
   tcp_packet **ttp_ptr;
 } ptp_snap;
 
+typedef struct host_status
+{
+  ipaddr ip_addr;
+  hash hval;  
+  timeval last_time;
+}host_status;
+
 /* Struct mirroring the constants defined in param.h */
 
 struct global_parameters
@@ -100,6 +107,7 @@ struct global_parameters
   int List_Search_Dept;
 
   int Hash_Table_Size;
+  int TCP_Idle_Time;
 };
 
 /* incoming/outgoing based on Ethernet MAC addresses */
@@ -117,3 +125,4 @@ enum ip_direction {
  SRC_OUT_DST_IN  = 3,
  SRC_OUT_DST_OUT = 4
 };
+

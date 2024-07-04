@@ -5,8 +5,8 @@ Bool internal_dhost;
 Bool internal_shost;
 Bool internal_eth(uint8_t *eth_addr, eth_filter *filter);
 
-Bool internal_src = FALSE;
-Bool internal_dst = FALSE;
+Bool internal_src = TRUE;
+Bool internal_dst = TRUE;
 
 Bool warn_printtrunc = TRUE;
 
@@ -53,7 +53,7 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	pcap_current_hdr = *phdr;
 	pcap_current_buf = buf;
 	if (debug > 2)
-		fprintf(fp_stderr, "tcpdump: read a type %d frame\n", type);
+		fprintf(fp_stderr, "tcpdump: read a type %d IP frame\n", type);
 
 	/* kindof ugly, but about the only way to make them fit together :-( */
 	switch (type)

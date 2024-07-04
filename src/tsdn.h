@@ -117,3 +117,30 @@ extern Bool warn_printtrunc;
 extern u_long pnum;
 
 int getpayloadlength (struct ip *pip, void *plast);
+
+/*
+ * timeval compare macros
+ */
+#define tv_ge(lhs,rhs) (tv_cmp((lhs),(rhs)) >= 0)
+#define tv_gt(lhs,rhs) (tv_cmp((lhs),(rhs)) >  0)
+#define tv_le(lhs,rhs) (tv_cmp((lhs),(rhs)) <= 0)
+#define tv_lt(lhs,rhs) (tv_cmp((lhs),(rhs)) <  0)
+#define tv_eq(lhs,rhs) (tv_cmp((lhs),(rhs)) == 0)
+
+double elapsed (timeval, timeval);
+int tv_cmp (struct timeval lhs, struct timeval rhs);
+
+extern timeval current_time;
+
+void tv_sub (struct timeval *plhs, struct timeval rhs);
+void tv_add (struct timeval *plhs, struct timeval rhs);
+Bool tv_same (struct timeval lhs, struct timeval rhs);
+
+/* handy constants */
+#define US_PER_SEC 1000000	/* microseconds per second */
+#define MS_PER_SEC 1000		/* milliseconds per second */
+#define US_PER_MS  1000     /* microseconds per millisecond */
+
+host_status **active_host_hashtable;
+
+Bool internal_ip(struct in_addr adx);
