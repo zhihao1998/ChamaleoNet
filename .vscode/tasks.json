@@ -11,7 +11,8 @@
 				"${fileDirname}/*.c",
 				"-o",
 				"${workspaceFolder}/bin/${fileBasenameNoExtension}",
-				"-lpcap"
+				"-lpcap",
+				"-lpthread"
 			],
 			"options": {
 				"cwd": "${fileDirname}"

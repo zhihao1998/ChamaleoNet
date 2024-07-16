@@ -349,20 +349,21 @@ size_t circular_buf_size(circular_buf_t *me)
 /// Because this version, which will overwrite the existing contents
 /// of the buffer, will involve modifying the tail pointer, which is also
 /// modified by get.
-int circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *pkt_desc_ptr)
+struct pkt_desc_t **circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *pkt_desc_ptr)
 {
   assert(me && me->pkt_desc_buf);
-
-  int r = 0;
-
+  struct pkt_desc_t **temp_pkt_desc_ptr_ptr;
   if (!circular_buf_full(me))
   {
     me->pkt_desc_buf[me->head] = pkt_desc_ptr;
+    temp_pkt_desc_ptr_ptr = &(me->pkt_desc_buf[me->head]);
     me->head = advance_headtail_value(me->head, me->max);
-    r = 1;
+    return temp_pkt_desc_ptr_ptr;
   }
-
-  return r;
+  else
+  {
+    return NULL;
+  }
 }
 
 /*To remove data from the buffer, we access the value at the tail and then update the tail pointer.
@@ -372,7 +373,7 @@ int circular_buf_get(circular_buf_t *me, struct pkt_desc_t **pkt_desc_ptr_ptr)
 {
   int r = 0;
 
-  if (me && pkt_desc_ptr_ptr && !circular_buf_empty(me))
+  if (me && !circular_buf_empty(me))
   {
     *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->tail];
     me->tail = advance_headtail_value(me->tail, me->max);

@@ -350,22 +350,3 @@ MallocZ(int nbytes)
 	return (ptr);
 }
 
-void *
-ReallocZ(void *oldptr, int obytes, int nbytes)
-{
-	char *ptr;
-
-	ptr = realloc(oldptr, nbytes);
-	if (ptr == NULL)
-	{
-		fprintf(fp_stderr, "Realloc failed (%d bytes --> %d bytes), fatal\n",
-				obytes, nbytes);
-		exit(EXIT_FAILURE);
-	}
-	if (obytes < nbytes)
-	{
-		memset((char *)ptr + obytes, 0, nbytes - obytes); /* BZERO */
-	}
-
-	return (ptr);
-}

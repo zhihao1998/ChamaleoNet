@@ -135,6 +135,7 @@ typedef struct flow_hash
 {
   tcp_addrblock addr_pair;
   struct flow_hash *next;
-  pkt_desc_t *pkt_desc;
+  pkt_desc_t *pkt_desc_ptr;
+  pkt_desc_t **pkt_desc_ptr_ptr;
 } flow_hash;
 

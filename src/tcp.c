@@ -260,6 +260,7 @@ static flow_hash *CreateFlowHash(struct ip *pip, struct tcphdr *ptcp, void *plas
 {
     static tcp_packet *temp_ttp;
     pkt_desc_t *temp_pkt_desc_ptr;
+    pkt_desc_t **temp_pkt_desc_pp;
     flow_hash *temp_flow_hash_ptr;
     flow_hash **flow_hash_head_pp;
     hash hval;
@@ -276,25 +277,26 @@ static flow_hash *CreateFlowHash(struct ip *pip, struct tcphdr *ptcp, void *plas
         return (NULL);
     }
 
-    /* grab the hash value (already computed by CopyAddr) */
     hval = temp_ttp->addr_pair.hash % GLOBALS.Hash_Table_Size;
     flow_hash_head_pp = &flow_hash_table[hval];
 
     temp_pkt_desc_ptr = pkt_desc_alloc();
     temp_pkt_desc_ptr->pkt_ptr = temp_ttp;
     temp_pkt_desc_ptr->recv_time = *pckt_time;
-    if (!circular_buf_try_put(circ_buf, temp_pkt_desc_ptr))
+
+    temp_pkt_desc_pp = circular_buf_try_put(circ_buf, temp_pkt_desc_ptr);
+    if (temp_pkt_desc_pp == NULL)
     {
         fprintf(fp_stderr, "Error: Circular buffer is full\n");
         return NULL;
     }
     temp_flow_hash_ptr = flow_hash_alloc();
     temp_flow_hash_ptr->addr_pair = temp_ttp->addr_pair;
-    temp_flow_hash_ptr->pkt_desc = temp_pkt_desc_ptr;
+    temp_flow_hash_ptr->pkt_desc_ptr = temp_pkt_desc_ptr;
+    temp_flow_hash_ptr->pkt_desc_ptr_ptr = temp_pkt_desc_pp;
 
     temp_flow_hash_ptr->next = *flow_hash_head_pp;
     *flow_hash_head_pp = temp_flow_hash_ptr;
-
     return temp_flow_hash_ptr;
 }
 
@@ -342,10 +344,10 @@ void FreeFlowHash(flow_hash *flow_hash_ptr)
     pkt_desc_t *pkt_desc_ptr;
     flow_hash *flow_hash_head_ptr, *flow_hash_prev, *temp_flow_hash_ptr;
 
-    pkt_desc_ptr = flow_hash_ptr->pkt_desc;
+    pkt_desc_ptr = flow_hash_ptr->pkt_desc_ptr;
+
     hval = flow_hash_ptr->addr_pair.hash % GLOBALS.Hash_Table_Size;
     flow_hash_head_ptr = flow_hash_table[hval];
-
     flow_hash_prev = flow_hash_head_ptr;
     for (temp_flow_hash_ptr = flow_hash_head_ptr; temp_flow_hash_ptr; temp_flow_hash_ptr = temp_flow_hash_ptr->next)
     {
@@ -363,6 +365,7 @@ void FreeFlowHash(flow_hash *flow_hash_ptr)
                 flow_hash_prev->next = temp_flow_hash_ptr->next;
             }
             pkt_desc_release(pkt_desc_ptr);
+            *(flow_hash_ptr->pkt_desc_ptr_ptr) = NULL;
             flow_hash_release(flow_hash_ptr);
             break;
         }
@@ -393,10 +396,10 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         flow_hash_ptr->addr_pair.a_port,
                         ip_dst_addr_print_buffer,
                         flow_hash_ptr->addr_pair.b_port,
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload_len,
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload[0],
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload[1],
-                        flow_hash_ptr->pkt_desc->recv_time.tv_sec);
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload_len,
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[0],
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[1],
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
             }
         }
         else
@@ -411,10 +414,10 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         flow_hash_ptr->addr_pair.a_port,
                         ip_dst_addr_print_buffer,
                         flow_hash_ptr->addr_pair.b_port,
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload_len,
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload[0],
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload[1],
-                        flow_hash_ptr->pkt_desc->recv_time.tv_sec);
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload_len,
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[0],
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[1],
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
             }
         }
     }
@@ -432,10 +435,10 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         flow_hash_ptr->addr_pair.a_port,
                         ip_dst_addr_print_buffer,
                         flow_hash_ptr->addr_pair.b_port,
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload_len,
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload[0],
-                        flow_hash_ptr->pkt_desc->pkt_ptr->payload[1],
-                        flow_hash_ptr->pkt_desc->recv_time.tv_sec);
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload_len,
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[0],
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[1],
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
             }
             FreeFlowHash(flow_hash_ptr);
         }
@@ -445,16 +448,20 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
 /* timeout_mgmt thread */
 void *timeout_mgmt(void *args)
 {
-    pkt_desc_t **pkt_desc_ptr_ptr;
+    pkt_desc_t *pkt_desc_ptr;
+    hash hval;
+    flow_hash *flow_hash_ptr;
+    int dir;
+    tcp_addrblock tp_in;
 
     while (1)
     {
-        if (circular_buf_get(circ_buf, pkt_desc_ptr_ptr))
+        if (circular_buf_get(circ_buf, &pkt_desc_ptr))
         {
             /* The packet descriptor has been freed. */
-            if (pkt_desc_ptr_ptr == NULL)
+            if ((pkt_desc_ptr == NULL) || (pkt_desc_ptr->pkt_ptr == NULL))
             {
-                fprintf(fp_stderr, "pkt_desc_ptr_ptr is NULL\n");
+                fprintf(fp_stderr, "pkt_desc_ptr is NULL\n");
                 continue;
             }
             else
@@ -462,25 +469,45 @@ void *timeout_mgmt(void *args)
                 if (debug > 1)
                 {
                     char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, &((*pkt_desc_ptr_ptr)->pkt_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-                    inet_ntop(AF_INET, &((*pkt_desc_ptr_ptr)->pkt_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
+                    inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
+                    inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
                     fprintf(fp_stdout, "popping TCP SYN: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
                             ip_src_addr_print_buffer,
-                            (*pkt_desc_ptr_ptr)->pkt_ptr->addr_pair.a_port,
+                            (pkt_desc_ptr)->pkt_ptr->addr_pair.a_port,
                             ip_dst_addr_print_buffer,
-                            (*pkt_desc_ptr_ptr)->pkt_ptr->addr_pair.b_port,
-                            (*pkt_desc_ptr_ptr)->pkt_ptr->payload_len,
-                            (*pkt_desc_ptr_ptr)->pkt_ptr->payload[0],
-                            (*pkt_desc_ptr_ptr)->pkt_ptr->payload[1],
-                            (*pkt_desc_ptr_ptr)->recv_time.tv_sec);
+                            (pkt_desc_ptr)->pkt_ptr->addr_pair.b_port,
+                            (pkt_desc_ptr)->pkt_ptr->payload_len,
+                            (pkt_desc_ptr)->pkt_ptr->payload[0],
+                            (pkt_desc_ptr)->pkt_ptr->payload[1],
+                            (pkt_desc_ptr)->recv_time.tv_sec);
                 }
+
+                hval = pkt_desc_ptr->pkt_ptr->addr_pair.hash % GLOBALS.Hash_Table_Size;
+
+                IP_COPYADDR(&tp_in.a_address, pkt_desc_ptr->pkt_ptr->addr_pair.a_address);
+                IP_COPYADDR(&tp_in.b_address, pkt_desc_ptr->pkt_ptr->addr_pair.b_address);
+                tp_in.a_port = pkt_desc_ptr->pkt_ptr->addr_pair.a_port;
+                tp_in.b_port = pkt_desc_ptr->pkt_ptr->addr_pair.b_port;
+                tp_in.hash = pkt_desc_ptr->pkt_ptr->addr_pair.hash;
+                
+                /* Find entry in hash table */
+                for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
+                {
+                    if (SameConn(&tp_in, &flow_hash_ptr->addr_pair, &dir))
+                    {
+                        /* Found */
+                        break;
+                    }
+                }
+                FreeTTP(pkt_desc_ptr->pkt_ptr);
+                FreeFlowHash(flow_hash_ptr);
             }
 
             // printf("size: %ld \n", circular_buf_size(circ_buf));
         }
         else
         {
-            printf("Error: Circular buffer is empty\n");
+            printf("size: %ld \n", circular_buf_size(circ_buf));
         }
         usleep(GLOBALS.TCP_Idle_Time * US_PER_MS);
     }

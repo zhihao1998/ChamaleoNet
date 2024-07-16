@@ -63,7 +63,7 @@ void circular_buf_free(circular_buf_t* me);
 void circular_buf_reset(circular_buf_t* me);
 
 /// Put version 1 continues to add data
-int circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *pkt_desc_ptr);
+struct pkt_desc_t **circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *pkt_desc_ptr);
 
 /// Retrieve a value from the buffer
 /// Returns 0 on success, -1 if the buffer is empty
