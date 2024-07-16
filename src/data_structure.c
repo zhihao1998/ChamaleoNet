@@ -179,7 +179,6 @@ void tp_list_list()
   fprintf(fp_stdout, "\n");
 }
 
-
 /* garbage collector for the ptp_snap list */
 
 static ptp_snap *top_ptph_flist = NULL; /* Pointer to the top of      */
@@ -231,3 +230,177 @@ int UsingFreedPtpsnap(ptp_snap *my_ptph)
   }
   return (0);
 }
+
+/* Packet Descriptor */
+/* Alloc a new space for an element in pkt_desc_list */
+/* TODO: Implement with free list */
+pkt_desc_t *pkt_desc_alloc()
+{
+  pkt_desc_t *new_pkt_desc;
+  new_pkt_desc = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
+  return (new_pkt_desc);
+}
+
+void pkt_desc_release(pkt_desc_t *rel_pkt_desc)
+{
+  free(rel_pkt_desc);
+}
+
+/* Flow Hash Table */
+/* Alloc a new space for entry in flow hash table */
+/* TODO: Implement with free list */
+
+flow_hash *flow_hash_alloc()
+{
+  struct flow_hash *new_flow_hash;
+  new_flow_hash = (flow_hash *)MMmalloc(sizeof(flow_hash), "flow_hash_alloc");
+  return (new_flow_hash);
+}
+
+void flow_hash_release(flow_hash *rel_flow_hash)
+{
+  free(rel_flow_hash);
+}
+
+/* Circular Buffer */
+
+static inline size_t advance_headtail_value(size_t value, size_t max)
+{
+  if (++value == max)
+  {
+    value = 0;
+  }
+  return value;
+}
+
+circular_buf_t *circular_buf_init(pkt_desc_t **pkt_desc_buf, size_t size)
+{
+  assert(pkt_desc_buf && size > 1);
+
+  circular_buf_t *cbuf = malloc(sizeof(circular_buf_t));
+  assert(cbuf);
+
+  cbuf->pkt_desc_buf = pkt_desc_buf;
+  cbuf->max = size;
+  circular_buf_reset(cbuf);
+
+  assert(circular_buf_empty(cbuf));
+
+  return cbuf;
+}
+
+void circular_buf_reset(circular_buf_t *me)
+{
+  assert(me);
+
+  me->head = 0;
+  me->tail = 0;
+}
+
+void circular_buf_free(circular_buf_t *me)
+{
+  assert(me);
+  free(me);
+}
+
+Bool circular_buf_full(circular_buf_t *me)
+{
+  // We want to check, not advance, so we don't save the output here
+  return advance_headtail_value(me->head, me->max) == me->tail;
+}
+
+Bool circular_buf_empty(circular_buf_t *me)
+{
+  assert(me);
+  return (me->head == me->tail);
+}
+
+size_t circular_buf_capacity(circular_buf_t *me)
+{
+  assert(me);
+
+  // We account for the space we can't use for thread safety
+  return me->max - 1;
+}
+
+size_t circular_buf_size(circular_buf_t *me)
+{
+  assert(me);
+
+  // We account for the space we can't use for thread safety
+  size_t size = me->max - 1;
+
+  if (!circular_buf_full(me))
+  {
+    if (me->head >= me->tail)
+    {
+      size = (me->head - me->tail);
+    }
+    else
+    {
+      size = (me->max + me->head - me->tail);
+    }
+  }
+
+  return size;
+}
+
+/// For thread safety, do not use put - use try_put.
+/// Because this version, which will overwrite the existing contents
+/// of the buffer, will involve modifying the tail pointer, which is also
+/// modified by get.
+int circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *pkt_desc_ptr)
+{
+  assert(me && me->pkt_desc_buf);
+
+  int r = 0;
+
+  if (!circular_buf_full(me))
+  {
+    me->pkt_desc_buf[me->head] = pkt_desc_ptr;
+    me->head = advance_headtail_value(me->head, me->max);
+    r = 1;
+  }
+
+  return r;
+}
+
+/*To remove data from the buffer, we access the value at the tail and then update the tail pointer.
+ * If the buffer is empty we do not return a value or modify the pointer.
+ * Instead, we return an error to the user. */
+int circular_buf_get(circular_buf_t *me, struct pkt_desc_t **pkt_desc_ptr_ptr)
+{
+  int r = 0;
+
+  if (me && pkt_desc_ptr_ptr && !circular_buf_empty(me))
+  {
+    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->tail];
+    me->tail = advance_headtail_value(me->tail, me->max);
+    r = 1;
+  }
+
+  return r;
+}
+
+// int circular_buf_peek(cbuf_handle_t me, uint8_t* data, unsigned int look_ahead_counter)
+// {
+// 	int r = -1;
+// 	size_t pos;
+
+// 	assert(me && data && me->buffer);
+
+// 	// We can't look beyond the current buffer size
+// 	if(circular_buf_empty(me) || look_ahead_counter > circular_buf_size(me))
+// 	{
+// 		return r;
+// 	}
+
+// 	pos = me->tail;
+// 	for(unsigned int i = 0; i < look_ahead_counter; i++)
+// 	{
+// 		data[i] = me->buffer[pos];
+// 		pos = advance_headtail_value(pos, me->max);
+// 	}
+
+// 	return 0;
+// }

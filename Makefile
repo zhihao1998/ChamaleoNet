@@ -1,7 +1,7 @@
 # tool macros
 CC ?= gcc
 CXX ?= # FILL: the compiler
-CFLAGS := -lpcap
+CFLAGS := -lpcap -lpthread
 CXXFLAGS := # FILL: compile flags
 DBGFLAGS := -g
 COBJFLAGS := $(CFLAGS) -c

@@ -13,10 +13,13 @@
 #include <netinet/tcp.h>
 #include <net/ethernet.h>
 #include <string.h>
+#include <assert.h>
+#include <pthread.h> 
+#include <unistd.h>
 
 #include "struct.h"
 #include "param.h"
-#include "freelists.h"
+#include "data_structure.h"
 
 /* tcpdump header (ether.h) defines ETHER_HDRLEN) */
 #ifndef ETHER_HDRLEN
@@ -141,6 +144,8 @@ Bool tv_same (struct timeval lhs, struct timeval rhs);
 #define MS_PER_SEC 1000		/* milliseconds per second */
 #define US_PER_MS  1000     /* microseconds per millisecond */
 
-host_status **active_host_hashtable;
+// host_status **active_host_hashtable;
 
 Bool internal_ip(struct in_addr adx);
+
+// void *timeout_mgmt(void *args);

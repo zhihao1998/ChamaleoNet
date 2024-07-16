@@ -87,15 +87,8 @@ typedef struct ptp_snap
   tcp_addrblock addr_pair; /* just a copy */
   struct ptp_snap *next;
   tcp_packet *ptp;
-  tcp_packet **ttp_ptr;
+  // tcp_packet **ttp_ptr;
 } ptp_snap;
-
-typedef struct host_status
-{
-  ipaddr ip_addr;
-  hash hval;  
-  timeval last_time;
-}host_status;
 
 /* Struct mirroring the constants defined in param.h */
 
@@ -103,9 +96,7 @@ struct global_parameters
 {
   int Max_TCP_Packets;
   int Max_UDP_Pairs;
-
   int List_Search_Dept;
-
   int Hash_Table_Size;
   int TCP_Idle_Time;
 };
@@ -125,4 +116,25 @@ enum ip_direction {
  SRC_OUT_DST_IN  = 3,
  SRC_OUT_DST_OUT = 4
 };
+
+/* Circular Buffer Related */
+
+typedef struct pkt_desc_t {
+  tcp_packet * pkt_ptr;
+  timeval recv_time;
+} pkt_desc_t;
+
+typedef struct circular_buf_t {
+  pkt_desc_t ** pkt_desc_buf;
+	size_t head;
+	size_t tail;
+	size_t max; //of the buffer
+}circular_buf_t;
+
+typedef struct flow_hash
+{
+  tcp_addrblock addr_pair;
+  struct flow_hash *next;
+  pkt_desc_t *pkt_desc;
+} flow_hash;
 

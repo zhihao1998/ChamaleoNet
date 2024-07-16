@@ -3,6 +3,7 @@
         "*.csv": "csv",
         "pcap.h": "c",
         "socket.h": "c",
-        "errno.h": "c"
+        "errno.h": "c",
+        "limits": "c"
     }
 }

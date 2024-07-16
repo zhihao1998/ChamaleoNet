@@ -35,6 +35,13 @@ u_long pnum = 0;
 /* global pointer, the pcap info header */
 static pcap_t *pcap;
 
+/* Circular buffer */
+// extern circular_buf_t *circ_buf;
+
+extern void *timeout_mgmt(void *args);
+
+
+/* pkt_rx thread */
 static int
 my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 {
@@ -210,61 +217,12 @@ static int ProcessPacket(struct timeval *pckt_time,
 	/* TCP */
 
 	if ((ptcp = gettcp(pip, &plast)) != NULL)
-	{	
+	{
 		tcp_handle(pip, ptcp, plast, &dir, pckt_time);
 	}
 
-	//   /* Statistics from IP HEADER */
-	//   if (ip_header_stat(phystype, pip, fpnum, pcount, file_count, filename, location,
-	//                      tlen, plast, ip_direction) == 0)
-	//     return 0;
-
-	//   /* create a dump file at ip level */
-	//   dump_ip(pip, plast);
-
-	//   /* Statistics from LAYER 4 (TCP/UDP) HEADER */
-
-	//   flow_stat_code = FLOW_STAT_NONE; /* No flow (and dup) check done yet */
-
-	//   if ((ptcp = gettcp(pip, &plast)) != NULL)
-	//   {
-	//     ++tcp_packet_count;
-	//     flow_stat_code = tcp_flow_stat(pip, ptcp, plast, &dir);
-	//     if (flow_stat_code != FLOW_STAT_DUP &&
-	//         flow_stat_code != FLOW_STAT_SHORT)
-	//       tcp_header_stat(ptcp, pip, plast);
-	//   }
-	//   else if (do_udp)
-	//   {
-	//     /* look for a UDP header */
-	//     if ((pudp = getudp(pip, &plast)) != NULL)
-	//     {
-	//       flow_stat_code = udp_flow_stat(pip, pudp, plast);
-	//       if (flow_stat_code != FLOW_STAT_DUP &&
-	//           flow_stat_code != FLOW_STAT_SHORT)
-	//         udp_header_stat(pudp, pip, plast);
-	//     }
-	//   }
-
-	//   if (flow_stat_code != FLOW_STAT_DUP)
-	//   {
-	//     if (!(PIP_ISV6(pip)))
-	//     {
-	//       /* Collect IPv4 histograms only on not duplicated flows */
-	//       ip_histo_stat(pip);
-	//     }
-	//   }
-
-	//   if (flow_stat_code != FLOW_STAT_OK)
-	//     return 0;
-
 	return 1;
 }
-
-// void init_bpf_filter(char* bpf_filename)
-// {
-
-// }
 
 int main(int argc, char *argv[])
 {
@@ -280,11 +238,11 @@ int main(int argc, char *argv[])
 						(tcp[13] & 16 != 0) || \
 						(icmp[icmptype] = 0) || \
 						(icmp[icmptype] = 8) || \
-						(udp) "; /* The filter expression */
-						struct pcap_pkthdr header; /* The header that pcap gives us */
-	struct ether_header *eptr;					   /* net/ethernet.h */
-	u_char *ptr;								   /* printing out hardware header info */
-	const u_char *packet;						   /* The actual packet */
+						(udp) ";   /* The filter expression */
+	struct pcap_pkthdr header;	   /* The header that pcap gives us */
+	struct ether_header *eptr;	   /* net/ethernet.h */
+	u_char *ptr;				   /* printing out hardware header info */
+	const u_char *packet;		   /* The actual packet */
 	pcap_if_t *all_devs;
 
 	int ret = 0;
@@ -343,8 +301,15 @@ int main(int argc, char *argv[])
 	eth_header.ether_type = htons(ETHERTYPE_IP);
 	ip_buf = MallocZ(IP_MAXPACKET);
 
-	// ret = pcap_loop(pcap, -1, (pcap_handler)my_callback_1, NULL);
+	/* timeout_mgmt thread */
+	pthread_t timeout_mgmt_thread;
+	if (pthread_create(&timeout_mgmt_thread, NULL, timeout_mgmt, NULL))
+	{
+		fprintf(stderr, "Error creating timeout_mgmt thread\n");
+		return 1;
+	}
 
+	/* pkt_rx thread */
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
 
@@ -353,6 +318,8 @@ int main(int argc, char *argv[])
 		ProcessPacket(&current_time, pip, plast, tlen, phystype, &fpnum, &pcount,
 					  file_count, location, DEFAULT_NET);
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
+
+	pthread_exit(NULL);
 
 	return 0;
 }
