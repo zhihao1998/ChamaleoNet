@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	dev = "docker0";
+	dev = "virbr0";
 	printf("DEV: %s\n", dev);
 
 	/* open the device for sniffing. */

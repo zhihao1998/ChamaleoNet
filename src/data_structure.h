@@ -36,6 +36,13 @@ void ptph_release (ptp_snap * rel_ptph);
 void *MMmalloc (size_t size, const char *f_name);
 
 /* Pkt descriptor */
+struct pkt_desc_list_elem
+{
+  struct pkt_desc_list_elem *next;
+  struct pkt_desc_list_elem *prev;
+  pkt_desc_t *pkt_desc_ptr;
+};
+
 pkt_desc_t *pkt_desc_alloc();
 void pkt_desc_release(pkt_desc_t *rel_pkt_desc);
 

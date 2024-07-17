@@ -26,16 +26,12 @@ extern Bool bayes_engine;
 
 #ifdef MEMDEBUG
 long IN_USE_TP = 0;
-long IN_USE_SEGMENT = 0;
-long IN_USE_QUADRANT = 0;
 long IN_USE_PTP_SNAP = 0;
-long IN_USE_UDP_PAIR = 0;
+
+
 
 long TOT_TP = 0;
-long TOT_SEGMENT = 0;
-long TOT_QUADRANT = 0;
 long TOT_PTP_SNAP = 0;
-long TOT_UDP_PAIR = 0;
 extern long tot_adx_hash_count, bayes_new_count;
 
 void memory_debug()
@@ -128,7 +124,6 @@ void tp_release(tcp_packet *released_tcp_packet)
 
   if ((last_tp_flist == NULL) || ((last_tp_flist->ptp != NULL) && (last_tp_flist->prev == NULL)))
   {
-
     new_tplist_elem =
         (struct tp_list_elem *)MMmalloc(sizeof(struct tp_list_elem),
                                         "tplist_release");
@@ -217,53 +212,114 @@ void ptph_release(ptp_snap *rel_ptph)
   top_ptph_flist = rel_ptph;
 }
 
-int UsingFreedPtpsnap(ptp_snap *my_ptph)
-{
-  struct ptp_snap *temp_ptph;
+/* Garbage collector for Packet Descriptor Array
+*  Two pointer are used (top and last).
+*  Alloc and release from last, while top is used to not loose the list ...
+*/
 
-  temp_ptph = top_ptph_flist;
-  while (temp_ptph)
-  {
-    if (temp_ptph == my_ptph)
-      return (1);
-    temp_ptph = temp_ptph->next;
-  }
-  return (0);
-}
+static struct pkt_desc_list_elem *top_pkt_desc_flist = NULL;  /* Pointer to the top of      */
+                                                              /* the 'pkt_desc_list' free list.    */
+static struct pkt_desc_list_elem *last_pkt_desc_flist = NULL; /* Pointer to the last used   */
+                                                              /* element list.  */
 
-/* Packet Descriptor */
 /* Alloc a new space for an element in pkt_desc_list */
-/* TODO: Implement with free list */
 pkt_desc_t *pkt_desc_alloc()
 {
-  pkt_desc_t *new_pkt_desc;
-  new_pkt_desc = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
-  return (new_pkt_desc);
+  pkt_desc_t *new_pkt_desc_ptr;
+#ifdef MEMDEBUG
+IN_USE_PKT_DESC++;
+#endif
+
+  if ((last_pkt_desc_flist == NULL) || (last_pkt_desc_flist->pkt_desc_ptr == NULL))
+  { /* The LinkList stack is empty.         */
+    new_pkt_desc_ptr = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
+#ifdef MEMDEBUG
+TOT_PKT_DESC++;
+#endif
+    return new_pkt_desc_ptr;
+  }
+  else
+  { /* The 'pkt_desc_list' stack is not empty.   */
+    new_pkt_desc_ptr = last_pkt_desc_flist->pkt_desc_ptr;
+    last_pkt_desc_flist->pkt_desc_ptr = NULL;
+    if (last_pkt_desc_flist->next != NULL)
+      last_pkt_desc_flist = last_pkt_desc_flist->next;
+    return new_pkt_desc_ptr;
+  }
 }
 
-void pkt_desc_release(pkt_desc_t *rel_pkt_desc)
+void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
 {
-  free(rel_pkt_desc);
+  struct pkt_desc_list_elem *new_pkt_desc_list_elem;
+#ifdef MEMDEBUG
+IN_USE_PKT_DESC--;
+#endif
+  
+    memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
+  
+    if ((last_pkt_desc_flist == NULL) || ((last_pkt_desc_flist->pkt_desc_ptr != NULL) && (last_pkt_desc_flist->prev == NULL)))
+    {
+      new_pkt_desc_list_elem = (struct pkt_desc_list_elem *)MMmalloc(sizeof(struct pkt_desc_list_elem), "pkt_desc_release");
+      new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
+      new_pkt_desc_list_elem->prev = NULL;
+      new_pkt_desc_list_elem->next = top_pkt_desc_flist;
+      if (new_pkt_desc_list_elem->next != NULL)
+        new_pkt_desc_list_elem->next->prev = new_pkt_desc_list_elem;
+      top_pkt_desc_flist = new_pkt_desc_list_elem;
+      last_pkt_desc_flist = new_pkt_desc_list_elem;
+    }
+    else
+    {
+      if (last_pkt_desc_flist->pkt_desc_ptr == NULL)
+        new_pkt_desc_list_elem = last_pkt_desc_flist;
+      else
+        new_pkt_desc_list_elem = last_pkt_desc_flist->prev;
+      new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
+      last_pkt_desc_flist = new_pkt_desc_list_elem;
+    }
 }
 
-/* Flow Hash Table */
-/* Alloc a new space for entry in flow hash table */
-/* TODO: Implement with free list */
 
+/* Garbage collector for Flow Hash Table */
+static flow_hash *top_flow_hash_flist = NULL; /* Pointer to the top of      */
+                                              /* the 'flow_hash' free list.    */
+
+/* Alloc a new space for entry in flow hash table */
 flow_hash *flow_hash_alloc()
 {
-  struct flow_hash *new_flow_hash;
-  new_flow_hash = (flow_hash *)MMmalloc(sizeof(flow_hash), "flow_hash_alloc");
-  return (new_flow_hash);
+  struct flow_hash *new_flow_hash_ptr;
+
+#ifdef MEMDEBUG
+  IN_USE_FLOW_HASH++;
+#endif
+
+  if (top_flow_hash_flist == NULL)
+  {
+    new_flow_hash_ptr = (flow_hash *)MMmalloc(sizeof(flow_hash), "flow_hash_alloc");
+#ifdef MEMDEBUG
+    TOT_FLOW_HASH++;
+#endif
+  }
+  else
+  {
+    new_flow_hash_ptr = top_flow_hash_flist;
+    top_flow_hash_flist = top_flow_hash_flist->next;
+  }
+  new_flow_hash_ptr->next = NULL;
+  return (new_flow_hash_ptr);
 }
 
-void flow_hash_release(flow_hash *rel_flow_hash)
+void flow_hash_release(flow_hash *rel_flow_hash_ptr)
 {
-  free(rel_flow_hash);
+#ifdef MEMDEBUG
+  IN_USE_FLOW_HASH--;
+#endif
+  memset(rel_flow_hash_ptr, 0, sizeof(flow_hash));
+  rel_flow_hash_ptr->next = top_flow_hash_flist;
+  top_flow_hash_flist = rel_flow_hash_ptr;
 }
 
-/* Circular Buffer */
-
+/* Circular Buffer Operations */
 static inline size_t advance_headtail_value(size_t value, size_t max)
 {
   if (++value == max)

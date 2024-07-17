@@ -18,9 +18,6 @@ u_long tcp_trace_count_local = 0;
 Bool warn_MAX_ = TRUE;
 
 /* connection records are stored in a hash table.  */
-
-// ptp_snap *ptp_hashtable[HASH_TABLE_SIZE] = { NULL };
-ptp_snap **ptp_hashtable;
 flow_hash **flow_hash_table;
 
 pkt_desc_t **pkt_desc_buf;
@@ -143,50 +140,6 @@ NewTTP_2(struct ip *pip, struct tcphdr *ptcp, void *plast, struct timeval *pckt_
     return ttp[num_tcp_packets];
 }
 
-static ptp_snap *
-NewPTPH_2(void)
-{
-    return (ptph_alloc());
-}
-
-static ptp_snap **
-FindTTP(struct ip *pip, struct tcphdr *ptcp, void *plast, int *pdir)
-{
-    ptp_snap **pptph_cur = NULL;
-    ptp_snap *ptph;
-
-    tcp_addrblock tp_in;
-    int dir;
-    hash hval;
-
-    /* grab the address from this packet */
-    CopyAddr(&tp_in, pip, ntohs(ptcp->th_sport), ntohs(ptcp->th_dport));
-
-    /* grab the hash value (already computed by CopyAddr) */
-    hval = tp_in.hash % GLOBALS.Hash_Table_Size;
-
-    // ptph_last = NULL;
-    pptph_cur = &ptp_hashtable[hval];
-
-    /* Search in the linked lists with the same hash value */
-    for (ptph = *pptph_cur; ptph; ptph = ptph->next)
-    {
-        ++search_count;
-        if (SameConn(&tp_in, &ptph->addr_pair, &dir))
-        {
-            /* OK, this looks good, suck it into memory */
-            tcp_packet *ptp = ptph->ptp;
-
-            *pdir = dir;
-            *pptph_cur = ptph;
-        }
-        // ptph_last = ptph;
-    }
-
-    // return the head of the access list (&ptp_hashtable[hval])
-    return pptph_cur;
-}
-
 static flow_hash *
 FindFlowHash(struct ip *pip, struct tcphdr *ptcp, void *plast, int *pdir)
 {
@@ -224,37 +177,6 @@ UpdateTTP(tcp_packet *ptp, struct ip *pip, struct tcphdr *ptcp, void *plast, str
     ptp->arrival_time = *pckt_time;
 }
 
-static ptp_snap *
-CreateTTP(ptp_snap **pptph_head, struct ip *pip, struct tcphdr *ptcp, void *plast, struct timeval *pckt_time)
-{
-    static tcp_packet *temp_ttp;
-    ptp_snap *ptph, **pptph_cur;
-
-    temp_ttp = NewTTP_2(pip, ptcp, plast, pckt_time);
-    if (temp_ttp == NULL) /* not enough memory to store the new flow */
-    {
-        /* the new connection must begin with a SYN */
-        if (debug > 0)
-        {
-            fprintf(fp_stdout,
-                    "** out of memory when creating flows - considering a not_id_p\n");
-        }
-        not_id_p++;
-        return (NULL);
-    }
-
-    ptph = NewPTPH_2();
-    // ptph->ttp_ptr = temp_ttp;
-    ptph->ptp = temp_ttp;
-    ptph->addr_pair = ptph->ptp->addr_pair;
-
-    /* put at the head of the access list */
-    ptph->next = *pptph_head;
-    *pptph_head = ptph;
-
-    /* return the new ptph */
-    return (ptph);
-}
 
 static flow_hash *CreateFlowHash(struct ip *pip, struct tcphdr *ptcp, void *plast, struct timeval *pckt_time)
 {
@@ -302,37 +224,6 @@ static flow_hash *CreateFlowHash(struct ip *pip, struct tcphdr *ptcp, void *plas
 
 void FreeTTP(tcp_packet *ptp_temp)
 {
-    int j = 0;
-    hash hval;
-    ptp_snap **pptph_head, **pptph_tmp;
-    ptp_snap *ptph_prev, *ptph, *ptph_tmp;
-
-    /* free up hash element->.. */
-    hval = ptp_temp->addr_pair.hash % GLOBALS.Hash_Table_Size;
-    pptph_head = &ptp_hashtable[hval];
-    j = 0;
-    ptph_prev = *pptph_head;
-    for (ptph = *pptph_head; ptph; ptph = ptph->next)
-    {
-        j++;
-        if (ptp_temp->addr_pair.hash == ptph->addr_pair.hash)
-        {
-            ptph_tmp = ptph;
-            if (j == 1)
-            {
-                /* it is the top of the list */
-                ptp_hashtable[hval] = ptph->next;
-            }
-            else
-            {
-                /* it is in the middle of the list */
-                ptph_prev->next = ptph->next;
-            }
-            ptph_release(ptph_tmp);
-            break;
-        }
-        ptph_prev = ptph;
-    }
     ttp[ptp_temp->loc_ttp] = NULL;
     tp_release(ptp_temp);
 }
@@ -440,6 +331,7 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[1],
                         flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
             }
+            FreeTTP(flow_hash_ptr->pkt_desc_ptr->pkt_ptr);
             FreeFlowHash(flow_hash_ptr);
         }
     }
@@ -453,15 +345,17 @@ void *timeout_mgmt(void *args)
     flow_hash *flow_hash_ptr;
     int dir;
     tcp_addrblock tp_in;
+    Bool is_found;
 
     while (1)
     {
         if (circular_buf_get(circ_buf, &pkt_desc_ptr))
         {
+            is_found = FALSE;
             /* The packet descriptor has been freed. */
             if ((pkt_desc_ptr == NULL) || (pkt_desc_ptr->pkt_ptr == NULL))
             {
-                fprintf(fp_stderr, "pkt_desc_ptr is NULL\n");
+                fprintf(fp_stdout, "TIMEOUT_MGMT: Skipped a packet descriptor which has already been freed.\n");
                 continue;
             }
             else
@@ -471,7 +365,7 @@ void *timeout_mgmt(void *args)
                     char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
                     inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                    fprintf(fp_stdout, "popping TCP SYN: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
+                    fprintf(fp_stdout, "TIMEOUT_MGMT: popping TCP SYN: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
                             ip_src_addr_print_buffer,
                             (pkt_desc_ptr)->pkt_ptr->addr_pair.a_port,
                             ip_dst_addr_print_buffer,
@@ -482,32 +376,39 @@ void *timeout_mgmt(void *args)
                             (pkt_desc_ptr)->recv_time.tv_sec);
                 }
 
+                /* Since we do not have pip/ptcp, we have to manually get the flow info from pkt_ptr */
                 hval = pkt_desc_ptr->pkt_ptr->addr_pair.hash % GLOBALS.Hash_Table_Size;
-
                 IP_COPYADDR(&tp_in.a_address, pkt_desc_ptr->pkt_ptr->addr_pair.a_address);
                 IP_COPYADDR(&tp_in.b_address, pkt_desc_ptr->pkt_ptr->addr_pair.b_address);
                 tp_in.a_port = pkt_desc_ptr->pkt_ptr->addr_pair.a_port;
                 tp_in.b_port = pkt_desc_ptr->pkt_ptr->addr_pair.b_port;
                 tp_in.hash = pkt_desc_ptr->pkt_ptr->addr_pair.hash;
-                
+
                 /* Find entry in hash table */
                 for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
                 {
                     if (SameConn(&tp_in, &flow_hash_ptr->addr_pair, &dir))
                     {
                         /* Found */
+                        is_found = TRUE;
                         break;
                     }
                 }
-                FreeTTP(pkt_desc_ptr->pkt_ptr);
-                FreeFlowHash(flow_hash_ptr);
-            }
 
-            // printf("size: %ld \n", circular_buf_size(circ_buf));
+                if (is_found)
+                {
+                    FreeTTP(pkt_desc_ptr->pkt_ptr);
+                    FreeFlowHash(flow_hash_ptr);
+                }
+                else
+                {
+                    fprintf(fp_stderr, "TIMEOUT_MGMT: Error: Cannot find the flow in the hash table!\n");
+                }
+            }
         }
         else
         {
-            printf("size: %ld \n", circular_buf_size(circ_buf));
+            fprintf(fp_stdout, "TIMEOUT_MGMT: Circular Buffer empty!\n");
         }
         usleep(GLOBALS.TCP_Idle_Time * US_PER_MS);
     }
@@ -516,16 +417,11 @@ void *timeout_mgmt(void *args)
 void trace_init(void)
 {
     static Bool initted = FALSE;
-    extern ptp_snap **ptp_hashtable;
-    // extern host_status **active_host_hashtable;
 
     if (initted)
         return;
 
     initted = TRUE;
-
-    /* initialize the hash table */
-    ptp_hashtable = (ptp_snap **)MallocZ(GLOBALS.Hash_Table_Size * sizeof(ptp_snap *));
 
     /* create an array to hold any pairs that we might create */
     ttp = (tcp_packet **)MallocZ(GLOBALS.Max_TCP_Packets * sizeof(tcp_packet *));
