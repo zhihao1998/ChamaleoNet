@@ -17,6 +17,9 @@ u_long tcp_trace_count_local = 0;
 
 Bool warn_MAX_ = TRUE;
 
+static pthread_mutex_t g_tMutex;
+static pthread_cond_t cond;
+
 /* connection records are stored in a hash table.  */
 flow_hash **flow_hash_table;
 
@@ -168,16 +171,6 @@ FindFlowHash(struct ip *pip, struct tcphdr *ptcp, void *plast, int *pdir)
     return NULL;
 }
 
-static void
-UpdateTTP(tcp_packet *ptp, struct ip *pip, struct tcphdr *ptcp, void *plast, struct timeval *pckt_time)
-{
-    /* Update the sotred information with newly arrival packet */
-    ptp->payload_len = getpayloadlength(pip, plast) - ptcp->th_off * 4;
-    strcpy(ptp->payload, get_ppayload(ptcp, &plast));
-    ptp->arrival_time = *pckt_time;
-}
-
-
 static flow_hash *CreateFlowHash(struct ip *pip, struct tcphdr *ptcp, void *plast, struct timeval *pckt_time)
 {
     static tcp_packet *temp_ttp;
@@ -296,6 +289,7 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
         else
         {
             flow_hash_ptr = CreateFlowHash(pip, ptcp, plast, pckt_time);
+            pthread_cond_signal(&cond);
             if (debug > 1)
             {
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
@@ -331,8 +325,13 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[1],
                         flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
             }
+            /* TODO: should we lock this? */
             FreeTTP(flow_hash_ptr->pkt_desc_ptr->pkt_ptr);
             FreeFlowHash(flow_hash_ptr);
+            if (circular_buf_empty(circ_buf))
+            {
+                pthread_cond_wait(&cond, &g_tMutex);
+            }
         }
     }
 }
@@ -340,19 +339,25 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
 /* timeout_mgmt thread */
 void *timeout_mgmt(void *args)
 {
+    while (circular_buf_empty(circ_buf))
+    {
+        fprintf(fp_stdout, "TIMEOUT_MGMT: Circular Buffer empty, thread waits!\n");
+        pthread_cond_wait(&cond, &g_tMutex);
+    }
     pkt_desc_t *pkt_desc_ptr;
     hash hval;
     flow_hash *flow_hash_ptr;
     int dir;
     tcp_addrblock tp_in;
     Bool is_found;
+    timeval current_time, pkt_time;
+    int sleep_time_us, time_diff;
 
     while (1)
     {
-        if (circular_buf_get(circ_buf, &pkt_desc_ptr))
+        /* Check the next timeout */
+        if (circular_buf_peek_one(circ_buf, &pkt_desc_ptr) != -1)
         {
-            is_found = FALSE;
-            /* The packet descriptor has been freed. */
             if ((pkt_desc_ptr == NULL) || (pkt_desc_ptr->pkt_ptr == NULL))
             {
                 fprintf(fp_stdout, "TIMEOUT_MGMT: Skipped a packet descriptor which has already been freed.\n");
@@ -360,57 +365,88 @@ void *timeout_mgmt(void *args)
             }
             else
             {
-                if (debug > 1)
-                {
-                    char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-                    inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                    fprintf(fp_stdout, "TIMEOUT_MGMT: popping TCP SYN: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
-                            ip_src_addr_print_buffer,
-                            (pkt_desc_ptr)->pkt_ptr->addr_pair.a_port,
-                            ip_dst_addr_print_buffer,
-                            (pkt_desc_ptr)->pkt_ptr->addr_pair.b_port,
-                            (pkt_desc_ptr)->pkt_ptr->payload_len,
-                            (pkt_desc_ptr)->pkt_ptr->payload[0],
-                            (pkt_desc_ptr)->pkt_ptr->payload[1],
-                            (pkt_desc_ptr)->recv_time.tv_sec);
-                }
+                /* Get the packet's arrival timestamp */
+                pkt_time = pkt_desc_ptr->recv_time;
+                gettimeofday(&current_time, NULL);
+                time_diff = (current_time.tv_sec - pkt_time.tv_sec) * US_PER_SEC + (current_time.tv_usec - pkt_time.tv_usec);
+                fprintf(fp_stdout, "Time for processing this packet: %dus!\n", time_diff);
 
-                /* Since we do not have pip/ptcp, we have to manually get the flow info from pkt_ptr */
-                hval = pkt_desc_ptr->pkt_ptr->addr_pair.hash % GLOBALS.Hash_Table_Size;
-                IP_COPYADDR(&tp_in.a_address, pkt_desc_ptr->pkt_ptr->addr_pair.a_address);
-                IP_COPYADDR(&tp_in.b_address, pkt_desc_ptr->pkt_ptr->addr_pair.b_address);
-                tp_in.a_port = pkt_desc_ptr->pkt_ptr->addr_pair.a_port;
-                tp_in.b_port = pkt_desc_ptr->pkt_ptr->addr_pair.b_port;
-                tp_in.hash = pkt_desc_ptr->pkt_ptr->addr_pair.hash;
+                time_diff = GLOBALS.TCP_Idle_Time - time_diff;
+                sleep_time_us = (GLOBALS.TCP_Idle_Time < time_diff) ? GLOBALS.TCP_Idle_Time : time_diff;
 
-                /* Find entry in hash table */
-                for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
+                if (sleep_time_us > 0)
                 {
-                    if (SameConn(&tp_in, &flow_hash_ptr->addr_pair, &dir))
+                    usleep(sleep_time_us);
+                    if (debug > 1)
                     {
-                        /* Found */
-                        is_found = TRUE;
-                        break;
+                        fprintf(fp_stdout, "TIMEOUT_MGMT: Slept for %dus!\n", sleep_time_us);
                     }
-                }
-
-                if (is_found)
-                {
-                    FreeTTP(pkt_desc_ptr->pkt_ptr);
-                    FreeFlowHash(flow_hash_ptr);
                 }
                 else
                 {
-                    fprintf(fp_stderr, "TIMEOUT_MGMT: Error: Cannot find the flow in the hash table!\n");
+                    fprintf(fp_stderr, "TIMEOUT_MGMT: A packet is not handled within the timeout for %dus!!!\n", sleep_time_us);
                 }
             }
         }
         else
         {
             fprintf(fp_stdout, "TIMEOUT_MGMT: Circular Buffer empty!\n");
+            continue;
         }
-        usleep(GLOBALS.TCP_Idle_Time * US_PER_MS);
+
+        /* Pop the packet descruptor from circular buffer */
+        // we have checked if the tail available in previous peeking function
+        circular_buf_get(circ_buf, &pkt_desc_ptr);
+        is_found = FALSE;
+        /* The packet descriptor has been freed. */
+        if (debug > 1)
+        {
+            char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
+            inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
+            fprintf(fp_stdout, "TIMEOUT_MGMT: popping TCP SYN: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
+                    ip_src_addr_print_buffer,
+                    (pkt_desc_ptr)->pkt_ptr->addr_pair.a_port,
+                    ip_dst_addr_print_buffer,
+                    (pkt_desc_ptr)->pkt_ptr->addr_pair.b_port,
+                    (pkt_desc_ptr)->pkt_ptr->payload_len,
+                    (pkt_desc_ptr)->pkt_ptr->payload[0],
+                    (pkt_desc_ptr)->pkt_ptr->payload[1],
+                    (pkt_desc_ptr)->recv_time.tv_sec);
+        }
+
+        /* Since we do not have pip/ptcp pointer, we have to manually get the flow info from pkt_ptr */
+        hval = pkt_desc_ptr->pkt_ptr->addr_pair.hash % GLOBALS.Hash_Table_Size;
+        IP_COPYADDR(&tp_in.a_address, pkt_desc_ptr->pkt_ptr->addr_pair.a_address);
+        IP_COPYADDR(&tp_in.b_address, pkt_desc_ptr->pkt_ptr->addr_pair.b_address);
+        tp_in.a_port = pkt_desc_ptr->pkt_ptr->addr_pair.a_port;
+        tp_in.b_port = pkt_desc_ptr->pkt_ptr->addr_pair.b_port;
+        tp_in.hash = pkt_desc_ptr->pkt_ptr->addr_pair.hash;
+
+        /* Find entry in hash table */
+        for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
+        {
+            if (SameConn(&tp_in, &flow_hash_ptr->addr_pair, &dir))
+            {
+                /* Found */
+                is_found = TRUE;
+                break;
+            }
+        }
+
+        if (is_found)
+        {
+            FreeTTP(pkt_desc_ptr->pkt_ptr);
+            FreeFlowHash(flow_hash_ptr);
+            if (circular_buf_empty(circ_buf))
+            {
+                pthread_cond_wait(&cond, &g_tMutex);
+            }
+        }
+        else
+        {
+            fprintf(fp_stderr, "TIMEOUT_MGMT: Error: Cannot find the flow in the hash table!\n");
+        }
     }
 }
 
@@ -422,6 +458,10 @@ void trace_init(void)
         return;
 
     initted = TRUE;
+
+    /* initialize the mutex lock for two threads */
+    pthread_mutex_init(&g_tMutex, NULL);
+    pthread_cond_init(&cond, NULL);
 
     /* create an array to hold any pairs that we might create */
     ttp = (tcp_packet **)MallocZ(GLOBALS.Max_TCP_Packets * sizeof(tcp_packet *));

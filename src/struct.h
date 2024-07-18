@@ -82,14 +82,6 @@ typedef struct tcp_packet
 } tcp_packet;
 
 
-typedef struct ptp_snap
-{
-  tcp_addrblock addr_pair; /* just a copy */
-  struct ptp_snap *next;
-  tcp_packet *ptp;
-  // tcp_packet **ttp_ptr;
-} ptp_snap;
-
 /* Struct mirroring the constants defined in param.h */
 
 struct global_parameters
@@ -98,7 +90,7 @@ struct global_parameters
   int Max_UDP_Pairs;
   int List_Search_Dept;
   int Hash_Table_Size;
-  int TCP_Idle_Time;
+  int TCP_Idle_Time; // in microseconds
 };
 
 /* incoming/outgoing based on Ethernet MAC addresses */

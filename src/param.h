@@ -33,6 +33,8 @@ Increase this number on high speed network will help ...*/
 /* oughta be prime  and larger than MAX_TCP_PACKETS */
 #define HASH_TABLE_SIZE 2000003
 
-/* TCP_IDLE_TIME in milliseconds: timeout to consider a TCP flow closed if no
+/* TCP_IDLE_TIME in microseconds: timeout to consider a TCP flow closed if no
 segments are observed since TCP_IDLE_TIME */
-#define TCP_IDLE_TIME 1000
+#define TCP_IDLE_TIME 20000
+
+#define PCAP_DEBUG

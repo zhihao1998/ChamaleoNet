@@ -40,7 +40,6 @@ static pcap_t *pcap;
 
 extern void *timeout_mgmt(void *args);
 
-
 /* pkt_rx thread */
 static int
 my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
@@ -313,14 +312,24 @@ int main(int argc, char *argv[])
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
 
+#ifdef PCAP_DEBUG
+	int i = 0;
+	do
+	{
+		ProcessPacket(&current_time, pip, plast, tlen, phystype, &fpnum, &pcount,
+					  file_count, location, DEFAULT_NET);
+		i++;
+	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0) && i < 10);
+#else
 	do
 	{
 		ProcessPacket(&current_time, pip, plast, tlen, phystype, &fpnum, &pcount,
 					  file_count, location, DEFAULT_NET);
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
+#endif
 
-	pthread_exit(NULL);
-
+	pthread_cancel(timeout_mgmt_thread);
+	free(ip_buf);
 	return 0;
 }
 
@@ -346,7 +355,5 @@ MallocZ(int nbytes)
 	}
 
 	memset(ptr, 0, nbytes); /* BZERO */
-
 	return (ptr);
 }
-

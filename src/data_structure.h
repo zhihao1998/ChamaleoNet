@@ -31,8 +31,6 @@ void tplist_release (struct tp_list_elem *rel_tplist);
 tcp_packet *tp_alloc (void);
 void tp_release (tcp_packet * relesased_tcp_packet);
 
-ptp_snap *ptph_alloc (void);
-void ptph_release (ptp_snap * rel_ptph);
 void *MMmalloc (size_t size, const char *f_name);
 
 /* Pkt descriptor */
@@ -87,3 +85,7 @@ size_t circular_buf_capacity(circular_buf_t* me);
 
 /// Returns the current number of elements in the buffer
 size_t circular_buf_size(circular_buf_t* me);
+
+// Peek one element before the tail to get timestamp 
+// Returns 0 on success, -1 if the buffer is empty
+int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_ptr);

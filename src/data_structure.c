@@ -28,8 +28,6 @@ extern Bool bayes_engine;
 long IN_USE_TP = 0;
 long IN_USE_PTP_SNAP = 0;
 
-
-
 long TOT_TP = 0;
 long TOT_PTP_SNAP = 0;
 extern long tot_adx_hash_count, bayes_new_count;
@@ -213,9 +211,9 @@ void ptph_release(ptp_snap *rel_ptph)
 }
 
 /* Garbage collector for Packet Descriptor Array
-*  Two pointer are used (top and last).
-*  Alloc and release from last, while top is used to not loose the list ...
-*/
+ *  Two pointer are used (top and last).
+ *  Alloc and release from last, while top is used to not loose the list ...
+ */
 
 static struct pkt_desc_list_elem *top_pkt_desc_flist = NULL;  /* Pointer to the top of      */
                                                               /* the 'pkt_desc_list' free list.    */
@@ -227,14 +225,14 @@ pkt_desc_t *pkt_desc_alloc()
 {
   pkt_desc_t *new_pkt_desc_ptr;
 #ifdef MEMDEBUG
-IN_USE_PKT_DESC++;
+  IN_USE_PKT_DESC++;
 #endif
 
   if ((last_pkt_desc_flist == NULL) || (last_pkt_desc_flist->pkt_desc_ptr == NULL))
   { /* The LinkList stack is empty.         */
     new_pkt_desc_ptr = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
 #ifdef MEMDEBUG
-TOT_PKT_DESC++;
+    TOT_PKT_DESC++;
 #endif
     return new_pkt_desc_ptr;
   }
@@ -252,33 +250,32 @@ void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
 {
   struct pkt_desc_list_elem *new_pkt_desc_list_elem;
 #ifdef MEMDEBUG
-IN_USE_PKT_DESC--;
+  IN_USE_PKT_DESC--;
 #endif
-  
-    memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
-  
-    if ((last_pkt_desc_flist == NULL) || ((last_pkt_desc_flist->pkt_desc_ptr != NULL) && (last_pkt_desc_flist->prev == NULL)))
-    {
-      new_pkt_desc_list_elem = (struct pkt_desc_list_elem *)MMmalloc(sizeof(struct pkt_desc_list_elem), "pkt_desc_release");
-      new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
-      new_pkt_desc_list_elem->prev = NULL;
-      new_pkt_desc_list_elem->next = top_pkt_desc_flist;
-      if (new_pkt_desc_list_elem->next != NULL)
-        new_pkt_desc_list_elem->next->prev = new_pkt_desc_list_elem;
-      top_pkt_desc_flist = new_pkt_desc_list_elem;
-      last_pkt_desc_flist = new_pkt_desc_list_elem;
-    }
-    else
-    {
-      if (last_pkt_desc_flist->pkt_desc_ptr == NULL)
-        new_pkt_desc_list_elem = last_pkt_desc_flist;
-      else
-        new_pkt_desc_list_elem = last_pkt_desc_flist->prev;
-      new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
-      last_pkt_desc_flist = new_pkt_desc_list_elem;
-    }
-}
 
+  memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
+
+  if ((last_pkt_desc_flist == NULL) || ((last_pkt_desc_flist->pkt_desc_ptr != NULL) && (last_pkt_desc_flist->prev == NULL)))
+  {
+    new_pkt_desc_list_elem = (struct pkt_desc_list_elem *)MMmalloc(sizeof(struct pkt_desc_list_elem), "pkt_desc_release");
+    new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
+    new_pkt_desc_list_elem->prev = NULL;
+    new_pkt_desc_list_elem->next = top_pkt_desc_flist;
+    if (new_pkt_desc_list_elem->next != NULL)
+      new_pkt_desc_list_elem->next->prev = new_pkt_desc_list_elem;
+    top_pkt_desc_flist = new_pkt_desc_list_elem;
+    last_pkt_desc_flist = new_pkt_desc_list_elem;
+  }
+  else
+  {
+    if (last_pkt_desc_flist->pkt_desc_ptr == NULL)
+      new_pkt_desc_list_elem = last_pkt_desc_flist;
+    else
+      new_pkt_desc_list_elem = last_pkt_desc_flist->prev;
+    new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
+    last_pkt_desc_flist = new_pkt_desc_list_elem;
+  }
+}
 
 /* Garbage collector for Flow Hash Table */
 static flow_hash *top_flow_hash_flist = NULL; /* Pointer to the top of      */
@@ -320,6 +317,7 @@ void flow_hash_release(flow_hash *rel_flow_hash_ptr)
 }
 
 /* Circular Buffer Operations */
+/* Reference: https://github.com/embeddedartistry/embedded-resources/tree/master/examples/c/circular_buffer */
 static inline size_t advance_headtail_value(size_t value, size_t max)
 {
   if (++value == max)
@@ -427,37 +425,28 @@ struct pkt_desc_t **circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *
  * Instead, we return an error to the user. */
 int circular_buf_get(circular_buf_t *me, struct pkt_desc_t **pkt_desc_ptr_ptr)
 {
-  int r = 0;
+  int r = -1;
 
   if (me && !circular_buf_empty(me))
   {
     *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->tail];
     me->tail = advance_headtail_value(me->tail, me->max);
-    r = 1;
+    r = 0;
   }
 
   return r;
 }
 
-// int circular_buf_peek(cbuf_handle_t me, uint8_t* data, unsigned int look_ahead_counter)
-// {
-// 	int r = -1;
-// 	size_t pos;
+/* To check the elements pointed by the tail without advancing the tail. */
+int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_ptr)
+{
+  int r = -1;
 
-// 	assert(me && data && me->buffer);
+  if (me && !circular_buf_empty(me))
+  {
+    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->tail];
+    r = 0;
+  }
 
-// 	// We can't look beyond the current buffer size
-// 	if(circular_buf_empty(me) || look_ahead_counter > circular_buf_size(me))
-// 	{
-// 		return r;
-// 	}
-
-// 	pos = me->tail;
-// 	for(unsigned int i = 0; i < look_ahead_counter; i++)
-// 	{
-// 		data[i] = me->buffer[pos];
-// 		pos = advance_headtail_value(pos, me->max);
-// 	}
-
-// 	return 0;
-// }
+  return r;
+}
