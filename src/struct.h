@@ -19,23 +19,6 @@ typedef u_char Bool;
 
 #define MAX_PAYLOAD_LENGTH 1500
 
-typedef struct segment
-{
-  seqnum seq_firstbyte; /* seqnumber of first byte */
-  seqnum seq_lastbyte;  /* seqnumber of last byte */
-  u_char retrans;       /* retransmit count */
-  u_int acked;          /* how MANY times has has it been acked? */
-  timeval time;         /* time the segment was sent */
-  /* LM start - add field to implement an heuristic to identify
-     loss packets within a flow
-   */
-  u_short ip_id; /* 16 bit ip identification field  */
-  char type_of_segment;
-  /* LM stop */
-  struct segment *next;
-  struct segment *prev;
-} segment;
-
 /* type for an IP address */
 /* IP address can be either IPv4 or IPv6 */
 typedef struct ipaddr
@@ -69,9 +52,6 @@ typedef struct tcp_packet
   /* connection naming information */
   Bool internal_src;
   Bool internal_dst;
-
-  /* connection information */
-  timeval arrival_time;
 
   /* payload information */
   int payload_len;

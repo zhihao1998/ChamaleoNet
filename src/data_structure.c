@@ -26,24 +26,14 @@ extern Bool bayes_engine;
 
 #ifdef MEMDEBUG
 long IN_USE_TP = 0;
-long IN_USE_PTP_SNAP = 0;
 
 long TOT_TP = 0;
-long TOT_PTP_SNAP = 0;
 extern long tot_adx_hash_count, bayes_new_count;
 
 void memory_debug()
 {
   fprintf(fp_stdout, "Using %ld over %ld TP\t(%ldK) (%ld MAX)\n",
           IN_USE_TP, TOT_TP, GLOBALS.Max_TCP_Packets, TOT_TP * sizeof(tcp_packet) >> 10);
-  fprintf(fp_stdout, "Using %ld over %ld SEGMENT\t(%ldK)\n",
-          IN_USE_SEGMENT, TOT_SEGMENT, TOT_SEGMENT * sizeof(segment) >> 10);
-  fprintf(fp_stdout, "Using %ld over %ld QUADRANT\t(%ldK)\n",
-          IN_USE_QUADRANT, TOT_QUADRANT, TOT_QUADRANT * sizeof(quadrant) >> 10);
-  fprintf(fp_stdout, "Using %ld over %ld PTP_SNAP\t(%ldK)\n",
-          IN_USE_PTP_SNAP, TOT_PTP_SNAP, TOT_PTP_SNAP * sizeof(ptp_snap) >> 10);
-  fprintf(fp_stdout, "Using %ld over %ld UDP_PAIR\t(%ldK)\n",
-          IN_USE_UDP_PAIR, TOT_UDP_PAIR, TOT_UDP_PAIR * sizeof(udp_pair) >> 10);
   fprintf(fp_stdout, "Using %ld ADX\n", tot_adx_hash_count);
   fprintf(fp_stdout, "Using %ld bayes_classifier\n", bayes_new_count);
 }
@@ -170,44 +160,6 @@ void tp_list_list()
     new_tplist_elem = new_tplist_elem->next;
   }
   fprintf(fp_stdout, "\n");
-}
-
-/* garbage collector for the ptp_snap list */
-
-static ptp_snap *top_ptph_flist = NULL; /* Pointer to the top of      */
-                                        /* the 'ptp_snap' free list.    */
-ptp_snap *ptph_alloc(void)
-{
-  struct ptp_snap *new_ptph;
-
-#ifdef MEMDEBUG
-  IN_USE_PTP_SNAP++;
-#endif
-
-  if (top_ptph_flist == NULL)
-  {
-    new_ptph = (ptp_snap *)MMmalloc(sizeof(ptp_snap), "ptph_alloc");
-#ifdef MEMDEBUG
-    TOT_PTP_SNAP++;
-#endif
-  }
-  else
-  {
-    new_ptph = top_ptph_flist;
-    top_ptph_flist = top_ptph_flist->next;
-  }
-  new_ptph->next = NULL;
-  return (new_ptph);
-}
-
-void ptph_release(ptp_snap *rel_ptph)
-{
-#ifdef MEMDEBUG
-  IN_USE_PTP_SNAP--;
-#endif
-  memset(rel_ptph, 0, sizeof(ptp_snap));
-  rel_ptph->next = top_ptph_flist;
-  top_ptph_flist = rel_ptph;
 }
 
 /* Garbage collector for Packet Descriptor Array
@@ -442,6 +394,11 @@ int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_p
 {
   int r = -1;
 
+  while (me->pkt_desc_buf[me->tail] == NULL)
+  {
+    me->tail = advance_headtail_value(me->tail, me->max);
+  }
+  
   if (me && !circular_buf_empty(me))
   {
     *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->tail];

@@ -138,7 +138,6 @@ NewTTP_2(struct ip *pip, struct tcphdr *ptcp, void *plast, struct timeval *pckt_
     ptp->payload_len = getpayloadlength(pip, plast) - ptcp->th_off * 4;
     strcpy(ptp->payload, get_ppayload(ptcp, &plast));
 
-    ptp->arrival_time = *pckt_time;
     ptp->loc_ttp = num_tcp_packets;
     return ttp[num_tcp_packets];
 }
@@ -289,12 +288,22 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
         else
         {
             flow_hash_ptr = CreateFlowHash(pip, ptcp, plast, pckt_time);
-            pthread_cond_signal(&cond);
+            if (!circular_buf_empty(circ_buf))
+            {
+                // timeval current_time, pkt_time;
+                // int time_diff;
+                // pkt_time = flow_hash_ptr->pkt_desc_ptr->recv_time;
+                // gettimeofday(&current_time, NULL);
+                // time_diff = tv_sub_2(current_time, pkt_time);
+                // fprintf(fp_stdout, "PKT_RX: cur_time - pkt_time =  %dus!\n", time_diff);
+
+                pthread_cond_signal(&cond);
+            }
             if (debug > 1)
             {
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                fprintf(fp_stdout, "new TCP SYN stored: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
+                fprintf(fp_stdout, "PKT_RX: new TCP SYN stored: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld.%5ld\n",
                         ip_src_addr_print_buffer,
                         flow_hash_ptr->addr_pair.a_port,
                         ip_dst_addr_print_buffer,
@@ -302,7 +311,8 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload_len,
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[0],
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[1],
-                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec,
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_usec);
             }
         }
     }
@@ -315,7 +325,7 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
             {
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                fprintf(fp_stdout, "freeing TCP SYN!!! from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
+                fprintf(fp_stdout, "PKT_RX: freeing TCP SYN from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld.%5ld\n",
                         ip_src_addr_print_buffer,
                         flow_hash_ptr->addr_pair.a_port,
                         ip_dst_addr_print_buffer,
@@ -323,15 +333,12 @@ int tcp_handle(struct ip *pip, struct tcphdr *ptcp, void *plast, int *dir, struc
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload_len,
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[0],
                         flow_hash_ptr->pkt_desc_ptr->pkt_ptr->payload[1],
-                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec,
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_usec);
             }
             /* TODO: should we lock this? */
             FreeTTP(flow_hash_ptr->pkt_desc_ptr->pkt_ptr);
             FreeFlowHash(flow_hash_ptr);
-            if (circular_buf_empty(circ_buf))
-            {
-                pthread_cond_wait(&cond, &g_tMutex);
-            }
         }
     }
 }
@@ -341,7 +348,7 @@ void *timeout_mgmt(void *args)
 {
     while (circular_buf_empty(circ_buf))
     {
-        fprintf(fp_stdout, "TIMEOUT_MGMT: Circular Buffer empty, thread waits!\n");
+        fprintf(fp_stdout, "TIMEOUT_MGMT: Circular Buffer empty, thread blocked!\n");
         pthread_cond_wait(&cond, &g_tMutex);
     }
     pkt_desc_t *pkt_desc_ptr;
@@ -355,6 +362,13 @@ void *timeout_mgmt(void *args)
 
     while (1)
     {
+
+        if (circular_buf_size(circ_buf) == 0)
+        {
+            fprintf(fp_stdout, "TIMEOUT_MGMT: Circular Buffer empty, thread blocked!\n");
+            pthread_cond_wait(&cond, &g_tMutex);
+        }
+
         /* Check the next timeout */
         if (circular_buf_peek_one(circ_buf, &pkt_desc_ptr) != -1)
         {
@@ -365,32 +379,36 @@ void *timeout_mgmt(void *args)
             }
             else
             {
-                /* Get the packet's arrival timestamp */
+                /* Slepping time  */
                 pkt_time = pkt_desc_ptr->recv_time;
+
                 gettimeofday(&current_time, NULL);
-                time_diff = (current_time.tv_sec - pkt_time.tv_sec) * US_PER_SEC + (current_time.tv_usec - pkt_time.tv_usec);
-                fprintf(fp_stdout, "Time for processing this packet: %dus!\n", time_diff);
+                time_diff = tv_sub_2(current_time, pkt_time);
 
-                time_diff = GLOBALS.TCP_Idle_Time - time_diff;
-                sleep_time_us = (GLOBALS.TCP_Idle_Time < time_diff) ? GLOBALS.TCP_Idle_Time : time_diff;
-
-                if (sleep_time_us > 0)
+                /* if (cur_time – pkt_time) <= Timeout, sleeps for (Timeout - (cur_time – pkt_time)) */
+                if (GLOBALS.TCP_Idle_Time >= time_diff)
                 {
+                    sleep_time_us = GLOBALS.TCP_Idle_Time - time_diff;
                     usleep(sleep_time_us);
                     if (debug > 1)
                     {
                         fprintf(fp_stdout, "TIMEOUT_MGMT: Slept for %dus!\n", sleep_time_us);
                     }
                 }
+                /* otherwise, the packet is delayed more than Timeout. The packet should to be freed immediately.
+                 * Should try to not let this happen! */
                 else
                 {
-                    fprintf(fp_stderr, "TIMEOUT_MGMT: A packet is not handled within the timeout for %dus!!!\n", sleep_time_us);
+                    if (debug > 1)
+                    {
+                        fprintf(fp_stderr, "TIMEOUT_MGMT: A packet is delayed too long for %dus!!!\n", time_diff);
+                    }
                 }
             }
         }
         else
         {
-            fprintf(fp_stdout, "TIMEOUT_MGMT: Circular Buffer empty!\n");
+            fprintf(fp_stderr, "TIMEOUT_MGMT: Circular Buffer empty!\n");
             continue;
         }
 
@@ -404,7 +422,7 @@ void *timeout_mgmt(void *args)
             char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
             inet_ntop(AF_INET, &((pkt_desc_ptr)->pkt_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-            fprintf(fp_stdout, "TIMEOUT_MGMT: popping TCP SYN: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld\n",
+            fprintf(fp_stdout, "TIMEOUT_MGMT: popping TCP SYN: from %s:%d to %s:%d with %d bytes of payload %c%c.. at %ld.%5ld\n",
                     ip_src_addr_print_buffer,
                     (pkt_desc_ptr)->pkt_ptr->addr_pair.a_port,
                     ip_dst_addr_print_buffer,
@@ -412,7 +430,8 @@ void *timeout_mgmt(void *args)
                     (pkt_desc_ptr)->pkt_ptr->payload_len,
                     (pkt_desc_ptr)->pkt_ptr->payload[0],
                     (pkt_desc_ptr)->pkt_ptr->payload[1],
-                    (pkt_desc_ptr)->recv_time.tv_sec);
+                    current_time.tv_sec,
+                    current_time.tv_usec);
         }
 
         /* Since we do not have pip/ptcp pointer, we have to manually get the flow info from pkt_ptr */
@@ -438,10 +457,7 @@ void *timeout_mgmt(void *args)
         {
             FreeTTP(pkt_desc_ptr->pkt_ptr);
             FreeFlowHash(flow_hash_ptr);
-            if (circular_buf_empty(circ_buf))
-            {
-                pthread_cond_wait(&cond, &g_tMutex);
-            }
+            // fprintf(fp_stderr, "TIMEOUT_MGMT: size: %ld!\n", circular_buf_size(circ_buf));
         }
         else
         {

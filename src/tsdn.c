@@ -1,14 +1,11 @@
 #include "tsdn.h"
 
-eth_filter mac_filter;
-Bool internal_dhost;
-Bool internal_shost;
-Bool internal_eth(uint8_t *eth_addr, eth_filter *filter);
-
 Bool internal_src = TRUE;
 Bool internal_dst = TRUE;
 
 Bool warn_printtrunc = TRUE;
+
+char *dev = "virbr0"; /* The device to sniff on */
 
 /* option flags and default values */
 Bool live_flag = TRUE;
@@ -35,9 +32,6 @@ u_long pnum = 0;
 /* global pointer, the pcap info header */
 static pcap_t *pcap;
 
-/* Circular buffer */
-// extern circular_buf_t *circ_buf;
-
 extern void *timeout_mgmt(void *args);
 
 /* pkt_rx thread */
@@ -47,6 +41,9 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	int type;
 	int iplen;
 	static int offset = -1;
+
+	timeval current_time;
+	int time_diff;
 
 	iplen = phdr->caplen;
 	if (iplen > IP_MAXPACKET)
@@ -58,8 +55,9 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	callback_phdr = phdr;
 	pcap_current_hdr = *phdr;
 	pcap_current_buf = buf;
-	if (debug > 2)
-		fprintf(fp_stderr, "tcpdump: read a type %d IP frame\n", type);
+
+	// if (debug > 2)
+	// 	fprintf(fp_stderr, "tcpdump: read a type %d IP frame\n", type);
 
 	/* kindof ugly, but about the only way to make them fit together :-( */
 	switch (type)
@@ -72,13 +70,6 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 		offset = 14;
 		iplen -= offset;
 		memcpy(&eth_header, buf, EH_SIZE); /* save ether header */
-
-		/* check if this frame is coming in */
-		internal_shost = internal_dhost = FALSE;
-		// if (internal_eth(eth_header.ether_shost, &mac_filter))
-		// 	internal_shost = TRUE;
-		// if (internal_eth(eth_header.ether_dhost, &mac_filter))
-		// 	internal_dhost = TRUE;
 
 		/* now get rid of ethernet headers */
 		switch (offset)
@@ -136,9 +127,11 @@ int pread_tcpdump(struct timeval *ptime,
 
 		/* fill in all of the return values */
 		*pphys = &eth_header;	 /* everything assumed to be ethernet */
-		*pphystype = PHYS_ETHER; /* everything assumed to be ethernet */
+		*pphystype = PHYS_ETHER; /* everything assumed zto be ethernet */
 		*ppip = (struct ip *)ip_buf;
 		*pplast = callback_plast; /* last byte in IP packet */
+
+		/* use the real time from Libpcap */
 		ptime->tv_usec = pcap_current_hdr.ts.tv_usec;
 		ptime->tv_sec = pcap_current_hdr.ts.tv_sec;
 		*plen = pcap_current_hdr.len;
@@ -229,7 +222,6 @@ int main(int argc, char *argv[])
 	/* initialize internals */
 	trace_init();
 
-	char *dev;					   /* The device to sniff on */
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
 	struct bpf_program fp;		   /* The compiled filter */
 	char filter_exp[] = "(tcp[13] & 2 != 0) || \
@@ -238,43 +230,56 @@ int main(int argc, char *argv[])
 						(icmp[icmptype] = 0) || \
 						(icmp[icmptype] = 8) || \
 						(udp) ";   /* The filter expression */
-	struct pcap_pkthdr header;	   /* The header that pcap gives us */
-	struct ether_header *eptr;	   /* net/ethernet.h */
-	u_char *ptr;				   /* printing out hardware header info */
-	const u_char *packet;		   /* The actual packet */
+	// char filter_exp[] = "";
+	struct pcap_pkthdr header; /* The header that pcap gives us */
+	struct ether_header *eptr; /* net/ethernet.h */
+	u_char *ptr;			   /* printing out hardware header info */
+	const u_char *packet;	   /* The actual packet */
 	pcap_if_t *all_devs;
 
 	int ret = 0;
 	struct ip *pip;
-	// struct tcphdr *ptcp = NULL;
 	int phystype;
 	void *phys; /* physical transport header */
-	// tcp_pair *ptp;
 	int fix;
 	int len;
 	int tlen;
 	void *plast;
 	long int location = 0;
 
-	/* Define the device */
-	if (pcap_findalldevs(&all_devs, errbuf) == -1)
+	// /* Define the device */
+	// if (pcap_findalldevs(&all_devs, errbuf) == -1)
+	// {
+	// 	fprintf(stderr, "error finding devices");
+	// 	return 1;
+	// }
+	// dev = all_devs->name;
+	// // or loop through all_devs to find the one you want
+	// if (all_devs == NULL)
+	// {
+	// 	printf("Error finding devices: %s\n", errbuf);
+	// 	return 1;
+	// }
+
+	printf("Capturing on the device: %s\n", dev);
+
+	/* open the device for sniffing. Here we use create+activate rather to avoid the packet buffer in libpcap. */
+	// pcap = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
+	pcap = pcap_create(dev, errbuf);
+
+	/* Set immediate mode */
+	if (pcap_set_immediate_mode(pcap, 1) == -1)
 	{
-		fprintf(stderr, "error finding devices");
-		return 1;
-	}
-	dev = all_devs->name;
-	// or loop through all_devs to find the one you want
-	if (all_devs == NULL)
-	{
-		printf("Error finding devices: %s\n", errbuf);
+		fprintf(stderr, "Error setting immediate mode\n");
 		return 1;
 	}
 
-	dev = "virbr0";
-	printf("DEV: %s\n", dev);
-
-	/* open the device for sniffing. */
-	pcap = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+	/* Activate the pcap handle. */
+	if (pcap_activate(pcap) == -1)
+	{
+		fprintf(stderr, "Error activating pcap\n");
+		return (2);
+	}
 
 	if (pcap == NULL)
 	{
@@ -282,7 +287,7 @@ int main(int argc, char *argv[])
 		return (2);
 	}
 
-	/* Complile the filter represented by string*/
+	/* Compile the filter represented by string*/
 	if (pcap_compile(pcap, &fp, filter_exp, 1, 0) == -1)
 	{
 		fprintf(stderr, "Error calling pcap_compile\n");
@@ -319,7 +324,7 @@ int main(int argc, char *argv[])
 		ProcessPacket(&current_time, pip, plast, tlen, phystype, &fpnum, &pcount,
 					  file_count, location, DEFAULT_NET);
 		i++;
-	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0) && i < 10);
+	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0) && i < 100);
 #else
 	do
 	{
@@ -329,7 +334,6 @@ int main(int argc, char *argv[])
 #endif
 
 	pthread_cancel(timeout_mgmt_thread);
-	free(ip_buf);
 	return 0;
 }
 
@@ -338,7 +342,8 @@ MallocZ(int nbytes)
 {
 	char *ptr;
 
-	ptr = malloc(nbytes);
+	// ptr = malloc(nbytes);
+	ptr = calloc(1, nbytes);
 	if (ptr == NULL)
 	{
 		fprintf(fp_stderr, "Malloc failed, fatal: %s\n", strerror(errno));
@@ -354,6 +359,6 @@ MallocZ(int nbytes)
 		exit(EXIT_FAILURE);
 	}
 
-	memset(ptr, 0, nbytes); /* BZERO */
+	// memset(ptr, 0, nbytes); /* BZERO */
 	return (ptr);
 }

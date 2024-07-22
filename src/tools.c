@@ -35,6 +35,12 @@ void tv_sub(struct timeval *plhs, struct timeval rhs)
     plhs->tv_sec -= rhs.tv_sec;
 }
 
+/* subtract the rhs from the lhs, return time_diff in us */
+int tv_sub_2(struct timeval lhs, struct timeval rhs)
+{
+    return ((lhs.tv_sec - rhs.tv_sec) * US_PER_SEC + lhs.tv_usec - rhs.tv_usec);
+}
+
 /* add the RHS to the LHS, answer in *plhs */
 void tv_add(struct timeval *plhs, struct timeval rhs)
 {
