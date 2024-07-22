@@ -19,8 +19,9 @@ This project is developed with the following dependencies:
 ## To RUN
 1. Create the dirs `make makedir`
 2. Specify the device name `dev` to be captured in `tsdn.c`, which is `virbr0` by default.
-3. run the main executable object by `sudo ./bin/tsdn`. Typically, libpcap requires root privilege. If the current user has root privilege to execute packet capturing, `sudo` can be omitted.
-4. Send some packets to the interface.
+3. Compile the target ```tsdn```.
+4. Run the main executable object by `sudo ./bin/tsdn`. Typically, libpcap requires root privilege. If the current user has root privilege to execute packet capturing, `sudo` can be omitted.
+5. Send some packets to the interface.
 
 
 ## Current developing status
