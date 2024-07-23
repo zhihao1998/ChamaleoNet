@@ -11,6 +11,7 @@
 #include <netinet/in.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
 #include <net/ethernet.h>
 #include <string.h>
 #include <assert.h>
@@ -101,8 +102,9 @@ unsigned char *pcap_current_buf;
 void InitGlobals(void);
 
 /* TCP realated */
-int tcp_handle(struct ip *, struct tcphdr *ptcp, void *plast, int *dir, struct timeval *pckt_time);
+int tcp_handle(struct ip *, void *ptcp, void *plast, struct timeval *pckt_time);
 struct tcphdr *gettcp (struct ip *pip, void **pplast);
+struct udphdr *getudp (struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
 void trace_init (void);
 void print_ttp();
@@ -150,14 +152,14 @@ struct tp_list_elem
 {
   struct tp_list_elem *next;
   struct tp_list_elem *prev;
-  tcp_packet *ptp;
+  ip_packet *ptp;
 };
 
 struct tp_list_elem *tplist_alloc (void);
 void tplist_release (struct tp_list_elem *rel_tplist);
 
-tcp_packet *tp_alloc (void);
-void tp_release (tcp_packet * relesased_tcp_packet);
+ip_packet *tp_alloc (void);
+void tp_release (ip_packet * relesased_ip_packet);
 
 void *MMmalloc (size_t size, const char *f_name);
 

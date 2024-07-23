@@ -65,7 +65,7 @@ int IP_SAMEADDR(ipaddr addr1, ipaddr addr2)
 }
 
 /*
- * gettcp:  return a pointer to a tcp header.
+ * findheader:  return a pointer to a L4(TCP/UDP) or ICMP header.
  * Skips either ip or ipv6 headers
  */
 static void *
@@ -88,7 +88,7 @@ findheader(u_int ipproto, struct ip *pip, void **pplast)
     {
       if (debug > 1)
       {
-        fprintf(fp_stdout, "gettcp: Skipping IPv4 non-initial fragment\n");
+        fprintf(fp_stdout, "findheader: Skipping IPv4 non-initial fragment\n");
       }
       return NULL;
     }
@@ -120,6 +120,18 @@ gettcp(struct ip *pip, void **pplast)
 }
 
 /*
+ * getudp:  return a pointer to a udp header.
+ * Skips either ip or ipv6 headers
+ */
+struct udphdr *
+getudp(struct ip *pip, void **pplast)
+{
+  struct udphdr *pudp;
+  pudp = (struct udphdr *)findheader(IPPROTO_UDP, pip, pplast);
+  return (pudp);
+}
+
+/*
  * get_ppayload:  return a pointer to a payload.
  * Skips either ip and TCP headers
  */
@@ -138,16 +150,5 @@ get_ppayload(struct tcphdr *ptcp, void **pplast)
 int
 getpayloadlength (struct ip *pip, void *plast)
 {
-#ifdef SUPPORT_IPV6
-  struct ipv6 *pipv6;
-
-  if (PIP_ISV6 (pip))
-    {
-      pipv6 = (struct ipv6 *) pip;	/* how about all headers */
-    //  return ntohs (pipv6->ip6_lngth);
-      return ntohs (pipv6->ip6_lngth) + 40 - gethdrlength(pip,plast);
-    }
-  else /* IPv4 */
-#endif
   return ntohs (pip->ip_len) - (pip->ip_hl * 4);
 }

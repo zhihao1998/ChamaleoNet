@@ -33,7 +33,7 @@ extern long tot_adx_hash_count, bayes_new_count;
 void memory_debug()
 {
   fprintf(fp_stdout, "Using %ld over %ld TP\t(%ldK) (%ld MAX)\n",
-          IN_USE_TP, TOT_TP, GLOBALS.Max_TCP_Packets, TOT_TP * sizeof(tcp_packet) >> 10);
+          IN_USE_TP, TOT_TP, GLOBALS.Max_TCP_Packets, TOT_TP * sizeof(ip_packet) >> 10);
   fprintf(fp_stdout, "Using %ld ADX\n", tot_adx_hash_count);
   fprintf(fp_stdout, "Using %ld bayes_classifier\n", bayes_new_count);
 }
@@ -62,7 +62,7 @@ MMmalloc(size_t size, const char *f_name)
   return temp_pointer;
 }
 
-/* Garbage collector for the tcp_packet structs
+/* Garbage collector for the ip_packet structs
  * Two pointer are used (top and last).
  * Alloc and release from last, while top is used to not loose the list ...
  */
@@ -72,10 +72,10 @@ static struct tp_list_elem *top_tp_flist = NULL;  /* Pointer to the top of      
 static struct tp_list_elem *last_tp_flist = NULL; /* Pointer to the last used   */
                                                   /* element list.              */
 
-tcp_packet *
+ip_packet *
 tp_alloc(void)
 {
-  tcp_packet *ptp_temp;
+  ip_packet *ptp_temp;
 #ifdef MEMDEBUG
   IN_USE_TP++;
 #endif
@@ -83,7 +83,7 @@ tp_alloc(void)
   if ((last_tp_flist == NULL) || (last_tp_flist->ptp == NULL))
   { /* The LinkList stack is empty.         */
     /* fprintf (fp_stdout, "FList empty, top == last == NULL\n"); */
-    ptp_temp = (tcp_packet *)MMmalloc(sizeof(tcp_packet), "tplist_alloc");
+    ptp_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "tplist_alloc");
 #ifdef MEMDEBUG
     TOT_TP++;
 #endif
@@ -100,7 +100,7 @@ tp_alloc(void)
   }
 }
 
-void tp_release(tcp_packet *released_tcp_packet)
+void tp_release(ip_packet *released_ip_packet)
 {
   struct tp_list_elem *new_tplist_elem;
 
@@ -108,14 +108,14 @@ void tp_release(tcp_packet *released_tcp_packet)
   IN_USE_TP--;
 #endif
 
-  memset(released_tcp_packet, 0, sizeof(tcp_packet));
+  memset(released_ip_packet, 0, sizeof(ip_packet));
 
   if ((last_tp_flist == NULL) || ((last_tp_flist->ptp != NULL) && (last_tp_flist->prev == NULL)))
   {
     new_tplist_elem =
         (struct tp_list_elem *)MMmalloc(sizeof(struct tp_list_elem),
                                         "tplist_release");
-    new_tplist_elem->ptp = released_tcp_packet;
+    new_tplist_elem->ptp = released_ip_packet;
     new_tplist_elem->prev = NULL;
     new_tplist_elem->next = top_tp_flist;
     if (new_tplist_elem->next != NULL)
@@ -129,7 +129,7 @@ void tp_release(tcp_packet *released_tcp_packet)
       new_tplist_elem = last_tp_flist;
     else
       new_tplist_elem = last_tp_flist->prev;
-    new_tplist_elem->ptp = released_tcp_packet;
+    new_tplist_elem->ptp = released_ip_packet;
     last_tp_flist = new_tplist_elem;
   }
 }
@@ -394,10 +394,12 @@ int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_p
 {
   int r = -1;
 
-  while (me->pkt_desc_buf[me->tail] == NULL)
-  {
-    me->tail = advance_headtail_value(me->tail, me->max);
-  }
+  // /* advance the tail until there is a valid value */
+  // while (me->pkt_desc_buf[me->tail] == NULL)
+  // {
+  //   me->tail = advance_headtail_value(me->tail, me->max);
+  //   printf("asssss\n");
+  // }
   
   if (me && !circular_buf_empty(me))
   {

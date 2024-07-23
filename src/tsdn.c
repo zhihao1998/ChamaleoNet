@@ -163,15 +163,8 @@ static int ProcessPacket(struct timeval *pckt_time,
 						 long int location,
 						 int ip_direction)
 {
-	struct tcphdr *ptcp = NULL;
-	int flow_stat_code;
-	struct udphdr *pudp;
-	int dir;
-	//   struct stat finfo;
-	int stat_error;
-	static int stat_err_counter = 3;
-
-	current_time = *pckt_time;
+	/* Header defintion */
+	struct icmphdr *picmp = NULL;
 
 	/* quick sanity check, better be an IPv4/v6 packet */
 	if (!PIP_ISV4(pip) && !PIP_ISV6(pip))
@@ -206,12 +199,37 @@ static int ProcessPacket(struct timeval *pckt_time,
 		}
 	}
 
-	/* TCP */
-
-	if ((ptcp = gettcp(pip, &plast)) != NULL)
+	/* Check the IP protocol ICMP/TCP/UDP */
+	switch (pip->ip_p)
 	{
-		tcp_handle(pip, ptcp, plast, &dir, pckt_time);
+	case IPPROTO_ICMP:
+		/* code */
+		break;
+	case IPPROTO_TCP:
+	{
+		struct tcphdr *ptcp = NULL;
+		if ((ptcp = gettcp(pip, &plast)) != NULL)
+		{
+			tcp_handle(pip, ptcp, plast, pckt_time);
+		}
+		break;
 	}
+	case IPPROTO_UDP:
+	{
+		struct udphdr *pudp = NULL;
+		if ((pudp = getudp(pip, &plast)) != NULL)
+		{
+			tcp_handle(pip, pudp, plast, pckt_time);
+		}
+		break;
+	}
+
+	default:
+		fprintf(fp_stderr, "ProcessPacket: Un-supported IP Protocol!");
+		break;
+	}
+
+	/* TCP */
 
 	return 1;
 }
@@ -224,13 +242,13 @@ int main(int argc, char *argv[])
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
 	struct bpf_program fp;		   /* The compiled filter */
-	char filter_exp[] = "(tcp[13] & 2 != 0) || \
-						(tcp[13] & 4 != 0) || \
-						(tcp[13] & 16 != 0) || \
-						(icmp[icmptype] = 0) || \
-						(icmp[icmptype] = 8) || \
-						(udp) ";   /* The filter expression */
-	// char filter_exp[] = "";
+	// char filter_exp[] = "(tcp[13] & 2 != 0) || \
+	// 					(tcp[13] & 4 != 0) || \
+	// 					(tcp[13] & 16 != 0) || \
+	// 					(icmp[icmptype] = 0) || \
+	// 					(icmp[icmptype] = 8) || \
+	// 					(udp) ";   /* The filter expression */
+	char filter_exp[] = "ip";
 	struct pcap_pkthdr header; /* The header that pcap gives us */
 	struct ether_header *eptr; /* net/ethernet.h */
 	u_char *ptr;			   /* printing out hardware header info */

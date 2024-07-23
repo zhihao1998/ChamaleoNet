@@ -35,4 +35,4 @@ Increase this number on high speed network will help ...*/
 
 /* TCP_IDLE_TIME in microseconds: timeout to consider a TCP flow closed if no
 segments are observed since TCP_IDLE_TIME */
-#define TCP_IDLE_TIME 20000
+#define TCP_IDLE_TIME 5000000
