@@ -17,6 +17,9 @@
 #include <assert.h>
 #include <pthread.h> 
 #include <unistd.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <linux/if_packet.h>
 
 #include "struct.h"
 #include "param.h"
@@ -25,6 +28,10 @@
 #ifndef ETHER_HDRLEN
 #define ETHER_HDRLEN 14
 #endif
+
+/* Interfaces to capture and send packets */
+#define RECV_INTF "virbr0"
+#define SEND_INTF "virbr1"
 
 #define C2S 1
 #define S2C -1
@@ -100,14 +107,15 @@ unsigned char *pcap_current_buf;
 #define PHYS_ETHER 1
 
 void InitGlobals(void);
+void InitGlobalArrays(void);
 
-/* TCP realated */
-int tcp_handle(struct ip *, void *ptcp, void *plast, struct timeval *pckt_time);
+/* Packet handle realated */
+int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time);
 struct tcphdr *gettcp (struct ip *pip, void **pplast);
 struct udphdr *getudp (struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
 void trace_init (void);
-void print_ttp();
+void print_tpkt();
 
 /* Return Values for tcp_flow_stat() and udp_flow_stat() */
 #define FLOW_STAT_NULL  0
@@ -148,18 +156,18 @@ Bool internal_ip(struct in_addr adx);
 
 /* memory management and garbage collection routines */
 
-struct tp_list_elem
+struct pkt_list_elem
 {
-  struct tp_list_elem *next;
-  struct tp_list_elem *prev;
-  ip_packet *ptp;
+  struct pkt_list_elem *next;
+  struct pkt_list_elem *prev;
+  ip_packet *ppkt;
 };
 
-struct tp_list_elem *tplist_alloc (void);
-void tplist_release (struct tp_list_elem *rel_tplist);
+struct pkt_list_elem *pktlist_alloc (void);
+void pktlist_release (struct pkt_list_elem *rel_pktlist);
 
-ip_packet *tp_alloc (void);
-void tp_release (ip_packet * relesased_ip_packet);
+ip_packet *pkt_alloc (void);
+void pkt_release (ip_packet * relesased_ip_packet);
 
 void *MMmalloc (size_t size, const char *f_name);
 
@@ -219,3 +227,23 @@ size_t circular_buf_size(circular_buf_t* me);
 // Peek one element before the tail to get timestamp 
 // Returns 0 on success, -1 if the buffer is empty
 int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_ptr);
+
+int LoadInternalNets(char *file);
+
+int SendPkt(char *sendbuf, int tx_len);
+
+void *timeout_mgmt(void *args);
+
+/*
+ * File Operations
+ */
+char * readline(FILE *fp, int skip_comment, int skip_void_lines);
+#define BUF_SIZE 80
+
+/*
+ * Output
+ */
+#define ANSI_BOLD    "\x1b[1m"
+#define ANSI_RESET   "\x1b[0m"
+
+

@@ -4,6 +4,8 @@
         "pcap.h": "c",
         "socket.h": "c",
         "errno.h": "c",
-        "limits": "c"
+        "limits": "c",
+        "if.h": "c",
+        "tsdn.h": "c"
     }
 }

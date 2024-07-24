@@ -24,17 +24,12 @@ This project is developed with the following dependencies:
 5. Send some packets to the interface.
 
 
-## Current developing status
-- Multithread and Circular Buffer work
-- TCP SYN packet buffering works
-
 ## TODO
-- send packet (save the raw packet rather than just payload, trading space for time)
 - handle more response packets before the flow rules being installed
 - different timeout (more circular buffer)
 - handle the host that is alive but blocked by firewall
-- not rely on header check instead check if the flow is already in the table
-- internal IP check 
+- not rely on header check instead check if the flow is already in the table, TCP/UDP work, except **ICMP**
+
 
 
 ## Add virtual interface
@@ -53,6 +48,9 @@ sudo chmod 777  callgrind.out*
 ```
 
 ## Note
+
+1. Only considers the Ethernet frames.
+
 ### Long latency between libpcap timestamp and the time when we get the packet
 It's the problem of packet buffer mechanism in Libpcap, which buffers packets for a specific period of time. 
 

@@ -11,7 +11,7 @@ typedef u_char Bool;
 #define FALSE 0
 #define BOOL2STR(b) (b) ? "TRUE" : "FALSE"
 
-#define MAX_PAYLOAD_LENGTH 1480
+#define MAX_PKT_LENGTH 1518
 
 /* type for an IP address */
 /* IP address can be either IPv4 or IPv6 */
@@ -50,12 +50,12 @@ typedef struct ip_packet
   Bool internal_src;
   Bool internal_dst;
 
-  /* raw packet (after Ether) information */
-  int payload_len;
-  u_char payload[MAX_PAYLOAD_LENGTH]; /* start of the tcp payload */
+  /* raw packet (from Ether) information */
+  int pkt_len;
+  u_char raw_pkt[MAX_PKT_LENGTH]; /* start of the tcp payload */
 
-  /* location in the ttp array */
-  int loc_ttp;
+  /* location in the pkt_arr array */
+  int loc_pkt_arr;
 } ip_packet;
 
 
@@ -68,6 +68,7 @@ struct global_parameters
   int List_Search_Dept;
   int Hash_Table_Size;
   int TCP_Idle_Time; // in microseconds
+  int Max_Internal_Hosts;
 };
 
 /* incoming/outgoing based on Ethernet MAC addresses */

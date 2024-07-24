@@ -67,42 +67,42 @@ MMmalloc(size_t size, const char *f_name)
  * Alloc and release from last, while top is used to not loose the list ...
  */
 
-static struct tp_list_elem *top_tp_flist = NULL;  /* Pointer to the top of      */
-                                                  /* the 'tplist' free list.    */
-static struct tp_list_elem *last_tp_flist = NULL; /* Pointer to the last used   */
+static struct pkt_list_elem *top_pkt_flist = NULL;  /* Pointer to the top of      */
+                                                  /* the 'pktlist' free list.    */
+static struct pkt_list_elem *last_pkt_flist = NULL; /* Pointer to the last used   */
                                                   /* element list.              */
 
 ip_packet *
-tp_alloc(void)
+pkt_alloc(void)
 {
-  ip_packet *ptp_temp;
+  ip_packet *ppkt_temp;
 #ifdef MEMDEBUG
   IN_USE_TP++;
 #endif
 
-  if ((last_tp_flist == NULL) || (last_tp_flist->ptp == NULL))
+  if ((last_pkt_flist == NULL) || (last_pkt_flist->ppkt == NULL))
   { /* The LinkList stack is empty.         */
     /* fprintf (fp_stdout, "FList empty, top == last == NULL\n"); */
-    ptp_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "tplist_alloc");
+    ppkt_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "pktlist_alloc");
 #ifdef MEMDEBUG
     TOT_TP++;
 #endif
 
-    return ptp_temp;
+    return ppkt_temp;
   }
   else
-  { /* The 'tplist' stack is not empty.   */
-    ptp_temp = last_tp_flist->ptp;
-    last_tp_flist->ptp = NULL;
-    if (last_tp_flist->next != NULL)
-      last_tp_flist = last_tp_flist->next;
-    return ptp_temp;
+  { /* The 'pktlist' stack is not empty.   */
+    ppkt_temp = last_pkt_flist->ppkt;
+    last_pkt_flist->ppkt = NULL;
+    if (last_pkt_flist->next != NULL)
+      last_pkt_flist = last_pkt_flist->next;
+    return ppkt_temp;
   }
 }
 
-void tp_release(ip_packet *released_ip_packet)
+void pkt_release(ip_packet *released_ip_packet)
 {
-  struct tp_list_elem *new_tplist_elem;
+  struct pkt_list_elem *new_pktlist_elem;
 
 #ifdef MEMDEBUG
   IN_USE_TP--;
@@ -110,54 +110,54 @@ void tp_release(ip_packet *released_ip_packet)
 
   memset(released_ip_packet, 0, sizeof(ip_packet));
 
-  if ((last_tp_flist == NULL) || ((last_tp_flist->ptp != NULL) && (last_tp_flist->prev == NULL)))
+  if ((last_pkt_flist == NULL) || ((last_pkt_flist->ppkt != NULL) && (last_pkt_flist->prev == NULL)))
   {
-    new_tplist_elem =
-        (struct tp_list_elem *)MMmalloc(sizeof(struct tp_list_elem),
-                                        "tplist_release");
-    new_tplist_elem->ptp = released_ip_packet;
-    new_tplist_elem->prev = NULL;
-    new_tplist_elem->next = top_tp_flist;
-    if (new_tplist_elem->next != NULL)
-      new_tplist_elem->next->prev = new_tplist_elem;
-    top_tp_flist = new_tplist_elem;
-    last_tp_flist = new_tplist_elem;
+    new_pktlist_elem =
+        (struct pkt_list_elem *)MMmalloc(sizeof(struct pkt_list_elem),
+                                        "pktlist_release");
+    new_pktlist_elem->ppkt = released_ip_packet;
+    new_pktlist_elem->prev = NULL;
+    new_pktlist_elem->next = top_pkt_flist;
+    if (new_pktlist_elem->next != NULL)
+      new_pktlist_elem->next->prev = new_pktlist_elem;
+    top_pkt_flist = new_pktlist_elem;
+    last_pkt_flist = new_pktlist_elem;
   }
   else
   {
-    if (last_tp_flist->ptp == NULL)
-      new_tplist_elem = last_tp_flist;
+    if (last_pkt_flist->ppkt == NULL)
+      new_pktlist_elem = last_pkt_flist;
     else
-      new_tplist_elem = last_tp_flist->prev;
-    new_tplist_elem->ptp = released_ip_packet;
-    last_tp_flist = new_tplist_elem;
+      new_pktlist_elem = last_pkt_flist->prev;
+    new_pktlist_elem->ppkt = released_ip_packet;
+    last_pkt_flist = new_pktlist_elem;
   }
 }
 
-void tp_list_list()
+void pkt_list_list()
 {
-  struct tp_list_elem *new_tplist_elem;
+  struct pkt_list_elem *new_pktlist_elem;
 
-  new_tplist_elem = top_tp_flist;
+  new_pktlist_elem = top_pkt_flist;
   fprintf(fp_stdout, "\n\t[top]\n");
-  while (new_tplist_elem != NULL)
+  while (new_pktlist_elem != NULL)
   {
     fprintf(fp_stdout, "\t|\n");
-    if (new_tplist_elem == last_tp_flist)
+    if (new_pktlist_elem == last_pkt_flist)
       fprintf(fp_stdout, "[last]->");
     else
       fprintf(fp_stdout, "\t");
-    fprintf(fp_stdout, "[tp_list_elem]->");
-    if (new_tplist_elem->ptp != NULL)
+    fprintf(fp_stdout, "[pkt_list_elem]->");
+    if (new_pktlist_elem->ppkt != NULL)
     {
-      fprintf(fp_stdout, "[ptp]");
+      fprintf(fp_stdout, "[ppkt]");
     }
     else
     {
       fprintf(fp_stdout, "[NULL]");
     }
     fprintf(fp_stdout, "\n");
-    new_tplist_elem = new_tplist_elem->next;
+    new_pktlist_elem = new_pktlist_elem->next;
   }
   fprintf(fp_stdout, "\n");
 }

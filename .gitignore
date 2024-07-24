@@ -1,5 +1,8 @@
 /bin
 /debug
 /obj
+/test
 *.o
 *.out.*
+*.pcap
+

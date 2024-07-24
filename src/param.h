@@ -36,3 +36,6 @@ Increase this number on high speed network will help ...*/
 /* TCP_IDLE_TIME in microseconds: timeout to consider a TCP flow closed if no
 segments are observed since TCP_IDLE_TIME */
 #define TCP_IDLE_TIME 5000000
+
+/* Max number of nets to check if ip is internal or external */
+#define MAX_INTERNAL_HOSTS  100

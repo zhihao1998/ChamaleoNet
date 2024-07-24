@@ -5,19 +5,18 @@ Bool internal_dst = TRUE;
 
 Bool warn_printtrunc = TRUE;
 
-char *dev = "virbr0"; /* The device to sniff on */
-
 /* option flags and default values */
 Bool live_flag = TRUE;
 
 /* Interaction with pcap */
 static struct ether_header eth_header;
 #define EH_SIZE sizeof(struct ether_header)
+
+static char *eth_buf; 
 static char *ip_buf; /* [IP_MAXPACKET] */
 static void *callback_plast;
 
 struct pcap_pkthdr *callback_phdr;
-struct ether_header *ptr_eth_header;
 
 struct timeval current_time;
 
@@ -32,7 +31,9 @@ u_long pnum = 0;
 /* global pointer, the pcap info header */
 static pcap_t *pcap;
 
-extern void *timeout_mgmt(void *args);
+struct in_addr *internal_net_list;
+int *internal_net_mask;
+int tot_internal_nets;
 
 /* pkt_rx thread */
 static int
@@ -69,8 +70,9 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 		// offset = find_ip_eth(buf); /* Here we check if we are dealing with Straight Ethernet encapsulation or PPPoE */
 		offset = 14;
 		iplen -= offset;
-		memcpy(&eth_header, buf, EH_SIZE); /* save ether header */
-
+		// memcpy(&eth_header, buf, EH_SIZE); /* save ether header */
+		
+		eth_buf = buf;
 		/* now get rid of ethernet headers */
 		switch (offset)
 		{
@@ -96,7 +98,7 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 int pread_tcpdump(struct timeval *ptime,
 				  int *plen,
 				  int *ptlen,
-				  void **pphys, int *pphystype, struct ip **ppip, void **pplast)
+				  struct ether_header **pphys, int *pphystype, struct ip **ppip, void **pplast)
 {
 	int ret;
 	while (1)
@@ -126,8 +128,9 @@ int pread_tcpdump(struct timeval *ptime,
 		}
 
 		/* fill in all of the return values */
-		*pphys = &eth_header;	 /* everything assumed to be ethernet */
-		*pphystype = PHYS_ETHER; /* everything assumed zto be ethernet */
+		// *pphys = &eth_header;	 /* everything assumed to be ethernet */
+		*pphys = (struct ether_header *)eth_buf;
+		*pphystype = PHYS_ETHER; /* everything assumed to be ethernet */
 		*ppip = (struct ip *)ip_buf;
 		*pplast = callback_plast; /* last byte in IP packet */
 
@@ -156,6 +159,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 						 struct ip *pip,
 						 void *plast,
 						 int tlen,
+						 struct ether_header *peth,
 						 int phystype,
 						 u_long *fpnum,
 						 u_long *pcount,
@@ -199,6 +203,10 @@ static int ProcessPacket(struct timeval *pckt_time,
 		}
 	}
 
+	// /* Check if the packet is from/to an internal network */
+	// internal_ip(pip->ip_src);
+	// internal_ip(pip->ip_dst);
+
 	/* Check the IP protocol ICMP/TCP/UDP */
 	switch (pip->ip_p)
 	{
@@ -210,7 +218,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 		struct tcphdr *ptcp = NULL;
 		if ((ptcp = gettcp(pip, &plast)) != NULL)
 		{
-			tcp_handle(pip, ptcp, plast, pckt_time);
+			pkt_handle(peth, pip, ptcp, plast, pckt_time);
 		}
 		break;
 	}
@@ -219,7 +227,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 		struct udphdr *pudp = NULL;
 		if ((pudp = getudp(pip, &plast)) != NULL)
 		{
-			tcp_handle(pip, pudp, plast, pckt_time);
+			pkt_handle(peth, pip, pudp, plast, pckt_time);
 		}
 		break;
 	}
@@ -237,8 +245,12 @@ static int ProcessPacket(struct timeval *pckt_time,
 int main(int argc, char *argv[])
 {
 	InitGlobals();
+	InitGlobalArrays();
 	/* initialize internals */
 	trace_init();
+
+	/* The relative path here is valid only when the tsdn is executed at the project root directory. */
+	LoadInternalNets("conf/net.internal");
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
 	struct bpf_program fp;		   /* The compiled filter */
@@ -253,12 +265,12 @@ int main(int argc, char *argv[])
 	struct ether_header *eptr; /* net/ethernet.h */
 	u_char *ptr;			   /* printing out hardware header info */
 	const u_char *packet;	   /* The actual packet */
-	pcap_if_t *all_devs;
+	// pcap_if_t *all_devs;
 
 	int ret = 0;
 	struct ip *pip;
 	int phystype;
-	void *phys; /* physical transport header */
+	struct ether_header *phys; /* physical transport header */
 	int fix;
 	int len;
 	int tlen;
@@ -279,11 +291,11 @@ int main(int argc, char *argv[])
 	// 	return 1;
 	// }
 
-	printf("Capturing on the device: %s\n", dev);
+	printf("Capturing on the device: %s\n", RECV_INTF);
 
 	/* open the device for sniffing. Here we use create+activate rather to avoid the packet buffer in libpcap. */
 	// pcap = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
-	pcap = pcap_create(dev, errbuf);
+	pcap = pcap_create(RECV_INTF, errbuf);
 
 	/* Set immediate mode */
 	if (pcap_set_immediate_mode(pcap, 1) == -1)
@@ -301,7 +313,7 @@ int main(int argc, char *argv[])
 
 	if (pcap == NULL)
 	{
-		fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
+		fprintf(stderr, "Couldn't open device %s: %s\n", RECV_INTF, errbuf);
 		return (2);
 	}
 
@@ -339,14 +351,14 @@ int main(int argc, char *argv[])
 	int i = 0;
 	do
 	{
-		ProcessPacket(&current_time, pip, plast, tlen, phystype, &fpnum, &pcount,
+		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, &fpnum, &pcount,
 					  file_count, location, DEFAULT_NET);
 		i++;
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0) && i < 100);
 #else
 	do
 	{
-		ProcessPacket(&current_time, pip, plast, tlen, phystype, &fpnum, &pcount,
+		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, &fpnum, &pcount,
 					  file_count, location, DEFAULT_NET);
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
 #endif

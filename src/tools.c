@@ -1,6 +1,14 @@
 
 #include "tsdn.h"
 
+extern struct in_addr *internal_net_list;
+extern int *internal_net_mask;
+extern int tot_internal_nets;
+
+/*
+ * Time Calculation
+ */
+
 /* return elapsed time in microseconds */
 /* (time2 - time1) */
 double
@@ -84,262 +92,350 @@ int tv_cmp(struct timeval lhs, struct timeval rhs)
         return (-1);
 }
 
-// /*
-//  * Check if the IP adx is included in the internal nets
-//  */
+/*
+ * Check if the IP adx is included in the internal nets
+ */
+
 Bool internal_ip(struct in_addr adx)
 {
-    return TRUE;
+    int i;
+
+    fprintf(fp_stdout, "Checking %s \n",inet_ntoa(adx));
+    for (i = 0; i < tot_internal_nets; i++)
+    {
+        // fprintf(fp_stdout, " Against: %s \n",inet_ntoa(internal_net_list[i]));
+        if ((adx.s_addr & internal_net_mask[i]) == internal_net_list[i].s_addr)
+        {
+            fprintf(fp_stdout, "Internal: %s\n",inet_ntoa(adx));
+            return 1;
+        }
+    }
+    fprintf(fp_stdout, "External: %s\n",inet_ntoa(adx));
+    return 0;
 }
 
-// Bool internal_ip(struct in_addr adx)
-// {
-//     int i;
+int ParseNetFile(FILE *fp, char *qualifier, int max_entries,
+                 struct in_addr *CLASS_net_list,
+                 int *CLASS_net_mask,
+                 int *tot_CLASS_nets)
+{
+    char *line, *ip_string, *mask_string, *err;
+    int i, j, len;
+    int is_ipv4;
+    long int mask_bits;
+    unsigned int full_local_mask;
+    struct in_addr mask2;
+    char s[INET6_ADDRSTRLEN];
 
-//     // fprintf(fp_stdout, "Checking %s \n",inet_ntoa(adx));
-//     for (i = 0; i < tot_internal_nets; i++)
-//     {
-//         // fprintf(fp_stdout, " Against: %s \n",inet_ntoa(internal_net_list[i]));
-//         if ((adx.s_addr & internal_net_mask[i]) == internal_net_list[i].s_addr)
-//         {
-//             // fprintf(fp_stdout, "Internal: %s\n",inet_ntoa(adx));
-//             return 1;
-//         }
-//     }
-//     // fprintf(fp_stdout, "External: %s\n",inet_ntoa(adx));
-//     return 0;
-// }
+    (*tot_CLASS_nets) = 0;
+    i = 0; // File line
+    j = 0; // Index for IPv4
+    while (1)
+    {
+        line = readline(fp, 1, 1);
+        if (!line)
+            break;
 
-// int ParseNetFile(FILE *fp, char *qualifier, int max_entries,
-//                  struct in_addr *CLASS_net_list,
-//                  struct in6_addr *CLASS_net_listv6,
-//                  int *CLASS_net_mask,
-//                  int *CLASS_net_mask_sizev6,
-//                  int *tot_CLASS_nets,
-//                  int *tot_CLASS_netsv6)
-// {
-//     char *line, *ip_string, *mask_string, *err;
-//     int i, j, k, len;
-//     int is_ipv4;
-//     long int mask_bits;
-//     unsigned int full_local_mask;
-//     struct in_addr mask2;
-//     char s[INET6_ADDRSTRLEN];
+        len = strlen(line);
+        if (line[len - 1] == '\n')
+            line[len - 1] = '\0';
+        ip_string = line;
 
-//     (*tot_CLASS_nets) = 0;
-//     (*tot_CLASS_netsv6) = 0;
-//     i = 0; // File line
-//     j = 0; // Index for IPv4
-//     k = 0; // Index for IPv6
-//     while (1)
-//     {
-//         line = readline(fp, 1, 1);
-//         if (!line)
-//             break;
+        if (j == max_entries)
+        {
+            fprintf(fp_stderr, "Maximum number of %s IPv4 hosts/networks (%d) exceeded\n", qualifier, max_entries);
+            return 0;
+        }
 
-//         len = strlen(line);
-//         if (line[len - 1] == '\n')
-//             line[len - 1] = '\0';
-//         ip_string = line;
+        is_ipv4 = 0;
+        // single line format
+        if (strchr(ip_string, '/'))
+        {
+            ip_string = strtok(ip_string, "/");
+            mask_string = strtok(NULL, "/");
 
-//         if (j == max_entries)
-//         {
-//             fprintf(fp_stderr, "Maximum number of %s IPv4 hosts/networks (%d) exceeded\n", qualifier, max_entries);
-//             return 0;
-//         }
+            if (!mask_string)
+            {
+                fprintf(fp_stderr, "Missing ip or network mask in %s config n.%d\n", qualifier, (i + 1));
+                return 0;
+            }
 
-//         if (k == max_entries)
-//         {
-//             fprintf(fp_stderr, "Maximum number of %s IPv6 hosts/networks (%d) exceeded\n", qualifier, max_entries);
-//             return 0;
-//         }
+            // IPv4 Address
+            if (!inet_pton(AF_INET, ip_string, &(CLASS_net_list[j])))
+            {
+                fprintf(fp_stderr, "Invalid ip address in %s config n.%d\n", qualifier, (i + 1));
+                return 0;
+            }
+            is_ipv4 = 1;
 
-//         is_ipv4 = 0;
-//         // single line format
-//         if (strchr(ip_string, '/'))
-//         {
-//             ip_string = strtok(ip_string, "/");
-//             mask_string = strtok(NULL, "/");
+            // network mask as a single number
+            if (!strchr(mask_string, '.'))
+            {
+                err = NULL;
+                mask_bits = strtol(mask_string, &err, 10);
+                if (is_ipv4 == 1)
+                {
+                    if (*err || mask_bits < 0 || mask_bits > 32)
+                    {
+                        fprintf(fp_stderr, "Invalid network mask in %s config n.%d\n", qualifier, (i + 1));
+                        return 0;
+                    }
+                    else if (mask_bits == 0)
+                    {
+                        fprintf(fp_stderr, ANSI_BOLD "Warning:" ANSI_RESET " IPv4 mask set to 0 bits in %s config n.%d\n\tAny IPv4 address will be considered internal\n",
+                                qualifier, (i + 1));
+                        CLASS_net_list[j].s_addr = 0;
+                    }
 
-//             if (!mask_string)
-//             {
-//                 fprintf(fp_stderr, "Missing ip or network mask in %s config n.%d\n", qualifier, (i + 1));
-//                 return 0;
-//             }
+                    if (CLASS_net_list[j].s_addr == 0)
+                        full_local_mask = 0;
+                    else
+                        full_local_mask = 0xffffffff << (32 - mask_bits);
 
-//             if (strchr(ip_string, ':'))
-//             { // IPv6 Address
-//                 if (!inet_pton(AF_INET6, ip_string, &(CLASS_net_listv6[k])))
-//                 {
-//                     fprintf(fp_stderr, "Invalid ip address in %s config n.%d\n", qualifier, (i + 1));
-//                     return 0;
-//                 }
-//                 is_ipv4 = 0;
-//             }
-//             else
-//             { // IPv4 Address
-//                 if (!inet_pton(AF_INET, ip_string, &(CLASS_net_list[j])))
-//                 {
-//                     fprintf(fp_stderr, "Invalid ip address in %s config n.%d\n", qualifier, (i + 1));
-//                     return 0;
-//                 }
-//                 is_ipv4 = 1;
-//             }
+                    sprintf(s, "%d.%d.%d.%d",
+                            full_local_mask >> 24,
+                            (full_local_mask >> 16) & 0x00ff,
+                            (full_local_mask >> 8) & 0x0000ff,
+                            full_local_mask & 0xff);
+                    // inet_aton (s, &(CLASS_net_mask2[j]));
+                    CLASS_net_mask[j] = inet_addr(s);
+                    CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
+                }
+            }
+            // mask in dotted format
+            else if (is_ipv4 == 1)
+            {
+                if (!inet_aton(mask_string, &mask2))
+                {
+                    fprintf(fp_stderr, "Invalid IPv4 network mask in %s config n.%d\n", qualifier, (i + 1));
+                    return 0;
+                }
+                CLASS_net_mask[j] = inet_addr(mask_string);
+                CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
+            }
+        }
+        // old format
+        else
+        {
+            if (!inet_aton(ip_string, &(CLASS_net_list[j])))
+            {
+                fprintf(fp_stderr, "Invalid IPv4 address in %s config n.%d\n", qualifier, (i + 1));
+                return 0;
+            }
 
-//             // network mask as a single number
-//             if (!strchr(mask_string, '.'))
-//             {
-//                 err = NULL;
-//                 mask_bits = strtol(mask_string, &err, 10);
-//                 if (is_ipv4 == 1)
-//                 {
-//                     if (*err || mask_bits < 0 || mask_bits > 32)
-//                     {
-//                         fprintf(fp_stderr, "Invalid network mask in %s config n.%d\n", qualifier, (i + 1));
-//                         return 0;
-//                     }
-//                     else if (mask_bits == 0)
-//                     {
-//                         fprintf(fp_stderr, ANSI_BOLD "Warning:" ANSI_RESET " IPv4 mask set to 0 bits in %s config n.%d\n\tAny IPv4 address will be considered internal\n",
-//                                 qualifier, (i + 1));
-//                         CLASS_net_list[j].s_addr = 0;
-//                     }
+            mask_string = readline(fp, 1, 1);
+            if (!mask_string)
+            {
+                fprintf(fp_stderr, "Missing IPv4 network mask in %s config n.%d\n", qualifier, (i + 1));
+                return 0;
+            }
 
-//                     if (CLASS_net_list[j].s_addr == 0)
-//                         full_local_mask = 0;
-//                     else
-//                         full_local_mask = 0xffffffff << (32 - mask_bits);
+            len = strlen(mask_string);
+            if (mask_string[len - 1] == '\n')
+                mask_string[len - 1] = '\0';
+            if (!inet_aton(mask_string, &mask2))
+            {
+                fprintf(fp_stderr, "Invalid IPv4 network mask in %s config n.%d\n", qualifier, (i + 1));
+                return 0;
+            }
+            CLASS_net_mask[j] = inet_addr(mask_string);
+            CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
+            is_ipv4 = 1;
+        }
+        if (debug)
+        {
+            if (is_ipv4 == 1)
+            {
+                mask2.s_addr = CLASS_net_mask[j];
+                fprintf(fp_stdout, "Adding: %s as %s ",
+                        inet_ntoa(CLASS_net_list[j]), qualifier);
+                fprintf(fp_stdout, "with mask %s (%u)\n",
+                        inet_ntoa(mask2),
+                        CLASS_net_mask[j]);
+            }
+        }
 
-//                     sprintf(s, "%d.%d.%d.%d",
-//                             full_local_mask >> 24,
-//                             (full_local_mask >> 16) & 0x00ff,
-//                             (full_local_mask >> 8) & 0x0000ff,
-//                             full_local_mask & 0xff);
-//                     // inet_aton (s, &(CLASS_net_mask2[j]));
-//                     CLASS_net_mask[j] = inet_addr(s);
-//                     CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
-//                 }
-//                 else
-//                 {
-//                     if (*err || mask_bits < 0 || mask_bits > 128)
-//                     {
-//                         fprintf(fp_stderr, "Invalid network mask in %s config n.%d\n", qualifier, (i + 1));
-//                         return 0;
-//                     }
-//                     else if (mask_bits > 64 && mask_bits != 128)
-//                     {
-//                         fprintf(fp_stderr, ANSI_BOLD "Warning:" ANSI_RESET " IPv6 mask should not exceed 64 bits in %s config n.%d\n", qualifier, (i + 1));
-//                         // mask_bits=64;
-//                     }
-//                     else if (mask_bits == 0)
-//                     {
-//                         fprintf(fp_stderr, ANSI_BOLD "Warning:" ANSI_RESET " IPv6 mask set to 0 bits in %s config n.%d\n\tAny IPv6 address will be considered internal\n",
-//                                 qualifier, (i + 1));
-//                     }
+        if (is_ipv4 == 1)
+        {
+            (*tot_CLASS_nets)++;
+            j++;
+        }
+        i++;
+    }
+    return 1;
+}
 
-//                     CLASS_net_mask_sizev6[k] = mask_bits;
-//                 }
-//             }
-//             // mask in dotted format
-//             else if (is_ipv4 == 1)
-//             {
-//                 if (!inet_aton(mask_string, &mask2))
-//                 {
-//                     fprintf(fp_stderr, "Invalid IPv4 network mask in %s config n.%d\n", qualifier, (i + 1));
-//                     return 0;
-//                 }
-//                 CLASS_net_mask[j] = inet_addr(mask_string);
-//                 CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
-//             }
-//             else
-//             {
-//                 fprintf(fp_stderr, "Invalid IPv6 network mask in %s config n.%d\n", qualifier, (i + 1));
-//                 return 0;
-//             }
-//         }
-//         // old format
-//         else
-//         {
-//             if (!inet_aton(ip_string, &(CLASS_net_list[j])))
-//             {
-//                 fprintf(fp_stderr, "Invalid IPv4 address in %s config n.%d\n", qualifier, (i + 1));
-//                 return 0;
-//             }
+int LoadInternalNets(char *file)
+{
+    FILE *fp;
+    int retval;
 
-//             mask_string = readline(fp, 1, 1);
-//             if (!mask_string)
-//             {
-//                 fprintf(fp_stderr, "Missing IPv4 network mask in %s config n.%d\n", qualifier, (i + 1));
-//                 return 0;
-//             }
+    fp = fopen(file, "r");
+    if (!fp)
+    {
+        fprintf(fp_stderr, "Unable to open file '%s'\n", file);
+        return 0;
+    }
 
-//             len = strlen(mask_string);
-//             if (mask_string[len - 1] == '\n')
-//                 mask_string[len - 1] = '\0';
-//             if (!inet_aton(mask_string, &mask2))
-//             {
-//                 fprintf(fp_stderr, "Invalid IPv4 network mask in %s config n.%d\n", qualifier, (i + 1));
-//                 return 0;
-//             }
-//             CLASS_net_mask[j] = inet_addr(mask_string);
-//             CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
-//             is_ipv4 = 1;
-//         }
-//         if (debug)
-//         {
-//             if (is_ipv4 == 1)
-//             {
-//                 mask2.s_addr = CLASS_net_mask[j];
-//                 fprintf(fp_stdout, "Adding: %s as %s ",
-//                         inet_ntoa(CLASS_net_list[j]), qualifier);
-//                 fprintf(fp_stdout, "with mask %s (%u)\n",
-//                         inet_ntoa(mask2),
-//                         CLASS_net_mask[j]);
-//             }
-//             else
-//             {
-//                 inet_ntop(AF_INET6, &(CLASS_net_listv6[k]), s, INET6_ADDRSTRLEN);
-//                 fprintf(fp_stdout, "Adding: %s as %s ", s, qualifier);
-//                 fprintf(fp_stdout, "with mask %u\n",
-//                         CLASS_net_mask_sizev6[k]);
-//             }
-//         }
+    retval = ParseNetFile(fp, "internal",
+                          GLOBALS.Max_Internal_Hosts,
+                          internal_net_list,
+                          internal_net_mask,
+                          &tot_internal_nets);
+    fclose(fp);
 
-//         if (is_ipv4 == 1)
-//         {
-//             (*tot_CLASS_nets)++;
-//             j++;
-//         }
-//         else
-//         {
-//             (*tot_CLASS_netsv6)++;
-//             k++;
-//         }
-//         i++;
-//     }
-//     return 1;
-// }
+    return retval;
+}
 
-// int LoadInternalNets(char *file)
-// {
-//     FILE *fp;
-//     int retval;
+/*
+ * Initialization
+ */
 
-//     fp = fopen(file, "r");
-//     if (!fp)
-//     {
-//         fprintf(fp_stderr, "Unable to open file '%s'\n", file);
-//         return 0;
-//     }
+void InitGlobalArrays(void)
+{
+    static Bool initted = FALSE;
 
-//     retval = ParseNetFile(fp, "internal", GLOBALS.Max_Internal_Hosts,
-//                           internal_net_list, internal_net_listv6,
-//                           internal_net_mask, internal_net_maskv6,
-//                           &tot_internal_nets, &tot_internal_netsv6);
+    if (initted)
+        return;
 
-//     //			     printf("Read %d IPv4 networks and %d IPv6 networks\n",tot_internal_nets,
-//     //				    tot_internal_netsv6);
-//     fclose(fp);
+    initted = TRUE;
 
-//     return retval;
-// }
+    internal_net_list = (struct in_addr *)MallocZ(GLOBALS.Max_Internal_Hosts * sizeof(struct in_addr));
+    internal_net_mask = (int *)MallocZ(GLOBALS.Max_Internal_Hosts * sizeof(int));
+}
+
+void InitGlobals(void)
+{
+    GLOBALS.Max_TCP_Packets = MAX_TCP_PACKETS;
+    GLOBALS.Max_UDP_Pairs = MAX_UDP_PAIRS;
+    GLOBALS.List_Search_Dept = LIST_SEARCH_DEPT;
+    GLOBALS.Hash_Table_Size = HASH_TABLE_SIZE;
+    GLOBALS.TCP_Idle_Time = TCP_IDLE_TIME;
+    GLOBALS.Max_Internal_Hosts = MAX_INTERNAL_HOSTS;
+}
+
+/*
+ * File Operations
+ */
+char *readline(FILE *fp, int skip_comment, int skip_void_lines)
+{
+    static char *buf = NULL;
+    static int buf_size = 0;
+    static int next_pos = 0;
+    char *tmp, curr_c;
+    int comment_started = 0;
+
+    if (buf == NULL)
+    {
+        buf = malloc(BUF_SIZE * sizeof(char));
+        buf_size = BUF_SIZE;
+        next_pos = 0;
+    }
+
+    buf[0] = '\0';
+    next_pos = 0;
+    while (1)
+    {
+        if (next_pos + 1 == buf_size)
+        {
+            buf_size += BUF_SIZE;
+            tmp = malloc(buf_size * sizeof(char));
+            strcpy(tmp, buf);
+            free(buf);
+            buf = tmp;
+        }
+
+        curr_c = fgetc(fp);
+        if (feof(fp))
+        {
+            buf[next_pos] = '\0';
+            break;
+        }
+
+        comment_started |= skip_comment && (curr_c == '#');
+        if (!comment_started || curr_c == '\n')
+        {
+            buf[next_pos] = curr_c;
+            buf[next_pos + 1] = '\0';
+            next_pos++;
+        }
+
+        if (curr_c == '\n')
+        {
+            if (buf[0] == '\n' && skip_void_lines)
+            {
+                buf[0] = '\0';
+                next_pos = 0;
+                comment_started = 0;
+                continue;
+            }
+            else
+                break;
+        }
+    }
+
+    if (buf[0] == '\0')
+        return NULL;
+    return buf;
+}
+
+/*
+ * Packet sender.
+ */
+
+int SendPkt(char *sendbuf, int tx_len)
+{   
+    int r = -1;
+	int sockfd;
+	struct ifreq if_idx;
+	struct ifreq if_mac;
+	struct ether_header *eh = (struct ether_header *) sendbuf;
+
+	struct sockaddr_ll socket_address;
+	char ifName[IFNAMSIZ];
+	
+	/* Get interface name */
+	strcpy(ifName, SEND_INTF);
+
+	/* Open RAW socket to send on */
+	if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
+	    perror("socket");
+	}
+
+	/* Get the index of the interface to send on */
+	memset(&if_idx, 0, sizeof(struct ifreq));
+	strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
+	if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
+	    perror("SIOCGIFINDEX");
+    
+	/* Get the MAC address of the interface to send on */
+	// memset(&if_mac, 0, sizeof(struct ifreq));
+	// strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
+	// if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
+	//     perror("SIOCGIFHWADDR");
+
+	/* Construct the Ethernet header, here we use raw packet */
+	// memset(sendbuf, 0, BUF_SIZ);
+	/* Ethernet header */
+	// eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
+	// /* Ethertype field */
+	// eh->ether_type = htons(ETH_P_IP);
+	// tx_len += sizeof(struct ether_header);
+
+	// /* Fill packet data */
+	// sendbuf[tx_len++] = 0xde;
+
+	/* Index of the network device */
+	socket_address.sll_ifindex = if_idx.ifr_ifindex;
+	/* Address length*/
+	socket_address.sll_halen = ETH_ALEN;
+	/* Destination MAC */
+	// socket_address.sll_addr[0] = MY_DEST_MAC0;
+
+	/* Send packet */
+	if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) != -1)
+    {
+        return 0;
+    }
+    return r;   
+}
