@@ -278,7 +278,7 @@ int LoadInternalNets(char *file)
     }
 
     retval = ParseNetFile(fp, "internal",
-                          GLOBALS.Max_Internal_Hosts,
+                          MAX_INTERNAL_HOSTS,
                           internal_net_list,
                           internal_net_mask,
                           &tot_internal_nets);
@@ -300,18 +300,8 @@ void InitGlobalArrays(void)
 
     initted = TRUE;
 
-    internal_net_list = (struct in_addr *)MallocZ(GLOBALS.Max_Internal_Hosts * sizeof(struct in_addr));
-    internal_net_mask = (int *)MallocZ(GLOBALS.Max_Internal_Hosts * sizeof(int));
-}
-
-void InitGlobals(void)
-{
-    GLOBALS.Max_TCP_Packets = MAX_TCP_PACKETS;
-    GLOBALS.Max_UDP_Pairs = MAX_UDP_PAIRS;
-    GLOBALS.List_Search_Dept = LIST_SEARCH_DEPT;
-    GLOBALS.Hash_Table_Size = HASH_TABLE_SIZE;
-    GLOBALS.TCP_Idle_Time = TCP_IDLE_TIME;
-    GLOBALS.Max_Internal_Hosts = MAX_INTERNAL_HOSTS;
+    internal_net_list = (struct in_addr *)MallocZ(MAX_INTERNAL_HOSTS * sizeof(struct in_addr));
+    internal_net_mask = (int *)MallocZ(MAX_INTERNAL_HOSTS * sizeof(int));
 }
 
 /*

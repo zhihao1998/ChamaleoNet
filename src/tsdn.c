@@ -210,9 +210,6 @@ static int ProcessPacket(struct timeval *pckt_time,
 	/* Check the IP protocol ICMP/TCP/UDP */
 	switch (pip->ip_p)
 	{
-	case IPPROTO_ICMP:
-		/* code */
-		break;
 	case IPPROTO_TCP:
 	{
 		struct tcphdr *ptcp = NULL;
@@ -231,20 +228,26 @@ static int ProcessPacket(struct timeval *pckt_time,
 		}
 		break;
 	}
+	case IPPROTO_ICMP:
+	{	
+		struct icmphdr *picmp = NULL;
+		if ((picmp = geticmp(pip, &plast)) != NULL)
+		{
+			pkt_handle(peth, pip, picmp, plast, pckt_time);
+		}
+		break;
+	}
 
 	default:
 		fprintf(fp_stderr, "ProcessPacket: Un-supported IP Protocol!");
 		break;
 	}
 
-	/* TCP */
-
 	return 1;
 }
 
 int main(int argc, char *argv[])
 {
-	InitGlobals();
 	InitGlobalArrays();
 	/* initialize internals */
 	trace_init();
@@ -335,13 +338,41 @@ int main(int argc, char *argv[])
 	eth_header.ether_type = htons(ETHERTYPE_IP);
 	ip_buf = MallocZ(IP_MAXPACKET);
 
-	/* timeout_mgmt thread */
-	pthread_t timeout_mgmt_thread;
-	if (pthread_create(&timeout_mgmt_thread, NULL, timeout_mgmt, NULL))
+	/* Use three threads to manage three levels of timeout */
+	/* timeout_level_1 thread */
+	pthread_t timeout_level_1_thread;
+	timeout_mgmt_args timeout_level_1_args = {TIMEOUT_LEVEL_1, circ_buf_list[0], &circ_buf_mutex_list[0], &circ_buf_cond_list[0]};
+	if (pthread_create(&timeout_level_1_thread, NULL, timeout_mgmt, (void*)&timeout_level_1_args))
 	{
-		fprintf(stderr, "Error creating timeout_mgmt thread\n");
+		fprintf(stderr, "Error creating timeout_level_1 thread\n");
 		return 1;
 	}
+
+	/* timeout_level_2 thread */
+	pthread_t timeout_level_2_thread;
+	timeout_mgmt_args timeout_level_2_args = {TIMEOUT_LEVEL_2, circ_buf_list[1], &circ_buf_mutex_list[1], &circ_buf_cond_list[1]};
+	if (pthread_create(&timeout_level_2_thread, NULL, timeout_mgmt, (void*)&timeout_level_2_args))
+	{
+		fprintf(stderr, "Error creating timeout_level_2 thread\n");
+		return 1;
+	}
+
+	/* timeout_level_3 thread */
+	pthread_t timeout_level_3_thread;
+	timeout_mgmt_args timeout_level_3_args = {TIMEOUT_LEVEL_3, circ_buf_list[2], &circ_buf_mutex_list[2], &circ_buf_cond_list[2]};
+	if (pthread_create(&timeout_level_3_thread, NULL, timeout_mgmt, (void*)&timeout_level_3_args))
+	{
+		fprintf(stderr, "Error creating timeout_level_3 thread\n");
+		return 1;
+	}
+
+	// /* timeout_mgmt thread */
+	// pthread_t timeout_mgmt_thread;
+	// if (pthread_create(&timeout_mgmt_thread, NULL, timeout_mgmt, NULL))
+	// {
+	// 	fprintf(stderr, "Error creating timeout_mgmt thread\n");
+	// 	return 1;
+	// }
 
 	/* pkt_rx thread */
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
@@ -363,7 +394,10 @@ int main(int argc, char *argv[])
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
 #endif
 
-	pthread_cancel(timeout_mgmt_thread);
+	// pthread_cancel(timeout_mgmt_thread);
+	pthread_cancel(timeout_level_1_thread);
+	pthread_cancel(timeout_level_2_thread);
+	pthread_cancel(timeout_level_3_thread);
 	return 0;
 }
 

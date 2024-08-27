@@ -68,8 +68,6 @@ struct ipaddr *IPV6ADDR2ADDR(struct in6_addr *addr6);
 void IP_COPYADDR(ipaddr *toaddr, ipaddr fromaddr);
 int IP_SAMEADDR(ipaddr addr1, ipaddr addr2);
 
-/* Global struct with the content of param.h*/
-struct global_parameters GLOBALS;
 
 /* TCP flags macros */
 #define SYN_SET(ptcp) ((ptcp)->th_flags & TH_SYN)
@@ -106,13 +104,13 @@ unsigned char *pcap_current_buf;
 
 #define PHYS_ETHER 1
 
-void InitGlobals(void);
 void InitGlobalArrays(void);
 
 /* Packet handle realated */
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time);
 struct tcphdr *gettcp (struct ip *pip, void **pplast);
 struct udphdr *getudp (struct ip *pip, void **pplast);
+struct icmphdr *geticmp (struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
 void trace_init (void);
 void print_tpkt();
@@ -234,6 +232,15 @@ int SendPkt(char *sendbuf, int tx_len);
 
 void *timeout_mgmt(void *args);
 
+/* Global structure for circular buffer and locks */
+pthread_mutex_t circ_buf_mutex_list[TIMEOUT_LEVEL_NUM];
+pthread_cond_t circ_buf_cond_list[TIMEOUT_LEVEL_NUM];
+pkt_desc_t **pkt_desc_buf_list[TIMEOUT_LEVEL_NUM];
+circular_buf_t *circ_buf_list[TIMEOUT_LEVEL_NUM];
+
+/* connection records are stored in a hash table.  */
+flow_hash **flow_hash_table;
+
 /*
  * File Operations
  */
@@ -245,5 +252,13 @@ char * readline(FILE *fp, int skip_comment, int skip_void_lines);
  */
 #define ANSI_BOLD    "\x1b[1m"
 #define ANSI_RESET   "\x1b[0m"
+
+void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr);
+int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2);
+int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir);
+void FreePkt(ip_packet *ppkt_temp);
+void FreeFlowHash(flow_hash *flow_hash_ptr);
+
+
 
 

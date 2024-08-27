@@ -58,19 +58,6 @@ typedef struct ip_packet
   int loc_pkt_arr;
 } ip_packet;
 
-
-/* Struct mirroring the constants defined in param.h */
-
-struct global_parameters
-{
-  int Max_TCP_Packets;
-  int Max_UDP_Pairs;
-  int List_Search_Dept;
-  int Hash_Table_Size;
-  int TCP_Idle_Time; // in microseconds
-  int Max_Internal_Hosts;
-};
-
 /* incoming/outgoing based on Ethernet MAC addresses */
 typedef struct eth_filter
 {
@@ -109,3 +96,11 @@ typedef struct flow_hash
   pkt_desc_t **pkt_desc_ptr_ptr;
 } flow_hash;
 
+
+typedef struct timeout_mgmt_args
+{
+  int timeout;
+  circular_buf_t *circ_buf;
+  pthread_mutex_t *g_tMutex_ptr;
+  pthread_cond_t *cond_ptr;
+}timeout_mgmt_args;

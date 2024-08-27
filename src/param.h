@@ -31,11 +31,14 @@ Increase this number on high speed network will help ...*/
 /* connection records are stored in a hash table.  Buckets are linked	*/
 /* lists sorted by most recent access.					*/
 /* oughta be prime  and larger than MAX_TCP_PACKETS */
-#define HASH_TABLE_SIZE 2000003
+#define HASH_TABLE_SIZE 2000000
 
-/* TCP_IDLE_TIME in microseconds: timeout to consider a TCP flow closed if no
-segments are observed since TCP_IDLE_TIME */
-#define TCP_IDLE_TIME 5000000
+/* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
+#define TIMEOUT_LEVEL_NUM 3
+#define TIMEOUT_LEVEL_1 10000000 //10s
+#define TIMEOUT_LEVEL_2 100000   //100ms
+#define TIMEOUT_LEVEL_3 50000    //50ms
+
 
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100

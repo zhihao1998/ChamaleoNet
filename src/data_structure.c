@@ -33,7 +33,7 @@ extern long tot_adx_hash_count, bayes_new_count;
 void memory_debug()
 {
   fprintf(fp_stdout, "Using %ld over %ld TP\t(%ldK) (%ld MAX)\n",
-          IN_USE_TP, TOT_TP, GLOBALS.Max_TCP_Packets, TOT_TP * sizeof(ip_packet) >> 10);
+          IN_USE_TP, TOT_TP, MAX_TCP_PACKETS, TOT_TP * sizeof(ip_packet) >> 10);
   fprintf(fp_stdout, "Using %ld ADX\n", tot_adx_hash_count);
   fprintf(fp_stdout, "Using %ld bayes_classifier\n", bayes_new_count);
 }
@@ -299,8 +299,8 @@ void circular_buf_reset(circular_buf_t *me)
 {
   assert(me);
 
-  me->head = 0;
   me->tail = 0;
+  me->head = 0;
 }
 
 void circular_buf_free(circular_buf_t *me)
@@ -312,13 +312,13 @@ void circular_buf_free(circular_buf_t *me)
 Bool circular_buf_full(circular_buf_t *me)
 {
   // We want to check, not advance, so we don't save the output here
-  return advance_headtail_value(me->head, me->max) == me->tail;
+  return advance_headtail_value(me->tail, me->max) == me->head;
 }
 
 Bool circular_buf_empty(circular_buf_t *me)
 {
   assert(me);
-  return (me->head == me->tail);
+  return (me->tail == me->head);
 }
 
 size_t circular_buf_capacity(circular_buf_t *me)
@@ -338,13 +338,13 @@ size_t circular_buf_size(circular_buf_t *me)
 
   if (!circular_buf_full(me))
   {
-    if (me->head >= me->tail)
+    if (me->tail >= me->head)
     {
-      size = (me->head - me->tail);
+      size = (me->tail - me->head);
     }
     else
     {
-      size = (me->max + me->head - me->tail);
+      size = (me->max + me->tail - me->head);
     }
   }
 
@@ -361,9 +361,9 @@ struct pkt_desc_t **circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *
   struct pkt_desc_t **temp_pkt_desc_ptr_ptr;
   if (!circular_buf_full(me))
   {
-    me->pkt_desc_buf[me->head] = pkt_desc_ptr;
-    temp_pkt_desc_ptr_ptr = &(me->pkt_desc_buf[me->head]);
-    me->head = advance_headtail_value(me->head, me->max);
+    me->pkt_desc_buf[me->tail] = pkt_desc_ptr;
+    temp_pkt_desc_ptr_ptr = &(me->pkt_desc_buf[me->tail]);
+    me->tail = advance_headtail_value(me->tail, me->max);
     return temp_pkt_desc_ptr_ptr;
   }
   else
@@ -381,8 +381,8 @@ int circular_buf_get(circular_buf_t *me, struct pkt_desc_t **pkt_desc_ptr_ptr)
 
   if (me && !circular_buf_empty(me))
   {
-    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->tail];
-    me->tail = advance_headtail_value(me->tail, me->max);
+    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->head];
+    me->head = advance_headtail_value(me->head, me->max);
     r = 0;
   }
 
@@ -395,15 +395,15 @@ int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_p
   int r = -1;
 
   // /* advance the tail until there is a valid value */
-  // while (me->pkt_desc_buf[me->tail] == NULL)
+  // while (me->pkt_desc_buf[me->head] == NULL)
   // {
-  //   me->tail = advance_headtail_value(me->tail, me->max);
+  //   me->head = advance_headtail_value(me->head, me->max);
   //   printf("asssss\n");
   // }
   
   if (me && !circular_buf_empty(me))
   {
-    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->tail];
+    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->head];
     r = 0;
   }
 

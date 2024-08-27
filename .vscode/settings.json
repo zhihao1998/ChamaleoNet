@@ -6,6 +6,7 @@
         "errno.h": "c",
         "limits": "c",
         "if.h": "c",
-        "tsdn.h": "c"
+        "tsdn.h": "c",
+        "type_traits": "c"
     }
 }

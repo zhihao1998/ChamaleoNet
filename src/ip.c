@@ -132,6 +132,18 @@ getudp(struct ip *pip, void **pplast)
 }
 
 /*
+* geticmp:  return a pointer to an icmp header.
+* Skips either ip or ipv6 headers
+*/
+struct icmphdr *
+geticmp(struct ip *pip, void **pplast)
+{
+  struct icmphdr *picmp;
+  picmp = (struct icmphdr *)findheader(IPPROTO_ICMP, pip, pplast);
+  return (picmp);
+}
+
+/*
  * get_ppayload:  return a pointer to a payload.
  * Skips either ip and TCP headers
  */
@@ -151,4 +163,81 @@ int
 getpayloadlength (struct ip *pip, void *plast)
 {
   return ntohs (pip->ip_len) - (pip->ip_hl * 4);
+}
+
+/* copy the IP addresses and port numbers into an addrblock structure	*/
+/* in addition to copying the address, we also create a HASH value	*/
+/* which is based on BOTH IP addresses and port numbers.  It allows	*/
+/* faster comparisons most of the time					*/
+void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr)
+{
+    p_flow_addr->protocol = pip->ip_p;
+    switch (pip->ip_p)
+    {
+    /* For ICMP, only use <sIP, dIP, Proto> pair for identifying a flow.  */
+    case IPPROTO_ICMP:
+    {
+        // p_flow_addr->a_port = ((icmphdr *)p_l4_hdr)->type;
+        // p_flow_addr->b_port = ((icmphdr *)p_l4_hdr)->code;
+        p_flow_addr->a_port = 0;
+        p_flow_addr->b_port = 0;
+        break;
+    }
+    case IPPROTO_TCP:
+    {
+        p_flow_addr->a_port = ((tcphdr *)p_l4_hdr)->th_sport;
+        p_flow_addr->b_port = ((tcphdr *)p_l4_hdr)->th_dport;
+        break;
+    }
+    case IPPROTO_UDP:
+    {
+        p_flow_addr->a_port = ((udphdr *)p_l4_hdr)->uh_sport;
+        p_flow_addr->b_port = ((udphdr *)p_l4_hdr)->uh_dport;
+        break;
+    }
+
+    default:
+        fprintf(fp_stderr, "CopyAddr: Unsupported Layer 4 protocol!");
+        break;
+    }
+
+    IP_COPYADDR(&p_flow_addr->a_address, *IPV4ADDR2ADDR(&pip->ip_src));
+    IP_COPYADDR(&p_flow_addr->b_address, *IPV4ADDR2ADDR(&pip->ip_dst));
+    /* fill in the hashed address */
+    p_flow_addr->hash = p_flow_addr->a_address.un.ip4.s_addr +
+                        p_flow_addr->b_address.un.ip4.s_addr +
+                        p_flow_addr->a_port +
+                        p_flow_addr->b_port +
+                        p_flow_addr->protocol;
+}
+
+int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2)
+{
+    /* same as first packet */
+    if (IP_SAMEADDR(ppkta1->a_address, ppkta2->a_address))
+        if (IP_SAMEADDR(ppkta1->b_address, ppkta2->b_address))
+            if ((ppkta1->a_port == ppkta2->a_port))
+                if ((ppkta1->b_port == ppkta2->b_port))
+                    return (C2S);
+
+    /* reverse of first packet */
+    if (IP_SAMEADDR(ppkta1->a_address, ppkta2->b_address))
+        if (IP_SAMEADDR(ppkta1->b_address, ppkta2->a_address))
+            if ((ppkta1->a_port == ppkta2->b_port))
+                if ((ppkta1->b_port == ppkta2->a_port))
+                    return (S2C);
+    /* different connection */
+    return (0);
+}
+
+int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir)
+{
+    /* Here we should also take into account the direction, since we are processing the packet rather than flow*/
+    /* if the hash values are different, they can't be the same */
+    if (ppkta1->hash != ppkta2->hash)
+        return (0);
+
+    /* OK, they hash the same, are they REALLY the same function */
+    *pdir = WhichDir(ppkta1, ppkta2);
+    return (*pdir != 0);
 }

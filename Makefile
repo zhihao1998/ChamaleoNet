@@ -20,6 +20,7 @@ TARGET_DEBUG := $(DBG_PATH)/$(TARGET_NAME)
 TARGET_TEST := $(TEST_PATH)/test
 
 # src files & obj files
+HEADERS := $(wildcard $(SRC_PATH)/*.h)
 SRC := $(foreach x, $(SRC_PATH), $(wildcard $(addprefix $(x)/*,.c*)))
 OBJ := $(addprefix $(OBJ_PATH)/, $(addsuffix .o, $(notdir $(basename $(SRC)))))
 OBJ_DEBUG := $(addprefix $(DBG_PATH)/, $(addsuffix .o, $(notdir $(basename $(SRC)))))

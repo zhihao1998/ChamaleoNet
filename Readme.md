@@ -8,6 +8,10 @@ The logical structure is described as:
 
 ![host-flow-diagram.jpg](/.images/host-flow-diagram.jpg)
 
+## Features
+
+- Three levels of TIMEOUT (100ms, 50ms, 20ms)
+
 ## Dependencies
 This project is developed with the following dependencies:
 
@@ -25,19 +29,21 @@ This project is developed with the following dependencies:
 
 
 ## TODO
-- handle more response packets before the flow rules being installed
-- different timeout (more circular buffer)
+- handle more response packets before the flow rules being installed (lazy freeing)
 - handle the host that is alive but blocked by firewall
-- not rely on header check instead check if the flow is already in the table, TCP/UDP work, except **ICMP**
-
 
 
 ## Add virtual interface
 
 ```bash
 sudo brctl addbr virbr0
+sudo brctl addbr virbr1
 sudo ifconfig virbr0 up
+sudo ifconfig virbr1 up
 ```
+
+## Send packets
+
 
 ## Performance Profile
 
