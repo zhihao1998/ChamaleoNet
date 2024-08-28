@@ -82,19 +82,21 @@ typedef struct pkt_desc_t {
 } pkt_desc_t;
 
 typedef struct circular_buf_t {
-  pkt_desc_t ** pkt_desc_buf;
+  void ** buf_space;
 	size_t head;
 	size_t tail;
 	size_t max; //of the buffer
 }circular_buf_t;
 
-typedef struct flow_hash
+typedef struct flow_hash_t
 {
   flow_addrblock addr_pair;
-  struct flow_hash *next;
+  struct flow_hash_t*next;
   pkt_desc_t *pkt_desc_ptr;
   pkt_desc_t **pkt_desc_ptr_ptr;
-} flow_hash;
+  Bool lazy_pending;
+  timeval resp_time;
+} flow_hash_t;
 
 
 typedef struct timeout_mgmt_args

@@ -39,6 +39,8 @@ Increase this number on high speed network will help ...*/
 #define TIMEOUT_LEVEL_2 100000   //100ms
 #define TIMEOUT_LEVEL_3 50000    //50ms
 
+#define LAZY_FREEING_TIMEOUT 5000000 //2s
+
 
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100

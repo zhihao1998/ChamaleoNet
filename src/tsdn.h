@@ -181,8 +181,8 @@ pkt_desc_t *pkt_desc_alloc();
 void pkt_desc_release(pkt_desc_t *rel_pkt_desc);
 
 /* Flow hash table */
-flow_hash *flow_hash_alloc();
-void flow_hash_release(flow_hash *flow_hash_ptr);
+flow_hash_t*flow_hash_alloc();
+void flow_hash_release(flow_hash_t*flow_hash_ptr);
 
 /* Circular Buffer Related */
 
@@ -194,7 +194,7 @@ typedef struct circular_buf_t circular_buf_t;
 
 /// Pass in a storage buffer and size 
 /// Returns a circular buffer handle
-circular_buf_t* circular_buf_init(pkt_desc_t ** pkt_desc_buf, size_t size);
+circular_buf_t* circular_buf_init(void ** buf_space, size_t size);
 
 /// Free a circular buffer structure.
 /// Does not free data buffer; owner is responsible for that
@@ -204,11 +204,11 @@ void circular_buf_free(circular_buf_t* me);
 void circular_buf_reset(circular_buf_t* me);
 
 /// Put version 1 continues to add data
-struct pkt_desc_t **circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *pkt_desc_ptr);
+void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr);
 
 /// Retrieve a value from the buffer
 /// Returns 0 on success, -1 if the buffer is empty
-int circular_buf_get(circular_buf_t *me, struct pkt_desc_t **pkt_desc_ptr_ptr);
+int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr);
 
 /// Returns true if the buffer is empty
 Bool circular_buf_empty(circular_buf_t* me);
@@ -222,15 +222,15 @@ size_t circular_buf_capacity(circular_buf_t* me);
 /// Returns the current number of elements in the buffer
 size_t circular_buf_size(circular_buf_t* me);
 
-// Peek one element before the tail to get timestamp 
-// Returns 0 on success, -1 if the buffer is empty
-int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_ptr);
+
 
 int LoadInternalNets(char *file);
 
 int SendPkt(char *sendbuf, int tx_len);
 
+/* Thread Operation Function */
 void *timeout_mgmt(void *args);
+void *lazy_free_flow_hash(void *args);
 
 /* Global structure for circular buffer and locks */
 pthread_mutex_t circ_buf_mutex_list[TIMEOUT_LEVEL_NUM];
@@ -239,7 +239,12 @@ pkt_desc_t **pkt_desc_buf_list[TIMEOUT_LEVEL_NUM];
 circular_buf_t *circ_buf_list[TIMEOUT_LEVEL_NUM];
 
 /* connection records are stored in a hash table.  */
-flow_hash **flow_hash_table;
+flow_hash_t**flow_hash_table;
+
+flow_hash_t **lazy_flow_hash_buf;
+circular_buf_t *lazy_flow_hash_circ_buf;
+pthread_mutex_t lazy_flow_hash_mutex;
+pthread_cond_t lazy_flow_hash_cond;
 
 /*
  * File Operations
@@ -257,7 +262,8 @@ void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr);
 int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2);
 int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir);
 void FreePkt(ip_packet *ppkt_temp);
-void FreeFlowHash(flow_hash *flow_hash_ptr);
+void FreePktDesc(flow_hash_t*flow_hash_ptr);
+void FreeFlowHash(flow_hash_t*flow_hash_ptr);
 
 
 

@@ -1,21 +1,3 @@
-/*
- *
- * Copyright (c) 2001
- *	Politecnico di Torino.  All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * For bug report and other information please visit Tstat site:
- * http://tstat.polito.it
- *
- * Tstat is deeply based on TCPTRACE. The authors would like to thank
- * Shawn Ostermann for the development of TCPTRACE.
- *
- */
-
 #include "tsdn.h"
 
 /*
@@ -230,13 +212,13 @@ void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
 }
 
 /* Garbage collector for Flow Hash Table */
-static flow_hash *top_flow_hash_flist = NULL; /* Pointer to the top of      */
+static flow_hash_t*top_flow_hash_flist = NULL; /* Pointer to the top of      */
                                               /* the 'flow_hash' free list.    */
 
 /* Alloc a new space for entry in flow hash table */
-flow_hash *flow_hash_alloc()
+flow_hash_t*flow_hash_alloc()
 {
-  struct flow_hash *new_flow_hash_ptr;
+  struct flow_hash_t*new_flow_hash_ptr;
 
 #ifdef MEMDEBUG
   IN_USE_FLOW_HASH++;
@@ -244,7 +226,7 @@ flow_hash *flow_hash_alloc()
 
   if (top_flow_hash_flist == NULL)
   {
-    new_flow_hash_ptr = (flow_hash *)MMmalloc(sizeof(flow_hash), "flow_hash_alloc");
+    new_flow_hash_ptr = (flow_hash_t*)MMmalloc(sizeof(flow_hash_t), "flow_hash_alloc");
 #ifdef MEMDEBUG
     TOT_FLOW_HASH++;
 #endif
@@ -258,12 +240,12 @@ flow_hash *flow_hash_alloc()
   return (new_flow_hash_ptr);
 }
 
-void flow_hash_release(flow_hash *rel_flow_hash_ptr)
+void flow_hash_release(flow_hash_t*rel_flow_hash_ptr)
 {
 #ifdef MEMDEBUG
   IN_USE_FLOW_HASH--;
 #endif
-  memset(rel_flow_hash_ptr, 0, sizeof(flow_hash));
+  memset(rel_flow_hash_ptr, 0, sizeof(flow_hash_t));
   rel_flow_hash_ptr->next = top_flow_hash_flist;
   top_flow_hash_flist = rel_flow_hash_ptr;
 }
@@ -279,14 +261,14 @@ static inline size_t advance_headtail_value(size_t value, size_t max)
   return value;
 }
 
-circular_buf_t *circular_buf_init(pkt_desc_t **pkt_desc_buf, size_t size)
+circular_buf_t *circular_buf_init(void **buf_space, size_t size)
 {
-  assert(pkt_desc_buf && size > 1);
+  assert(buf_space && size > 1);
 
   circular_buf_t *cbuf = malloc(sizeof(circular_buf_t));
   assert(cbuf);
 
-  cbuf->pkt_desc_buf = pkt_desc_buf;
+  cbuf->buf_space = buf_space;
   cbuf->max = size;
   circular_buf_reset(cbuf);
 
@@ -355,16 +337,16 @@ size_t circular_buf_size(circular_buf_t *me)
 /// Because this version, which will overwrite the existing contents
 /// of the buffer, will involve modifying the tail pointer, which is also
 /// modified by get.
-struct pkt_desc_t **circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *pkt_desc_ptr)
+void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr)
 {
-  assert(me && me->pkt_desc_buf);
-  struct pkt_desc_t **temp_pkt_desc_ptr_ptr;
+  assert(me && me->buf_space);
+  void **temp_buf_slot_ptr_ptr;
   if (!circular_buf_full(me))
   {
-    me->pkt_desc_buf[me->tail] = pkt_desc_ptr;
-    temp_pkt_desc_ptr_ptr = &(me->pkt_desc_buf[me->tail]);
+    me->buf_space[me->tail] = buf_slot_ptr;
+    temp_buf_slot_ptr_ptr = &(me->buf_space[me->tail]);
     me->tail = advance_headtail_value(me->tail, me->max);
-    return temp_pkt_desc_ptr_ptr;
+    return temp_buf_slot_ptr_ptr;
   }
   else
   {
@@ -375,35 +357,14 @@ struct pkt_desc_t **circular_buf_try_put(circular_buf_t *me, struct pkt_desc_t *
 /*To remove data from the buffer, we access the value at the tail and then update the tail pointer.
  * If the buffer is empty we do not return a value or modify the pointer.
  * Instead, we return an error to the user. */
-int circular_buf_get(circular_buf_t *me, struct pkt_desc_t **pkt_desc_ptr_ptr)
+int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr)
 {
   int r = -1;
 
   if (me && !circular_buf_empty(me))
   {
-    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->head];
+    *buf_slot_ptr_ptr = me->buf_space[me->head];
     me->head = advance_headtail_value(me->head, me->max);
-    r = 0;
-  }
-
-  return r;
-}
-
-/* To check the elements pointed by the tail without advancing the tail. */
-int circular_buf_peek_one(circular_buf_t* me, struct pkt_desc_t **pkt_desc_ptr_ptr)
-{
-  int r = -1;
-
-  // /* advance the tail until there is a valid value */
-  // while (me->pkt_desc_buf[me->head] == NULL)
-  // {
-  //   me->head = advance_headtail_value(me->head, me->max);
-  //   printf("asssss\n");
-  // }
-  
-  if (me && !circular_buf_empty(me))
-  {
-    *pkt_desc_ptr_ptr = me->pkt_desc_buf[me->head];
     r = 0;
   }
 

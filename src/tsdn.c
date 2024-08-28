@@ -366,13 +366,13 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	// /* timeout_mgmt thread */
-	// pthread_t timeout_mgmt_thread;
-	// if (pthread_create(&timeout_mgmt_thread, NULL, timeout_mgmt, NULL))
-	// {
-	// 	fprintf(stderr, "Error creating timeout_mgmt thread\n");
-	// 	return 1;
-	// }
+	/* lazy freeing thread */
+	pthread_t lazy_free_flow_hash_thread;
+	if (pthread_create(&lazy_free_flow_hash_thread, NULL, lazy_free_flow_hash, NULL))
+	{
+		fprintf(stderr, "Error creating lazy_free_flow_hash thread\n");
+		return 1;
+	}
 
 	/* pkt_rx thread */
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,

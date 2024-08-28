@@ -15,8 +15,9 @@ void *timeout_mgmt(void *args)
         pthread_cond_wait(thread_cond_ptr, thread_g_tMutex_ptr);
     }
     pkt_desc_t *pkt_desc_ptr;
+    void *buf_slot;
     hash hval;
-    flow_hash *flow_hash_ptr;
+    flow_hash_t *flow_hash_ptr;
     int dir;
     flow_addrblock pkt_in;
     Bool is_found;
@@ -33,8 +34,9 @@ void *timeout_mgmt(void *args)
         }
 
         /* Check the next timeout */
-        if (circular_buf_get(thread_circ_buf, &pkt_desc_ptr) != -1)
+        if (circular_buf_get(thread_circ_buf, &buf_slot) != -1)
         {
+            pkt_desc_ptr = (pkt_desc_t *)buf_slot;
             /* The packet is freed before the sleep */
             if ((pkt_desc_ptr == NULL) || (pkt_desc_ptr->pkt_ptr == NULL))
             {
@@ -120,6 +122,7 @@ void *timeout_mgmt(void *args)
                         fprintf(fp_stderr, "TIMEOUT_MGMT: Error: Cannot send the packet!\n");
                     }
                     FreePkt(pkt_desc_ptr->pkt_ptr);
+                    FreePktDesc(flow_hash_ptr);
                     FreeFlowHash(flow_hash_ptr);
                     // fprintf(fp_stderr, "TIMEOUT_MGMT: size: %ld!\n", circular_buf_size(thread_circ_buf));
                 }

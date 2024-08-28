@@ -378,7 +378,7 @@ int SendPkt(char *sendbuf, int tx_len)
     int r = -1;
 	int sockfd;
 	struct ifreq if_idx;
-	struct ifreq if_mac;
+	// struct ifreq if_mac;
 	struct ether_header *eh = (struct ether_header *) sendbuf;
 
 	struct sockaddr_ll socket_address;

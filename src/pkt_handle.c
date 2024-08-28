@@ -64,12 +64,12 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struc
     return pkt_arr[num_ip_packets];
 }
 
-static flow_hash *
+static flow_hash_t *
 FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
 {
     flow_addrblock pkt_in;
     hash hval;
-    flow_hash *flow_hash_ptr;
+    flow_hash_t *flow_hash_ptr;
 
     /* grab the address from this packet */
     CopyAddr(&pkt_in, pip, ptcp);
@@ -90,13 +90,13 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
     return NULL;
 }
 
-static flow_hash *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time, circular_buf_t *circ_buf)
+static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time, circular_buf_t *circ_buf)
 {
     static ip_packet *temp_pkt;
     pkt_desc_t *temp_pkt_desc_ptr;
     pkt_desc_t **temp_pkt_desc_pp;
-    flow_hash *temp_flow_hash_ptr;
-    flow_hash **flow_hash_head_pp;
+    flow_hash_t *temp_flow_hash_ptr;
+    flow_hash_t **flow_hash_head_pp;
     hash hval;
 
     /* Buffer packet */
@@ -118,7 +118,7 @@ static flow_hash *CreateFlowHash(struct ether_header *peth, struct ip *pip, void
     temp_pkt_desc_ptr->recv_time = *pckt_time;
 
     /* Push into circular buffer */
-    temp_pkt_desc_pp = circular_buf_try_put(circ_buf, temp_pkt_desc_ptr);
+    temp_pkt_desc_pp = (pkt_desc_t **)circular_buf_try_put(circ_buf, (void *)temp_pkt_desc_ptr);
     if (temp_pkt_desc_pp == NULL)
     {
         fprintf(fp_stderr, "Error: Circular buffer is full\n");
@@ -133,9 +133,11 @@ static flow_hash *CreateFlowHash(struct ether_header *peth, struct ip *pip, void
     temp_flow_hash_ptr->addr_pair = temp_pkt->addr_pair;
     temp_flow_hash_ptr->pkt_desc_ptr = temp_pkt_desc_ptr;
     temp_flow_hash_ptr->pkt_desc_ptr_ptr = temp_pkt_desc_pp;
-
     temp_flow_hash_ptr->next = *flow_hash_head_pp;
+
+    temp_flow_hash_ptr->lazy_pending = FALSE;
     *flow_hash_head_pp = temp_flow_hash_ptr;
+
     return temp_flow_hash_ptr;
 }
 
@@ -145,14 +147,17 @@ void FreePkt(ip_packet *ppkt_temp)
     pkt_release(ppkt_temp);
 }
 
-void FreeFlowHash(flow_hash *flow_hash_ptr)
+void FreePktDesc(flow_hash_t *flow_hash_ptr)
+{
+    pkt_desc_release(flow_hash_ptr->pkt_desc_ptr);
+    *(flow_hash_ptr->pkt_desc_ptr_ptr) = NULL;
+}
+
+void FreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
     int j = 0;
     hash hval;
-    pkt_desc_t *pkt_desc_ptr;
-    flow_hash *flow_hash_head_ptr, *flow_hash_prev, *temp_flow_hash_ptr;
-
-    pkt_desc_ptr = flow_hash_ptr->pkt_desc_ptr;
+    flow_hash_t *flow_hash_head_ptr, *flow_hash_prev, *temp_flow_hash_ptr;
 
     hval = flow_hash_ptr->addr_pair.hash % HASH_TABLE_SIZE;
     flow_hash_head_ptr = flow_hash_table[hval];
@@ -172,13 +177,34 @@ void FreeFlowHash(flow_hash *flow_hash_ptr)
                 /* it is in the middle of the linked list */
                 flow_hash_prev->next = temp_flow_hash_ptr->next;
             }
-            pkt_desc_release(pkt_desc_ptr);
-            *(flow_hash_ptr->pkt_desc_ptr_ptr) = NULL;
             flow_hash_release(flow_hash_ptr);
             break;
         }
         flow_hash_prev = temp_flow_hash_ptr;
     }
+}
+
+void LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
+{
+    /* Mark the lazy pending flag */
+    flow_hash_ptr->lazy_pending = TRUE;
+
+    /* The time when we receive response packet */
+    timeval current_time;
+    gettimeofday(&current_time, NULL);
+    flow_hash_ptr->resp_time = current_time;
+
+    /* Put the flow hash pointer into the lazy freeing circular buffer */
+    flow_hash_t **temp_flow_hash_pp;
+    temp_flow_hash_pp = (flow_hash_t **)circular_buf_try_put(lazy_flow_hash_circ_buf, (void *)flow_hash_ptr);
+    if (temp_flow_hash_pp == NULL)
+    {
+        fprintf(fp_stderr, "Error: Lazy freeing circular buffer is full\n");
+        return;
+    }
+
+    /* Activate the lazy freeing thread */
+    pthread_cond_signal(&lazy_flow_hash_cond);
 }
 
 int which_circular_buf(struct ip *pip)
@@ -202,7 +228,7 @@ int which_circular_buf(struct ip *pip)
 
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
 {
-    flow_hash *flow_hash_ptr;
+    flow_hash_t *flow_hash_ptr;
     pkt_desc_t *pkt_desc_ptr;
     int dir = 0;
 
@@ -220,6 +246,25 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     /* Found the flow, then check the direction of this packet */
     if (flow_hash_ptr != NULL)
     {
+        if (debug > 1)
+        {
+            inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
+            inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
+            fprintf(fp_stdout, "pkt_handle: from %s:%d to %s:%d, lazy pending %d\n",
+                    ip_src_addr_print_buffer,
+                    flow_hash_ptr->addr_pair.a_port,
+                    ip_dst_addr_print_buffer,
+                    flow_hash_ptr->addr_pair.b_port,
+                    flow_hash_ptr->lazy_pending);
+        }
+
+        if (flow_hash_ptr->lazy_pending == TRUE)
+        {
+            /* The flow is in lazy freeing process, ignore this packet */
+            fprintf(fp_stdout, "pkt_handle: The flow is in lazy freeing process, ignore this packet\n");
+            return 0;
+        }
+
         /* Same direction of this packet, probably another reply */
         if (dir == C2S)
         {
@@ -258,7 +303,11 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
 
             /* TODO: should we lock this? */
             FreePkt(flow_hash_ptr->pkt_desc_ptr->pkt_ptr);
-            FreeFlowHash(flow_hash_ptr);
+            /* To handle the delay between the response packet is received and the flow rule is installed,
+             * here we use a lazy-freeing strategy that put the hash table entry to be freed into another circular queue. */
+            FreePktDesc(flow_hash_ptr);
+            // FreeFlowHash(flow_hash_ptr);
+            LazyFreeFlowHash(flow_hash_ptr);
         }
     }
     /* Did not find the flow, create one */
@@ -285,7 +334,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         {
             inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
             inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-            fprintf(fp_stdout, "PKT_RX: new TCP SYN stored: from %s:%d to %s:%d with %d bytes of raw_packet %s at %ld.%5ld\n",
+            fprintf(fp_stdout, "PKT_RX: new request pkt stored: from %s:%d to %s:%d with %d bytes of raw_packet %s at %ld.%5ld\n",
                     ip_src_addr_print_buffer,
                     ntohs(flow_hash_ptr->addr_pair.a_port),
                     ip_dst_addr_print_buffer,
@@ -311,7 +360,7 @@ void trace_init(void)
     /* create an array to hold any pairs that we might create */
     pkt_arr = (ip_packet **)MallocZ(MAX_TCP_PACKETS * sizeof(ip_packet *));
 
-    for (int i=0; i<TIMEOUT_LEVEL_NUM; i++)
+    for (int i = 0; i < TIMEOUT_LEVEL_NUM; i++)
     {
         /* initialize the mutex lock for two threads */
         pthread_mutex_init(&circ_buf_mutex_list[i], NULL);
@@ -321,16 +370,19 @@ void trace_init(void)
         pkt_desc_buf_list[i] = (pkt_desc_t **)MallocZ(MAX_TCP_PACKETS * sizeof(pkt_desc_t *));
 
         /* initalize the circular buffer */
-        circ_buf_list[i] = circular_buf_init(pkt_desc_buf_list[i], MAX_TCP_PACKETS);
+        circ_buf_list[i] = circular_buf_init((void **)pkt_desc_buf_list[i], MAX_TCP_PACKETS);
     }
-    // /* initalize the packet descriptor buffer for the circular buffer */
-    // pkt_desc_buf = (pkt_desc_t **)MallocZ(MAX_TCP_PACKETS * sizeof(pkt_desc_t *));
-
-    // /* initalize the circular buffer */
-    // circ_buf = circular_buf_init(pkt_desc_buf, MAX_TCP_PACKETS);
 
     /* initialize the hash table */
-    flow_hash_table = (flow_hash **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash *));
+    flow_hash_table = (flow_hash_t **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash_t *));
+
+    /* initialize the circular buffer for lazy freeing */
+    lazy_flow_hash_buf = (flow_hash_t **)MallocZ(MAX_TCP_PACKETS * sizeof(flow_hash_t *));
+    lazy_flow_hash_circ_buf = circular_buf_init((void **)lazy_flow_hash_buf, MAX_TCP_PACKETS);
+
+    /* initialize the mutex lock for lazy freeing */
+    pthread_mutex_init(&lazy_flow_hash_mutex, NULL);
+    pthread_cond_init(&lazy_flow_hash_cond, NULL);
 }
 
 /* Helper functions */
