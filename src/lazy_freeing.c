@@ -30,6 +30,7 @@ void *lazy_free_flow_hash(void *args)
             if (flow_hash_ptr == NULL || flow_hash_ptr->lazy_pending == FALSE)                
             {
                 fprintf(fp_stderr, "LAZY_FREE_FLOW_HASH: Error: flow_hash_ptr is NULL!\n");
+                
             }
             else
             {

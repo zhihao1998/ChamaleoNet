@@ -222,6 +222,8 @@ size_t circular_buf_capacity(circular_buf_t* me);
 /// Returns the current number of elements in the buffer
 size_t circular_buf_size(circular_buf_t* me);
 
+int circular_buf_peek_head(circular_buf_t *me, void **buf_slot_ptr_ptr);
+
 
 
 int LoadInternalNets(char *file);
@@ -237,6 +239,8 @@ pthread_mutex_t circ_buf_mutex_list[TIMEOUT_LEVEL_NUM];
 pthread_cond_t circ_buf_cond_list[TIMEOUT_LEVEL_NUM];
 pkt_desc_t **pkt_desc_buf_list[TIMEOUT_LEVEL_NUM];
 circular_buf_t *circ_buf_list[TIMEOUT_LEVEL_NUM];
+
+pthread_mutex_t circ_buf_head_mutex_list[TIMEOUT_LEVEL_NUM];
 
 /* connection records are stored in a hash table.  */
 flow_hash_t**flow_hash_table;

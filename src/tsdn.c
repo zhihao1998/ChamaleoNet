@@ -341,7 +341,7 @@ int main(int argc, char *argv[])
 	/* Use three threads to manage three levels of timeout */
 	/* timeout_level_1 thread */
 	pthread_t timeout_level_1_thread;
-	timeout_mgmt_args timeout_level_1_args = {TIMEOUT_LEVEL_1, circ_buf_list[0], &circ_buf_mutex_list[0], &circ_buf_cond_list[0]};
+	timeout_mgmt_args timeout_level_1_args = {TIMEOUT_LEVEL_1, circ_buf_list[0], &circ_buf_mutex_list[0], &circ_buf_cond_list[0], &circ_buf_head_mutex_list[0]};
 	if (pthread_create(&timeout_level_1_thread, NULL, timeout_mgmt, (void*)&timeout_level_1_args))
 	{
 		fprintf(stderr, "Error creating timeout_level_1 thread\n");
@@ -350,7 +350,7 @@ int main(int argc, char *argv[])
 
 	/* timeout_level_2 thread */
 	pthread_t timeout_level_2_thread;
-	timeout_mgmt_args timeout_level_2_args = {TIMEOUT_LEVEL_2, circ_buf_list[1], &circ_buf_mutex_list[1], &circ_buf_cond_list[1]};
+	timeout_mgmt_args timeout_level_2_args = {TIMEOUT_LEVEL_2, circ_buf_list[1], &circ_buf_mutex_list[1], &circ_buf_cond_list[1], &circ_buf_head_mutex_list[1]};
 	if (pthread_create(&timeout_level_2_thread, NULL, timeout_mgmt, (void*)&timeout_level_2_args))
 	{
 		fprintf(stderr, "Error creating timeout_level_2 thread\n");
@@ -359,7 +359,7 @@ int main(int argc, char *argv[])
 
 	/* timeout_level_3 thread */
 	pthread_t timeout_level_3_thread;
-	timeout_mgmt_args timeout_level_3_args = {TIMEOUT_LEVEL_3, circ_buf_list[2], &circ_buf_mutex_list[2], &circ_buf_cond_list[2]};
+	timeout_mgmt_args timeout_level_3_args = {TIMEOUT_LEVEL_3, circ_buf_list[2], &circ_buf_mutex_list[2], &circ_buf_cond_list[2], &circ_buf_head_mutex_list[2]};
 	if (pthread_create(&timeout_level_3_thread, NULL, timeout_mgmt, (void*)&timeout_level_3_args))
 	{
 		fprintf(stderr, "Error creating timeout_level_3 thread\n");
@@ -394,10 +394,50 @@ int main(int argc, char *argv[])
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
 #endif
 
-	// pthread_cancel(timeout_mgmt_thread);
+	/* free the circular buffer */
+	for (int i = 0; i < TIMEOUT_LEVEL_NUM; i++)
+	{
+		free(circ_buf_list[i]->buf_space);
+		free(circ_buf_list[i]);
+	}
+
+	/* free the flow hash table */
+	for (int i = 0; i < HASH_TABLE_SIZE; i++)
+	{
+		flow_hash_t *flow_hash_ptr = flow_hash_table[i];
+		while (flow_hash_ptr != NULL)
+		{
+			flow_hash_t *temp = flow_hash_ptr;
+			flow_hash_ptr = flow_hash_ptr->next;
+			free(temp);
+		}
+	}
+
+	/* free the lazy flow hash table */
+	for (int i = 0; i < HASH_TABLE_SIZE; i++)
+	{
+		flow_hash_t *flow_hash_ptr = lazy_flow_hash_buf[i];
+		while (flow_hash_ptr != NULL)
+		{
+			flow_hash_t *temp = flow_hash_ptr;
+			flow_hash_ptr = flow_hash_ptr->next;
+			free(temp);
+		}
+	}
+
+	/* Release the mutex */
+	for (int i = 0; i < TIMEOUT_LEVEL_NUM; i++)
+	{
+		pthread_mutex_destroy(&circ_buf_mutex_list[i]);
+		pthread_cond_destroy(&circ_buf_cond_list[i]);
+	}
+	pthread_mutex_destroy(&lazy_flow_hash_mutex);
+	pthread_cond_destroy(&lazy_flow_hash_cond);
+
 	pthread_cancel(timeout_level_1_thread);
 	pthread_cancel(timeout_level_2_thread);
 	pthread_cancel(timeout_level_3_thread);
+	pthread_cancel(lazy_free_flow_hash_thread);
 	return 0;
 }
 

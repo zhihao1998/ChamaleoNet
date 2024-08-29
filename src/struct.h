@@ -105,4 +105,5 @@ typedef struct timeout_mgmt_args
   circular_buf_t *circ_buf;
   pthread_mutex_t *g_tMutex_ptr;
   pthread_cond_t *cond_ptr;
+  pthread_mutex_t *head_mutex_ptr;
 }timeout_mgmt_args;

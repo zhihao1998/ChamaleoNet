@@ -370,3 +370,17 @@ int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr)
 
   return r;
 }
+
+/* peek head */
+int circular_buf_peek_head(circular_buf_t *me, void **buf_slot_ptr_ptr)
+{
+  int r = -1;
+
+  if (me && !circular_buf_empty(me))
+  {
+    *buf_slot_ptr_ptr = me->buf_space[me->head];
+    r = 0;
+  }
+
+  return r;
+}

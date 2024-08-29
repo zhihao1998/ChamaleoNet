@@ -35,11 +35,11 @@ Increase this number on high speed network will help ...*/
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
 #define TIMEOUT_LEVEL_NUM 3
-#define TIMEOUT_LEVEL_1 10000000 //10s
-#define TIMEOUT_LEVEL_2 100000   //100ms
-#define TIMEOUT_LEVEL_3 50000    //50ms
+#define TIMEOUT_LEVEL_1 100000 
+#define TIMEOUT_LEVEL_2 50000  
+#define TIMEOUT_LEVEL_3 20000   
 
-#define LAZY_FREEING_TIMEOUT 5000000 //2s
+#define LAZY_FREEING_TIMEOUT 10000000
 
 
 /* Max number of nets to check if ip is internal or external */

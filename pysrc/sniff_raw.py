@@ -9,4 +9,4 @@ def callback(packet):
     packet.show()
     o_open_file.write(packet)
    
-dpkt_input = sniff(iface = "virbr0",  filter='tcp',prn = callback)
+dpkt_input = sniff(iface = "virbr1",  filter='tcp',prn = callback)

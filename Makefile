@@ -12,6 +12,7 @@ OBJ_PATH := obj
 SRC_PATH := src
 DBG_PATH := debug
 TEST_PATH := test
+PCAP_PATH := pcap
 
 # compile macros
 TARGET_NAME := tsdn
@@ -70,6 +71,10 @@ test: $(TARGET_TEST)
 clean:
 	@echo CLEAN $(CLEAN_LIST)
 	@rm -f $(CLEAN_LIST)
+	@rm -f $(BIN_PATH)/*
+	@rm -f $(OBJ_PATH)/*
+	@rm -f $(DBG_PATH)/*
+	@rm -f $(PCAP_PATH)/*
 
 .PHONY: distclean
 distclean:
