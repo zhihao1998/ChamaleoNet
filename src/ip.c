@@ -231,7 +231,7 @@ int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2)
 
 int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir)
 {
-  assert(ppkta1->hash == ppkta2->hash == 0);
+  assert(!((ppkta2->hash == ppkta1->hash) && (ppkta2->hash == 0)));
   /* Here we should also take into account the direction, since we are processing the packet rather than flow*/
   /* if the hash values are different, they can't be the same */
   if (ppkta1->hash != ppkta2->hash)

@@ -372,55 +372,18 @@ char *readline(FILE *fp, int skip_comment, int skip_void_lines)
 /*
  * Packet sender.
  */
+// int SendPkt(char *sendbuf, int tx_len)
+// {   
+//     return 0;   
+// }
 
 int SendPkt(char *sendbuf, int tx_len)
 {   
     int r = -1;
-	int sockfd;
-	struct ifreq if_idx;
+
 	// struct ifreq if_mac;
 	struct ether_header *eh = (struct ether_header *) sendbuf;
 
-	struct sockaddr_ll socket_address;
-	char ifName[IFNAMSIZ];
-	
-	/* Get interface name */
-	strcpy(ifName, SEND_INTF);
-
-	/* Open RAW socket to send on */
-	if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
-	    perror("socket");
-	}
-
-	/* Get the index of the interface to send on */
-	memset(&if_idx, 0, sizeof(struct ifreq));
-	strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
-	if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
-	    perror("SIOCGIFINDEX");
-    
-	/* Get the MAC address of the interface to send on */
-	// memset(&if_mac, 0, sizeof(struct ifreq));
-	// strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
-	// if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
-	//     perror("SIOCGIFHWADDR");
-
-	/* Construct the Ethernet header, here we use raw packet */
-	// memset(sendbuf, 0, BUF_SIZ);
-	/* Ethernet header */
-	// eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
-	// /* Ethertype field */
-	// eh->ether_type = htons(ETH_P_IP);
-	// tx_len += sizeof(struct ether_header);
-
-	// /* Fill packet data */
-	// sendbuf[tx_len++] = 0xde;
-
-	/* Index of the network device */
-	socket_address.sll_ifindex = if_idx.ifr_ifindex;
-	/* Address length*/
-	socket_address.sll_halen = ETH_ALEN;
-	/* Destination MAC */
-	// socket_address.sll_addr[0] = MY_DEST_MAC0;
 
 	/* Send packet */
 	if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) != -1)

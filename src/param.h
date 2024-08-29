@@ -35,7 +35,7 @@ Increase this number on high speed network will help ...*/
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
 #define TIMEOUT_LEVEL_NUM 3
-#define TIMEOUT_LEVEL_1 100000 
+#define TIMEOUT_LEVEL_1 100000
 #define TIMEOUT_LEVEL_2 50000  
 #define TIMEOUT_LEVEL_3 20000   
 

@@ -21,8 +21,6 @@ void *timeout_mgmt(void *args)
     hash hval;
     flow_hash_t *flow_hash_ptr;
     int dir;
-    flow_addrblock pkt_in;
-    Bool is_found;
     timeval current_time, pkt_time;
     int sleep_time_us, time_diff;
     int res;
@@ -36,9 +34,8 @@ void *timeout_mgmt(void *args)
             pthread_cond_wait(thread_cond_ptr, thread_g_tMutex_ptr);
         }
 
-        pthread_mutex_lock(thread_head_mutex_ptr);
+        // pthread_mutex_lock(thread_head_mutex_ptr);
         res = circular_buf_get(thread_circ_buf, &buf_slot);
-        pthread_mutex_unlock(thread_head_mutex_ptr);
         /* Check the next timeout */
         if (res != -1)
         {
@@ -80,11 +77,13 @@ void *timeout_mgmt(void *args)
                 if ((pkt_desc_ptr == NULL) || (pkt_desc_ptr->pkt_ptr == NULL))
                 {
                     fprintf(fp_stdout, "TIMEOUT_MGMT: After sleeping skipped a packet descriptor which has already been freed.\n");
+                    FreeFlowHash(flow_hash_ptr);
                     continue;
                 }
 
-                is_found = FALSE;
-                /* The packet descriptor has been freed. */
+                /* The packet descriptor and packet still exist. Start to clean. */
+                flow_hash_ptr = pkt_desc_ptr->flow_hash_ptr;
+                FreeFlowHash(flow_hash_ptr);
                 if (debug > 1)
                 {
                     char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
@@ -102,43 +101,15 @@ void *timeout_mgmt(void *args)
                             current_time.tv_usec);
                 }
 
-                /* Since we do not have pip/ptcp pointer, we have to manually get the flow info from pkt_ptr */
-                hval = pkt_desc_ptr->pkt_ptr->addr_pair.hash % HASH_TABLE_SIZE;
-                IP_COPYADDR(&pkt_in.a_address, pkt_desc_ptr->pkt_ptr->addr_pair.a_address);
-                IP_COPYADDR(&pkt_in.b_address, pkt_desc_ptr->pkt_ptr->addr_pair.b_address);
-                pkt_in.a_port = pkt_desc_ptr->pkt_ptr->addr_pair.a_port;
-                pkt_in.b_port = pkt_desc_ptr->pkt_ptr->addr_pair.b_port;
-                pkt_in.hash = pkt_desc_ptr->pkt_ptr->addr_pair.hash;
-
-                /* Find entry in hash table */
-                for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
+                if (SendPkt(pkt_desc_ptr->pkt_ptr->raw_pkt, pkt_desc_ptr->pkt_ptr->pkt_len) == -1)
                 {
-                    if (SameConn(&pkt_in, &flow_hash_ptr->addr_pair, &dir))
-                    {
-                        /* Found */
-                        is_found = TRUE;
-                        break;
-                    }
+                    fprintf(fp_stderr, "TIMEOUT_MGMT: Error: Cannot send the packet!\n");
                 }
-
-                if (is_found)
-                {
-                    pthread_mutex_lock(thread_head_mutex_ptr);
-                    if (SendPkt(pkt_desc_ptr->pkt_ptr->raw_pkt, pkt_desc_ptr->pkt_ptr->pkt_len) == -1)
-                    {
-                        fprintf(fp_stderr, "TIMEOUT_MGMT: Error: Cannot send the packet!\n");
-                    }
-                    FreePkt(pkt_desc_ptr->pkt_ptr);
-                    FreePktDesc(flow_hash_ptr);
-                    FreeFlowHash(flow_hash_ptr);
-                    // fprintf(fp_stderr, "TIMEOUT_MGMT: size: %ld!\n", circular_buf_size(thread_circ_buf));
-                    pthread_mutex_unlock(thread_head_mutex_ptr);
-                }
-                else
-                {
-                    fprintf(fp_stderr, "TIMEOUT_MGMT: Error: Cannot find the flow in the hash table!\n");
-                }
+                FreePkt(pkt_desc_ptr->pkt_ptr);
+                FreePktDesc(pkt_desc_ptr);
+                // fprintf(fp_stderr, "TIMEOUT_MGMT: size: %ld!\n", circular_buf_size(thread_circ_buf));
             }
         }
+        // pthread_mutex_unlock(thread_head_mutex_ptr);
     }
 }

@@ -76,9 +76,12 @@ enum ip_direction {
 
 /* Circular Buffer Related */
 
+typedef struct flow_hash_t flow_hash_t;
+
 typedef struct pkt_desc_t {
   ip_packet * pkt_ptr;
   timeval recv_time;
+  flow_hash_t *flow_hash_ptr;
 } pkt_desc_t;
 
 typedef struct circular_buf_t {

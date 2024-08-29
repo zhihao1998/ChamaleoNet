@@ -138,6 +138,8 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     temp_flow_hash_ptr->lazy_pending = FALSE;
     *flow_hash_head_pp = temp_flow_hash_ptr;
 
+    temp_pkt_desc_ptr->flow_hash_ptr = temp_flow_hash_ptr;
+
     return temp_flow_hash_ptr;
 }
 
@@ -147,13 +149,9 @@ void FreePkt(ip_packet *ppkt_temp)
     pkt_release(ppkt_temp);
 }
 
-void FreePktDesc(flow_hash_t *flow_hash_ptr)
+void FreePktDesc(pkt_desc_t *pkt_desc_ptr)
 {
-    pkt_desc_t *tmp_pkt_desc_ptr;
-    tmp_pkt_desc_ptr = flow_hash_ptr->pkt_desc_ptr;
-    pkt_desc_release(tmp_pkt_desc_ptr);
-    flow_hash_ptr->pkt_desc_ptr = NULL;
-    *(flow_hash_ptr->pkt_desc_ptr_ptr) = NULL;
+    pkt_desc_release(pkt_desc_ptr);
 }
 
 void FreeFlowHash(flow_hash_t *flow_hash_ptr)
@@ -253,14 +251,14 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         if (flow_hash_ptr->lazy_pending == TRUE)
         {
             /* The flow is in lazy freeing process, ignore this packet */
-            inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-            inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-            fprintf(fp_stdout, "pkt_handle: from %s:%d to %s:%d, lazy pending %d\n",
-                    ip_src_addr_print_buffer,
-                    flow_hash_ptr->addr_pair.a_port,
-                    ip_dst_addr_print_buffer,
-                    flow_hash_ptr->addr_pair.b_port,
-                    flow_hash_ptr->lazy_pending);
+            // inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
+            // inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
+            // fprintf(fp_stdout, "pkt_handle: from %s:%d to %s:%d, lazy pending %d\n",
+            //         ip_src_addr_print_buffer,
+            //         flow_hash_ptr->addr_pair.a_port,
+            //         ip_dst_addr_print_buffer,
+            //         flow_hash_ptr->addr_pair.b_port,
+            //         flow_hash_ptr->lazy_pending);
             return 0;
         }
 
@@ -273,62 +271,33 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         /* Reversed direction of this packet, probably a response */
         else if (dir == S2C)
         {
-            pthread_mutex_lock(&circ_buf_head_mutex_list[timeout_level]);
-            circular_buf_peek_head(circ_buf_list[timeout_level], &buf_slot);
-            tmp_pkt_desc_ptr = (pkt_desc_t *)buf_slot;
-            if (tmp_pkt_desc_ptr != flow_hash_ptr->pkt_desc_ptr)
+            /* the critical resource is the head of the circular buffer */
+            // pthread_mutex_lock(&circ_buf_head_mutex_list[timeout_level]);
+            if (debug > 1)
             {
-
-                if (debug > 1)
-                {
-                    inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-                    inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                    fprintf(fp_stdout, "pkt_handle: S2C: from %s:%d to %s:%d with %d bytes of raw_packet %c%c.. at %ld\n",
-                            ip_src_addr_print_buffer,
-                            flow_hash_ptr->addr_pair.a_port,
-                            ip_dst_addr_print_buffer,
-                            flow_hash_ptr->addr_pair.b_port,
-                            flow_hash_ptr->pkt_desc_ptr->pkt_ptr->pkt_len,
-                            flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt[0],
-                            flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt[1],
-                            flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
-                }
-
-                /* TODO: should we lock this? */
-                FreePkt(flow_hash_ptr->pkt_desc_ptr->pkt_ptr);
-                /* To handle the delay between the response packet is received and the flow rule is installed,
-                 * here we use a lazy-freeing strategy that put the hash table entry to be freed into another circular queue. */
-                FreePktDesc(flow_hash_ptr);
-                // FreeFlowHash(flow_hash_ptr);
-                LazyFreeFlowHash(flow_hash_ptr);
-                pthread_mutex_unlock(&circ_buf_head_mutex_list[timeout_level]);
+                inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
+                inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
+                fprintf(fp_stdout, "pkt_handle: S2C: from %s:%d to %s:%d with %d bytes of raw_packet %c%c.. at %ld\n",
+                        ip_src_addr_print_buffer,
+                        flow_hash_ptr->addr_pair.a_port,
+                        ip_dst_addr_print_buffer,
+                        flow_hash_ptr->addr_pair.b_port,
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->pkt_len,
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt[0],
+                        flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt[1],
+                        flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
             }
-            else
-            {
-                if (debug > 1)
-                {
-                    inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-                    inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                    fprintf(fp_stdout, "pkt_handle: S2C: from %s:%d to %s:%d with %d bytes of raw_packet %c%c.. at %ld\n",
-                            ip_src_addr_print_buffer,
-                            flow_hash_ptr->addr_pair.a_port,
-                            ip_dst_addr_print_buffer,
-                            flow_hash_ptr->addr_pair.b_port,
-                            flow_hash_ptr->pkt_desc_ptr->pkt_ptr->pkt_len,
-                            flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt[0],
-                            flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt[1],
-                            flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec);
-                }
+            ip_packet *pkt_ptr = flow_hash_ptr->pkt_desc_ptr->pkt_ptr;
+            pkt_desc_t *pkt_desc_ptr = flow_hash_ptr->pkt_desc_ptr;
+            LazyFreeFlowHash(flow_hash_ptr);
 
-                /* TODO: should we lock this? */
-                FreePkt(flow_hash_ptr->pkt_desc_ptr->pkt_ptr);
-                /* To handle the delay between the response packet is received and the flow rule is installed,
-                 * here we use a lazy-freeing strategy that put the hash table entry to be freed into another circular queue. */
-                FreePktDesc(flow_hash_ptr);
-                // FreeFlowHash(flow_hash_ptr);
-                LazyFreeFlowHash(flow_hash_ptr);
-                pthread_mutex_unlock(&circ_buf_head_mutex_list[timeout_level]);
-            }
+            /* TODO: should we lock this? */
+            FreePkt(pkt_ptr);
+            /* To handle the delay between the response packet is received and the flow rule is installed,
+             * here we use a lazy-freeing strategy that put the hash table entry to be freed into another circular queue. */
+            FreePktDesc(pkt_desc_ptr);
+            // FreeFlowHash(flow_hash_ptr);
+            // pthread_mutex_unlock(&circ_buf_head_mutex_list[timeout_level]);
         }
     }
     /* Did not find the flow, create one */
@@ -406,6 +375,45 @@ void trace_init(void)
     /* initialize the mutex lock for lazy freeing */
     pthread_mutex_init(&lazy_flow_hash_mutex, NULL);
     pthread_cond_init(&lazy_flow_hash_cond, NULL);
+
+    /* Initialize the params for sendpkt */
+    /* Get interface name */
+	strcpy(ifName, SEND_INTF);
+
+	/* Open RAW socket to send on */
+	if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
+	    perror("socket");
+	}
+
+	/* Get the index of the interface to send on */
+	memset(&if_idx, 0, sizeof(struct ifreq));
+	strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
+	if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
+	    perror("SIOCGIFINDEX");
+    
+	/* Get the MAC address of the interface to send on */
+	// memset(&if_mac, 0, sizeof(struct ifreq));
+	// strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
+	// if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
+	//     perror("SIOCGIFHWADDR");
+
+	/* Construct the Ethernet header, here we use raw packet */
+	// memset(sendbuf, 0, BUF_SIZ);
+	/* Ethernet header */
+	// eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
+	// /* Ethertype field */
+	// eh->ether_type = htons(ETH_P_IP);
+	// tx_len += sizeof(struct ether_header);
+
+	// /* Fill packet data */
+	// sendbuf[tx_len++] = 0xde;
+
+	/* Index of the network device */
+	socket_address.sll_ifindex = if_idx.ifr_ifindex;
+	/* Address length*/
+	socket_address.sll_halen = ETH_ALEN;
+	/* Destination MAC */
+	// socket_address.sll_addr[0] = MY_DEST_MAC0;
 }
 
 /* Helper functions */

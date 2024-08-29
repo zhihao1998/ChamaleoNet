@@ -229,6 +229,10 @@ int circular_buf_peek_head(circular_buf_t *me, void **buf_slot_ptr_ptr);
 int LoadInternalNets(char *file);
 
 int SendPkt(char *sendbuf, int tx_len);
+int sockfd;
+struct ifreq if_idx;
+struct sockaddr_ll socket_address;
+char ifName[IFNAMSIZ];
 
 /* Thread Operation Function */
 void *timeout_mgmt(void *args);
@@ -266,8 +270,10 @@ void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr);
 int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2);
 int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir);
 void FreePkt(ip_packet *ppkt_temp);
-void FreePktDesc(flow_hash_t*flow_hash_ptr);
-void FreeFlowHash(flow_hash_t*flow_hash_ptr);
+void FreePktDesc(pkt_desc_t *pkt_desc_ptr);
+void FreeFlowHash(flow_hash_t *flow_hash_ptr);
+
+
 
 
 

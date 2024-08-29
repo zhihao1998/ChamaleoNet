@@ -42,10 +42,6 @@ void *lazy_free_flow_hash(void *args)
                 if (LAZY_FREEING_TIMEOUT >= time_diff_us)
                 {
                     sleep_time_us = LAZY_FREEING_TIMEOUT - time_diff_us;
-                    if (debug > 1)
-                    {
-                        fprintf(fp_stderr, "LAZY_FREE_FLOW_HASH: Sleeping for %dus\n", sleep_time_us);
-                    }
                     usleep(sleep_time_us);
                 }
                 /* otherwise, the packet is delayed more than Timeout. The packet should to be freed immediately.
