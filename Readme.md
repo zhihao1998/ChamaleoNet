@@ -38,6 +38,27 @@ This project is developed with the following dependencies:
 
 - Lock the access of the tail element in circular buffer (not thread safe)
 
+## Data Plane
+
+### Build and Run
+
+
+```shell
+iftofinoup
+
+
+sudo p4-build -o p4/build/ p4/tf_honeypot.p4
+
+cd p4/log
+
+tfm -p tf_honeypot
+
+p4 -p tf_honeypot
+
+```
+
+
+
 
 ## Add virtual interface
 

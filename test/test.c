@@ -1,87 +1,132 @@
-#include "../src/tsdn.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <arpa/inet.h>
+#include <netinet/if_ether.h>
+#include <netinet/ether.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <net/ethernet.h>
+#include <string.h>
+#include <assert.h>
+#include <pthread.h> 
+#include <unistd.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <linux/if_packet.h>
 
+#include <Python.h>
 
-#define MY_DEST_MAC0	0x00
-#define MY_DEST_MAC1	0x00
-#define MY_DEST_MAC2	0x00
-#define MY_DEST_MAC3	0x00
-#define MY_DEST_MAC4	0x00
-#define MY_DEST_MAC5	0x00
+typedef struct in_addr in_addr;
 
-#define DEFAULT_IF	"virbr1"
-#define BUF_SIZ		1518
+static PyObject *pModule, *pClass, *pInstance;
 
-int send_pkt(char *sendbuf, int tx_len)
+/* Initialze Grpc object */
+int tf_grpc_init()
+{	
+	PyObject *pArgs;
+	Py_Initialize();
+	PyRun_SimpleString("import sys");
+	PyRun_SimpleString("sys.path.append('./tf_grpc')");
+
+	pModule = PyImport_ImportModule("tf_grpc_server");
+	assert(pModule != NULL);
+	/* Call Py_INCREF() for objects that you want to keep around for a while.  
+	 * A pointer to an object that has been INCREFed is said to be protected. */
+	Py_INCREF(pModule);
+
+	pClass = PyObject_GetAttrString(pModule, "TfGRPCServer"); /* fetch module.class */
+	assert(pClass != NULL);
+	Py_INCREF(pClass);
+
+	/* Instantiate the class */
+	pArgs = Py_BuildValue("()"); /* create empty argument tuple */
+	pInstance = PyEval_CallObject(pClass, pArgs); 
+	assert(pInstance != NULL);
+	Py_INCREF(pInstance);
+}
+
+int tf_grpc_destroy()
 {
-	int sockfd;
-	struct ifreq if_idx;
-	struct ifreq if_mac;
-	// int tx_len = 0;
-	// char sendbuf[BUF_SIZ];
-	struct ether_header *eh = (struct ether_header *) sendbuf;
+	/* Clean up */
+	assert(pInstance != NULL);
+	assert(pClass != NULL);
+	assert(pModule != NULL);
 
-	struct sockaddr_ll socket_address;
-	char ifName[IFNAMSIZ];
-	
-	/* Get interface name */
-	strcpy(ifName, DEFAULT_IF);
+	Py_DECREF(pInstance);
+	Py_DECREF(pClass);
+	Py_DECREF(pModule);
+	Py_Finalize();
+}
 
-	/* Open RAW socket to send on */
-	if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
-	    perror("socket");
-	}
+/* TCP Flow Table */
+int tf_tcp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port)
+{
+	PyObject *pArgs, *pRes, *pFunc;
+	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 
-	/* Get the index of the interface to send on */
-	memset(&if_idx, 0, sizeof(struct ifreq));
-	strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
-	if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
-	    perror("SIOCGIFINDEX");
-	/* Get the MAC address of the interface to send on */
-	memset(&if_mac, 0, sizeof(struct ifreq));
-	strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
-	if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
-	    perror("SIOCGIFHWADDR");
+	inet_ntop(AF_INET, &(src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
+	inet_ntop(AF_INET, &(dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
 
-	/* Construct the Ethernet header */
-	// memset(sendbuf, 0, BUF_SIZ);
-	/* Ethernet header */
-	// eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
-	// eh->ether_shost[1] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[1];
-	// eh->ether_shost[2] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[2];
-	// eh->ether_shost[3] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[3];
-	// eh->ether_shost[4] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[4];
-	// eh->ether_shost[5] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[5];
-	// eh->ether_dhost[0] = MY_DEST_MAC0;
-	// eh->ether_dhost[1] = MY_DEST_MAC1;
-	// eh->ether_dhost[2] = MY_DEST_MAC2;
-	// eh->ether_dhost[3] = MY_DEST_MAC3;
-	// eh->ether_dhost[4] = MY_DEST_MAC4;
-	// eh->ether_dhost[5] = MY_DEST_MAC5;
-	// /* Ethertype field */
-	// eh->ether_type = htons(ETH_P_IP);
-	// tx_len += sizeof(struct ether_header);
+	pFunc = PyObject_GetAttrString(pInstance, "tcp_flow_add_with_drop"); 
+	pArgs = Py_BuildValue("(ssii)", ip_src_addr_str, ip_dst_addr_str, src_port, dst_port); 
+	pRes = PyEval_CallObject(pFunc, pArgs);	 
+	Py_DECREF(pFunc);
+	Py_DECREF(pArgs);
+	Py_DECREF(pRes);
+}
 
-	// /* Packet data */
-	// sendbuf[tx_len++] = 0xde;
-	// sendbuf[tx_len++] = 0xad;
-	// sendbuf[tx_len++] = 0xbe;
-	// sendbuf[tx_len++] = 0xef;
+int tf_tcp_flow_add_with_send(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port, u_short egress_port)
+{
+	PyObject *pArgs, *pRes, *pFunc;
+	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 
-	/* Index of the network device */
-	socket_address.sll_ifindex = if_idx.ifr_ifindex;
-	/* Address length*/
-	socket_address.sll_halen = ETH_ALEN;
-	/* Destination MAC */
-	socket_address.sll_addr[0] = MY_DEST_MAC0;
-	socket_address.sll_addr[1] = MY_DEST_MAC1;
-	socket_address.sll_addr[2] = MY_DEST_MAC2;
-	socket_address.sll_addr[3] = MY_DEST_MAC3;
-	socket_address.sll_addr[4] = MY_DEST_MAC4;
-	socket_address.sll_addr[5] = MY_DEST_MAC5;
+	inet_ntop(AF_INET, &(src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
+	inet_ntop(AF_INET, &(dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
 
-	/* Send packet */
-	if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0)
-	    printf("Send failed\n");
+	pFunc = PyObject_GetAttrString(pInstance, "tcp_flow_add_with_send"); 
+	assert(pFunc != NULL);
+	pArgs = Py_BuildValue("(ssiii)", ip_src_addr_str, ip_dst_addr_str, src_port, dst_port, egress_port); 
+	assert(pArgs != NULL);
+	pRes = PyEval_CallObject(pFunc, pArgs);	 
+	assert(pRes != NULL);
+	Py_DECREF(pFunc);
+	Py_DECREF(pArgs);
+	Py_DECREF(pRes);
+}
+
+
+PyObject *import_name(const char *modname, const char *symbol)
+{
+	PyObject *u_name, *module;
+	u_name = PyUnicode_FromString(modname);
+	module = PyImport_Import(u_name);
+	Py_DECREF(u_name);
+	return PyObject_GetAttrString(module, symbol);
+}
+
+/* Simple embedding example */
+int main()
+{
+	tf_grpc_init();
+
+	in_addr src_ip, dst_ip;
+	inet_aton("10.0.0.1", &(src_ip));
+	inet_aton("10.0.0.2", &(dst_ip));
+
+	u_short src_port = 80;
+	u_short dst_port = 81;
+	u_short egress_port = 1;
+
+	tf_tcp_flow_add_with_drop(src_ip, dst_ip, src_port, dst_port);
+	tf_tcp_flow_add_with_send(src_ip, dst_ip, src_port, dst_port, egress_port);
+
+	tf_grpc_destroy();
 
 	return 0;
 }

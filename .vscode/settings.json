@@ -7,6 +7,9 @@
         "limits": "c",
         "if.h": "c",
         "tsdn.h": "c",
-        "type_traits": "c"
+        "type_traits": "c",
+        "python.h": "c",
+        "stdlib.h": "c",
+        "ip.h": "c"
     }
 }

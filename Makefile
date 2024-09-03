@@ -1,7 +1,8 @@
 # tool macros
 CC ?= gcc
 CXX ?= # FILL: the compiler
-CFLAGS := -lpcap -lpthread
+PYFLAGS = $(shell python3-config --includes) $(shell python3-config --ldflags --embed) 
+CFLAGS := -lpcap -lpthread $(PYFLAGS)
 CXXFLAGS := # FILL: compile flags
 DBGFLAGS := -g
 COBJFLAGS := $(CFLAGS) -c
@@ -18,7 +19,7 @@ PCAP_PATH := pcap
 TARGET_NAME := tsdn
 TARGET := $(BIN_PATH)/$(TARGET_NAME)
 TARGET_DEBUG := $(DBG_PATH)/$(TARGET_NAME)
-TARGET_TEST := $(TEST_PATH)/test
+TARGET_TEST := $(BIN_PATH)/test
 
 # src files & obj files
 HEADERS := $(wildcard $(SRC_PATH)/*.h)
@@ -76,7 +77,17 @@ clean:
 	@rm -f $(DBG_PATH)/*
 	@rm -f $(PCAP_PATH)/*
 
+
+.PHONY: p4clean
+p4clean:
+	@sudo rm -rf p4/build/*
+	@sudo rm -rf p4/log/*
+
 .PHONY: distclean
 distclean:
 	@echo CLEAN $(DISTCLEAN_LIST)
 	@rm -f $(DISTCLEAN_LIST)
+
+.PHONY: echo
+echo:
+	@echo $(PYFLAGS)
