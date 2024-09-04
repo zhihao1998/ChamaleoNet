@@ -7,6 +7,6 @@
 *.pcap
 /pcap
 /trace
-/p4_src/build
-/p4_src/log
+/p4/build
+/p4/log
 */__pycache__

@@ -10,6 +10,7 @@
         "type_traits": "c",
         "python.h": "c",
         "stdlib.h": "c",
-        "ip.h": "c"
+        "ip.h": "c",
+        "ioctl.h": "c"
     }
 }

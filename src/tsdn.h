@@ -20,6 +20,7 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 #include <linux/if_packet.h>
+#include <Python.h>
 
 #include "struct.h"
 #include "param.h"
@@ -29,9 +30,11 @@
 #define ETHER_HDRLEN 14
 #endif
 
+#define ETH_P_ 
+
 /* Interfaces to capture and send packets */
-#define RECV_INTF "virbr0"
-#define SEND_INTF "virbr1"
+#define RECV_INTF "veth251"
+#define SEND_INTF "veth251"
 
 #define C2S 1
 #define S2C -1
@@ -189,9 +192,6 @@ void flow_hash_release(flow_hash_t*flow_hash_ptr);
 // Opaque circular buffer structure
 typedef struct circular_buf_t circular_buf_t;
 
-// Handle type, the way users interact with the API
-// typedef circular_buf_t* cbuf_handle_t;
-
 /// Pass in a storage buffer and size 
 /// Returns a circular buffer handle
 circular_buf_t* circular_buf_init(void ** buf_space, size_t size);
@@ -272,6 +272,16 @@ int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir);
 void FreePkt(ip_packet *ppkt_temp);
 void FreePktDesc(pkt_desc_t *pkt_desc_ptr);
 void FreeFlowHash(flow_hash_t *flow_hash_ptr);
+
+
+/* Tofino Interaction */
+
+int bfrt_tcp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port);
+int bfrt_udp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port);
+int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip);
+void bfrt_grpc_destroy();
+void bfrt_grpc_init();
+
 
 
 

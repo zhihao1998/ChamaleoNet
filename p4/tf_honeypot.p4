@@ -9,6 +9,7 @@
 
 /*Type Defination*/
 const bit<16> ETHERTYPE_IPV4 = 0x0800;
+const bit<16> ETHERTYPE_HONEYPOT = 0x0801;
 
 const bit<8> IP_PROTO_ICMP = 1;
 const bit<8> IP_PROTO_TCP = 6;
@@ -29,7 +30,7 @@ const PortId_t CPU_PORT = 64;
 const PortId_t COLLECTOR_PORT = 1; /*veth2, 3*/
 
 /*Table Sizing=*/
-const int DEFAULT_TABLE_SIZE = 512;
+const int DEFAULT_TABLE_SIZE = 10000;
 
 /*************************************************************************
  ***********************  H E A D E R S  *********************************
@@ -135,10 +136,12 @@ parser IngressParser(packet_in        pkt,
     state parse_ethernet {
         pkt.extract(hdr.ethernet);
         transition select(hdr.ethernet.ether_type) {
-            ETHERTYPE_IPV4:  parse_ipv4;
-            default:         accept;
+            ETHERTYPE_IPV4:     parse_ipv4;
+            ETHERTYPE_HONEYPOT: accept;
+            default:            accept;
         }
     }
+
     state parse_ipv4 {
         pkt.extract(hdr.ipv4);
         transition select(hdr.ipv4.protocol) {
@@ -191,7 +194,6 @@ control Ingress(
         key = {
             hdr.ipv4.src_addr              : ternary;
             hdr.ipv4.dst_addr              : ternary;
-            hdr.ipv4.protocol              : exact;
         }
         
         actions = {
@@ -207,7 +209,6 @@ control Ingress(
         key = {
             hdr.ipv4.src_addr              : ternary;
             hdr.ipv4.dst_addr              : ternary;
-            hdr.ipv4.protocol              : exact;
             hdr.tcp.src_port               : exact;
             hdr.tcp.dst_port               : exact;
         }
@@ -225,7 +226,6 @@ control Ingress(
         key = {
             hdr.ipv4.src_addr              : ternary;
             hdr.ipv4.dst_addr              : ternary;
-            hdr.ipv4.protocol              : exact;
             hdr.udp.src_port               : exact;
             hdr.udp.dst_port               : exact;
         }
@@ -240,8 +240,10 @@ control Ingress(
     }
     
     apply {
-        if (ig_intr_md.ingress_port == CPU_PORT) {
-            set_egress_port();
+        if (ig_intr_md.ingress_port == CPU_PORT && hdr.ethernet.ether_type == ETHERTYPE_HONEYPOT) {
+            set_egress_port(COLLECTOR_PORT);
+            /* Resotre the original IP type */
+            hdr.ethernet.ether_type = ETHERTYPE_IPV4;
         }
         else{
             if (hdr.ipv4.isValid()) {

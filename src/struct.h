@@ -30,6 +30,8 @@ typedef struct ipaddr
 typedef struct icmphdr icmphdr;
 typedef struct tcphdr tcphdr;
 typedef struct udphdr udphdr;
+typedef struct in_addr in_addr;
+
 
 typedef struct
 {
@@ -52,7 +54,7 @@ typedef struct ip_packet
 
   /* raw packet (from Ether) information */
   int pkt_len;
-  u_char raw_pkt[MAX_PKT_LENGTH]; /* start of the tcp payload */
+  u_char raw_pkt[MAX_PKT_LENGTH]; /* start of the whole raw packet */
 
   /* location in the pkt_arr array */
   int loc_pkt_arr;

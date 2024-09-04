@@ -187,6 +187,7 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
 
 void LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
+    assert(flow_hash_ptr != NULL);
     /* Mark the lazy pending flag */
     flow_hash_ptr->lazy_pending = TRUE;
 
@@ -194,6 +195,9 @@ void LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
     timeval current_time;
     gettimeofday(&current_time, NULL);
     flow_hash_ptr->resp_time = current_time;
+    flow_hash_ptr->pkt_desc_ptr->pkt_ptr = NULL;
+    flow_hash_ptr->pkt_desc_ptr = NULL;
+    flow_hash_ptr->pkt_desc_ptr_ptr = NULL;
 
     /* Put the flow hash pointer into the lazy freeing circular buffer */
     flow_hash_t **temp_flow_hash_pp;
@@ -225,6 +229,36 @@ int which_circular_buf(struct ip *pip)
         return 2;
     }
     }
+}
+
+int install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol)
+{
+    int ret = 0;
+    char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
+
+    inet_ntop(AF_INET, &(src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &(dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
+
+    switch (protocol)
+    {
+    case IPPROTO_TCP:
+    {
+        ret = bfrt_tcp_flow_add_with_drop(src_ip, dst_ip, src_port, dst_port);
+        break;
+    }
+    case IPPROTO_UDP:
+    {
+        ret = bfrt_udp_flow_add_with_drop(src_ip, dst_ip, src_port, dst_port);
+        break;
+    }
+    case IPPROTO_ICMP:
+    {
+        ret = bfrt_icmp_flow_add_with_drop(src_ip, dst_ip);
+        break;
+    }
+    }
+
+    return ret;
 }
 
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
@@ -289,6 +323,18 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             }
             ip_packet *pkt_ptr = flow_hash_ptr->pkt_desc_ptr->pkt_ptr;
             pkt_desc_t *pkt_desc_ptr = flow_hash_ptr->pkt_desc_ptr;
+
+            /* Install Flow Entry */
+            if (install_drop_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
+                                    flow_hash_ptr->addr_pair.b_address.un.ip4,
+                                    flow_hash_ptr->addr_pair.a_port,
+                                    flow_hash_ptr->addr_pair.b_port,
+                                    flow_hash_ptr->addr_pair.protocol))
+            {
+                fprintf(fp_stderr, "Error: Failed to install flow entry\n");
+                return -1;
+            }
+
             LazyFreeFlowHash(flow_hash_ptr);
 
             /* TODO: should we lock this? */
@@ -378,42 +424,43 @@ void trace_init(void)
 
     /* Initialize the params for sendpkt */
     /* Get interface name */
-	strcpy(ifName, SEND_INTF);
+    strcpy(ifName, SEND_INTF);
 
-	/* Open RAW socket to send on */
-	if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1) {
-	    perror("socket");
-	}
+    /* Open RAW socket to send on */
+    if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1)
+    {
+        perror("socket");
+    }
 
-	/* Get the index of the interface to send on */
-	memset(&if_idx, 0, sizeof(struct ifreq));
-	strncpy(if_idx.ifr_name, ifName, IFNAMSIZ-1);
-	if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
-	    perror("SIOCGIFINDEX");
-    
-	/* Get the MAC address of the interface to send on */
-	// memset(&if_mac, 0, sizeof(struct ifreq));
-	// strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
-	// if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
-	//     perror("SIOCGIFHWADDR");
+    /* Get the index of the interface to send on */
+    memset(&if_idx, 0, sizeof(struct ifreq));
+    strncpy(if_idx.ifr_name, ifName, IFNAMSIZ - 1);
+    if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
+        perror("SIOCGIFINDEX");
 
-	/* Construct the Ethernet header, here we use raw packet */
-	// memset(sendbuf, 0, BUF_SIZ);
-	/* Ethernet header */
-	// eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
-	// /* Ethertype field */
-	// eh->ether_type = htons(ETH_P_IP);
-	// tx_len += sizeof(struct ether_header);
+    /* Get the MAC address of the interface to send on */
+    // memset(&if_mac, 0, sizeof(struct ifreq));
+    // strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
+    // if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
+    //     perror("SIOCGIFHWADDR");
 
-	// /* Fill packet data */
-	// sendbuf[tx_len++] = 0xde;
+    /* Construct the Ethernet header, here we use raw packet */
+    // memset(sendbuf, 0, BUF_SIZ);
+    /* Ethernet header */
+    // eh->ether_shost[0] = ((uint8_t *)&if_mac.ifr_hwaddr.sa_data)[0];
+    // /* Ethertype field */
+    // eh->ether_type = htons(ETH_P_IP);
+    // tx_len += sizeof(struct ether_header);
 
-	/* Index of the network device */
-	socket_address.sll_ifindex = if_idx.ifr_ifindex;
-	/* Address length*/
-	socket_address.sll_halen = ETH_ALEN;
-	/* Destination MAC */
-	// socket_address.sll_addr[0] = MY_DEST_MAC0;
+    // /* Fill packet data */
+    // sendbuf[tx_len++] = 0xde;
+
+    /* Index of the network device */
+    socket_address.sll_ifindex = if_idx.ifr_ifindex;
+    /* Address length*/
+    socket_address.sll_halen = ETH_ALEN;
+    /* Destination MAC */
+    // socket_address.sll_addr[0] = MY_DEST_MAC0;
 }
 
 /* Helper functions */

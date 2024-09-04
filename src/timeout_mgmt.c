@@ -24,6 +24,7 @@ void *timeout_mgmt(void *args)
     timeval current_time, pkt_time;
     int sleep_time_us, time_diff;
     int res;
+    ushort ip_protocol;
 
     while (1)
     {
@@ -48,6 +49,7 @@ void *timeout_mgmt(void *args)
             }
             else
             {
+                ip_protocol = pkt_desc_ptr->pkt_ptr->addr_pair.protocol;
                 /* Sleeping time calculation */
                 pkt_time = pkt_desc_ptr->recv_time;
                 gettimeofday(&current_time, NULL);
@@ -68,7 +70,7 @@ void *timeout_mgmt(void *args)
                 {
                     if (debug > 1)
                     {
-                        fprintf(fp_stderr, "TIMEOUT_MGMT: A packet is delayed too long for %dus!!!\n", time_diff);
+                        fprintf(fp_stderr, "TIMEOUT_MGMT: A type%d packet is delayed too long for %dus!!!\n", ip_protocol, time_diff - thread_timeout);
                     }
                 }
 
@@ -77,7 +79,6 @@ void *timeout_mgmt(void *args)
                 if ((pkt_desc_ptr == NULL) || (pkt_desc_ptr->pkt_ptr == NULL))
                 {
                     fprintf(fp_stdout, "TIMEOUT_MGMT: After sleeping skipped a packet descriptor which has already been freed.\n");
-                    FreeFlowHash(flow_hash_ptr);
                     continue;
                 }
 

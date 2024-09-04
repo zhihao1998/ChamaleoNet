@@ -251,6 +251,7 @@ int main(int argc, char *argv[])
 	InitGlobalArrays();
 	/* initialize internals */
 	trace_init();
+	bfrt_grpc_init();
 
 	/* The relative path here is valid only when the tsdn is executed at the project root directory. */
 	LoadInternalNets("conf/net.internal");
@@ -438,6 +439,8 @@ int main(int argc, char *argv[])
 	pthread_cancel(timeout_level_2_thread);
 	pthread_cancel(timeout_level_3_thread);
 	pthread_cancel(lazy_free_flow_hash_thread);
+
+	bfrt_grpc_destroy();
 	return 0;
 }
 
