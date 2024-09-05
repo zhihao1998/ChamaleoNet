@@ -272,6 +272,7 @@ int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir);
 void FreePkt(ip_packet *ppkt_temp);
 void FreePktDesc(pkt_desc_t *pkt_desc_ptr);
 void FreeFlowHash(flow_hash_t *flow_hash_ptr);
+int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr);
 
 
 /* Tofino Interaction */
@@ -281,6 +282,8 @@ int bfrt_udp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port
 int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip);
 void bfrt_grpc_destroy();
 void bfrt_grpc_init();
+void* install_drop_entry(void *args);
+int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
 
 
 

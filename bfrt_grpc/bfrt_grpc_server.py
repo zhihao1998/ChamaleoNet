@@ -25,46 +25,82 @@ class Bfrt_GRPC_Server:
 
     def tcp_flow_add_with_drop(self, src_ip, dst_ip, src_port, dst_port):
         match_key = (src_ip, dst_ip, src_port, dst_port, 'tcp')
-        if match_key in self.installed_flow_key:
+        match_key_reverse = (dst_ip, src_ip, dst_port, src_port, 'tcp')
+        if match_key in self.installed_flow_key or match_key_reverse in self.installed_flow_key:
             return 0
         else:
-            print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
-            self.installed_flow_key.add(match_key)
-            self.bfrt.entry_add(table_name='pipe.Ingress.tcp_flow', 
-                                keys=[('hdr.ipv4.src_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
-                                    ('hdr.ipv4.dst_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
-                                    ('hdr.tcp.src_port', src_port), 
-                                    ('hdr.tcp.dst_port', dst_port)],
-                                data=[],
-                                action_name='Ingress.drop')
+            try:
+                print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
+                self.installed_flow_key.add(match_key)
+                self.bfrt.entry_add(table_name='pipe.Ingress.tcp_flow', 
+                                    keys=[('hdr.ipv4.src_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.ipv4.dst_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.tcp.src_port', src_port), 
+                                        ('hdr.tcp.dst_port', dst_port)],
+                                    data=[],
+                                    action_name='Ingress.drop')
+                self.installed_flow_key.add(match_key_reverse)
+                self.bfrt.entry_add(table_name='pipe.Ingress.tcp_flow', 
+                                    keys=[('hdr.ipv4.src_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.ipv4.dst_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.tcp.src_port', dst_port), 
+                                        ('hdr.tcp.dst_port', src_port)],
+                                    data=[],
+                                    action_name='Ingress.drop')     
+            except Exception as e:
+                print(e)                                                      
             return 0
     
     def udp_flow_add_with_drop(self, src_ip, dst_ip, src_port, dst_port):
         match_key = (src_ip, dst_ip, src_port, dst_port, 'udp')
-        if match_key in self.installed_flow_key:
+        match_key_reverse = (dst_ip, src_ip, dst_port, src_port, 'udp')
+        if match_key in self.installed_flow_key or match_key_reverse in self.installed_flow_key:
             return 0
         else:
-            print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
-            self.bfrt.entry_add(table_name='pipe.Ingress.udp_flow', 
-                                keys=[('hdr.ipv4.src_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
-                                    ('hdr.ipv4.dst_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
-                                    ('hdr.udp.src_port', src_port), 
-                                    ('hdr.udp.dst_port', dst_port)],
-                                data=[],
-                                action_name='Ingress.drop')
+            try:
+                print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
+                self.installed_flow_key.add(match_key)
+                self.bfrt.entry_add(table_name='pipe.Ingress.udp_flow', 
+                                    keys=[('hdr.ipv4.src_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.ipv4.dst_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.udp.src_port', dst_port), 
+                                        ('hdr.udp.dst_port', src_port)],
+                                    data=[],
+                                    action_name='Ingress.drop')
+                self.installed_flow_key.add(match_key_reverse)
+                self.bfrt.entry_add(table_name='pipe.Ingress.udp_flow', 
+                                    keys=[('hdr.ipv4.src_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.ipv4.dst_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.udp.src_port', dst_port), 
+                                        ('hdr.udp.dst_port', src_port)],
+                                    data=[],
+                                    action_name='Ingress.drop')
+            except Exception as e:
+                print(e)
             return 0
     
     def icmp_flow_add_with_drop(self, src_ip, dst_ip):
         match_key = (src_ip, dst_ip, 'icmp')
-        if match_key in self.installed_flow_key:
+        match_key_reverse = (dst_ip, src_ip, 'icmp')
+        if match_key in self.installed_flow_key or match_key_reverse in self.installed_flow_key:
             return 0
         else:
-            print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
-            self.bfrt.entry_add(table_name='pipe.Ingress.icmp_flow', 
-                                keys=[('hdr.ipv4.src_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
-                                    ('hdr.ipv4.dst_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255'))],
-                                data=[],
-                                action_name='Ingress.drop')
+            try:
+                print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
+                self.installed_flow_key.add(match_key)
+                self.bfrt.entry_add(table_name='pipe.Ingress.icmp_flow', 
+                                    keys=[('hdr.ipv4.src_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.ipv4.dst_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255'))],
+                                    data=[],
+                                    action_name='Ingress.drop')
+                self.installed_flow_key.add(match_key_reverse)
+                self.bfrt.entry_add(table_name='pipe.Ingress.icmp_flow', 
+                                    keys=[('hdr.ipv4.src_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.ipv4.dst_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255'))],
+                                    data=[],
+                                    action_name='Ingress.drop')
+            except Exception as e:
+                print(e)
             return 0
 
     def clear_tables(self):
@@ -77,9 +113,9 @@ class Bfrt_GRPC_Server:
 if __name__ == "__main__":
     controller = Bfrt_GRPC_Server()
     # controller.tcp_flow_add_with_drop('10.0.0.1', '10.0.0.2', 10, 20)
-    # controller.udp_flow_add_with_drop('10.0.0.3', '10.0.0.4', 30, 40)
+    controller.udp_flow_add_with_drop('130.192.9.161', '8.8.8.8', 61434, 53)
     # controller.icmp_flow_add_with_drop('10.0.0.5', '10.0.0.6')
-    controller.dump_table('pipe.Ingress.tcp_flow')
-    controller.dump_table('pipe.Ingress.udp_flow')
-    controller.dump_table('pipe.Ingress.icmp_flow')
-    controller.clear_tables()
+    # controller.dump_table('pipe.Ingress.tcp_flow')
+    # controller.dump_table('pipe.Ingress.udp_flow')
+    # controller.dump_table('pipe.Ingress.icmp_flow')
+    # controller.clear_tables()

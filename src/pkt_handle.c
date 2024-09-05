@@ -12,8 +12,8 @@ ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
 
 Bool warn_MAX_ = TRUE;
 
-// pkt_desc_t **pkt_desc_buf;
-// circular_buf_t *circ_buf;
+/* mutex lock for hash table  */
+static pthread_mutex_t mutex_hash_table;
 
 static ip_packet *
 NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
@@ -86,7 +86,6 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
             return flow_hash_ptr;
         }
     }
-    /* Not found */
     return NULL;
 }
 
@@ -96,7 +95,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     pkt_desc_t *temp_pkt_desc_ptr;
     pkt_desc_t **temp_pkt_desc_pp;
     flow_hash_t *temp_flow_hash_ptr;
-    flow_hash_t **flow_hash_head_pp;
+    flow_hash_t *flow_hash_head_ptr;
     hash hval;
 
     /* Buffer packet */
@@ -124,22 +123,31 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
         fprintf(fp_stderr, "Error: Circular buffer is full\n");
         return NULL;
     }
-
     /* Create entry for hash table */
     hval = temp_pkt->addr_pair.hash % HASH_TABLE_SIZE;
-    flow_hash_head_pp = &flow_hash_table[hval];
+    flow_hash_head_ptr = flow_hash_table[hval];
 
     temp_flow_hash_ptr = flow_hash_alloc();
     temp_flow_hash_ptr->addr_pair = temp_pkt->addr_pair;
     temp_flow_hash_ptr->pkt_desc_ptr = temp_pkt_desc_ptr;
     temp_flow_hash_ptr->pkt_desc_ptr_ptr = temp_pkt_desc_pp;
-    temp_flow_hash_ptr->next = *flow_hash_head_pp;
-
+    temp_flow_hash_ptr->prev = NULL;
+    temp_flow_hash_ptr->next = flow_hash_head_ptr;
     temp_flow_hash_ptr->lazy_pending = FALSE;
-    *flow_hash_head_pp = temp_flow_hash_ptr;
 
+    if (flow_hash_head_ptr == NULL)
+    {
+        /* it is the first entry in the slot */
+        flow_hash_table[hval] = temp_flow_hash_ptr;
+    }
+    else
+    {
+        /* it is not the first entry in the slot */
+        flow_hash_head_ptr->prev = temp_flow_hash_ptr;
+    }
+
+    /* Store a pointer in packet descriptor */
     temp_pkt_desc_ptr->flow_hash_ptr = temp_flow_hash_ptr;
-
     return temp_flow_hash_ptr;
 }
 
@@ -156,38 +164,43 @@ void FreePktDesc(pkt_desc_t *pkt_desc_ptr)
 
 void FreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
-    int j = 0;
+    if (flow_hash_ptr == NULL)
+    {
+        return;
+    }
     hash hval;
-    flow_hash_t *flow_hash_head_ptr, *flow_hash_prev, *temp_flow_hash_ptr;
+    flow_hash_t *flow_hash_head_ptr;
 
     hval = flow_hash_ptr->addr_pair.hash % HASH_TABLE_SIZE;
     flow_hash_head_ptr = flow_hash_table[hval];
-    flow_hash_prev = flow_hash_head_ptr;
-    for (temp_flow_hash_ptr = flow_hash_head_ptr; temp_flow_hash_ptr; temp_flow_hash_ptr = temp_flow_hash_ptr->next)
+    if (flow_hash_ptr == flow_hash_table[hval])
     {
-        j++;
-        if (flow_hash_ptr->addr_pair.hash == temp_flow_hash_ptr->addr_pair.hash)
-        {
-            if (j == 1)
-            {
-                /* it is the top of the linked list */
-                flow_hash_table[hval] = temp_flow_hash_ptr->next;
-            }
-            else
-            {
-                /* it is in the middle of the linked list */
-                flow_hash_prev->next = temp_flow_hash_ptr->next;
-            }
-            flow_hash_release(flow_hash_ptr);
-            break;
-        }
+        /* it is the top of the linked list */
+        flow_hash_table[hval] = flow_hash_ptr->next;
+        flow_hash_release(flow_hash_ptr);
     }
-    flow_hash_prev = temp_flow_hash_ptr;
+    else
+    {
+        /* it is the middle of the linked list */
+        flow_hash_ptr->prev->next = flow_hash_ptr->next;
+        flow_hash_ptr->next->prev = flow_hash_ptr->prev;
+        flow_hash_release(flow_hash_ptr);
+    }
 }
 
-void LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
+int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
     assert(flow_hash_ptr != NULL);
+    /* Avoid Double Free */
+    if (flow_hash_ptr->pkt_desc_ptr == NULL)
+    {
+        return -1;
+    }
+    else if (flow_hash_ptr->pkt_desc_ptr->pkt_ptr == NULL)
+    {
+        return -1;
+    }
+
     /* Mark the lazy pending flag */
     flow_hash_ptr->lazy_pending = TRUE;
 
@@ -205,7 +218,7 @@ void LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
     if (temp_flow_hash_pp == NULL)
     {
         fprintf(fp_stderr, "Error: Lazy freeing circular buffer is full\n");
-        return;
+        return -1;
     }
 
     /* Activate the lazy freeing thread */
@@ -231,36 +244,6 @@ int which_circular_buf(struct ip *pip)
     }
 }
 
-int install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol)
-{
-    int ret = 0;
-    char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
-
-    inet_ntop(AF_INET, &(src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
-    inet_ntop(AF_INET, &(dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
-
-    switch (protocol)
-    {
-    case IPPROTO_TCP:
-    {
-        ret = bfrt_tcp_flow_add_with_drop(src_ip, dst_ip, src_port, dst_port);
-        break;
-    }
-    case IPPROTO_UDP:
-    {
-        ret = bfrt_udp_flow_add_with_drop(src_ip, dst_ip, src_port, dst_port);
-        break;
-    }
-    case IPPROTO_ICMP:
-    {
-        ret = bfrt_icmp_flow_add_with_drop(src_ip, dst_ip);
-        break;
-    }
-    }
-
-    return ret;
-}
-
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
 {
     flow_hash_t *flow_hash_ptr;
@@ -279,20 +262,12 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
 
     /* do not rely on the header, instead check if it's already in the hash table */
     flow_hash_ptr = FindFlowHash(pip, ptcp, plast, &dir);
+
     /* Found the flow, then check the direction of this packet */
     if (flow_hash_ptr != NULL)
     {
         if (flow_hash_ptr->lazy_pending == TRUE)
         {
-            /* The flow is in lazy freeing process, ignore this packet */
-            // inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-            // inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-            // fprintf(fp_stdout, "pkt_handle: from %s:%d to %s:%d, lazy pending %d\n",
-            //         ip_src_addr_print_buffer,
-            //         flow_hash_ptr->addr_pair.a_port,
-            //         ip_dst_addr_print_buffer,
-            //         flow_hash_ptr->addr_pair.b_port,
-            //         flow_hash_ptr->lazy_pending);
             return 0;
         }
 
@@ -301,6 +276,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         /* Same direction of this packet, probably another request */
         if (dir == C2S)
         {
+            return 0;
         }
         /* Reversed direction of this packet, probably a response */
         else if (dir == S2C)
@@ -325,11 +301,11 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             pkt_desc_t *pkt_desc_ptr = flow_hash_ptr->pkt_desc_ptr;
 
             /* Install Flow Entry */
-            if (install_drop_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
-                                    flow_hash_ptr->addr_pair.b_address.un.ip4,
-                                    flow_hash_ptr->addr_pair.a_port,
-                                    flow_hash_ptr->addr_pair.b_port,
-                                    flow_hash_ptr->addr_pair.protocol))
+            if (try_install_drop_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
+                                       flow_hash_ptr->addr_pair.b_address.un.ip4,
+                                       flow_hash_ptr->addr_pair.a_port,
+                                       flow_hash_ptr->addr_pair.b_port,
+                                       flow_hash_ptr->addr_pair.protocol))
             {
                 fprintf(fp_stderr, "Error: Failed to install flow entry\n");
                 return -1;
@@ -353,12 +329,12 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         flow_hash_ptr = CreateFlowHash(peth, pip, ptcp, plast, pckt_time, circ_buf_list[timeout_level]);
 
         /* Calculate the packet processing time */
-        // timeval current_time, pkt_time;
-        // int time_diff;
-        // pkt_time = flow_hash_ptr->pkt_desc_ptr->recv_time;
-        // gettimeofday(&current_time, NULL);
-        // time_diff = tv_sub_2(current_time, pkt_time);
-        // fprintf(fp_stdout, "PKT_RX: cur_time - pkt_time =  %dus!\n", time_diff);
+        timeval current_time, pkt_time;
+        int time_diff;
+        pkt_time = flow_hash_ptr->pkt_desc_ptr->recv_time;
+        gettimeofday(&current_time, NULL);
+        time_diff = tv_sub_2(current_time, pkt_time);
+        fprintf(fp_stdout, "PKT_RX: cur_time - pkt_time =  %dus!\n", time_diff);
 
         /* Weak up the timeout_mgmt thread */
         if (!circular_buf_empty(circ_buf_list[timeout_level]))
@@ -413,6 +389,9 @@ void trace_init(void)
 
     /* initialize the hash table */
     flow_hash_table = (flow_hash_t **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash_t *));
+
+    /* initialize the mutex for hash table */
+    pthread_mutex_init(&mutex_hash_table, NULL);
 
     /* initialize the circular buffer for lazy freeing */
     lazy_flow_hash_buf = (flow_hash_t **)MallocZ(MAX_TCP_PACKETS * sizeof(flow_hash_t *));

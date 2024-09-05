@@ -29,14 +29,11 @@ This project is developed with the following dependencies:
 
 
 ## TODO
-- handle the host that is alive but blocked by firewall
 - design and execute some benchmarks and stress tests to check the the codebase is solid and measure some performance indicators 
 - you can use some trace and replay it 
 - do a worst case scenario with sender doing a syn flooding attack
 - check malformed packets effects (e.g., using nmap -O option would aready create some funzy packets)
 - Do some analysis on the 1h trace we captured some time ago to check timers&dealy, this is used to define timeouts for instance, observe the new flow arrival rate, and the memory usage with a real use case
-
-- Lock the access of the tail element in circular buffer (not thread safe)
 
 ## Data Plane
 
@@ -54,6 +51,10 @@ cd p4/log
 tfm -p tf_honeypot
 
 p4 -p tf_honeypot
+
+sudo tcpdump -vvv -i veth2 -w pcap/test.pcap
+
+sudo tcpreplay -i veth4 --mbps 1 trace/old_trace.pcap
 
 ```
 

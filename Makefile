@@ -80,7 +80,6 @@ clean:
 
 .PHONY: p4clean
 p4clean:
-	@sudo rm -rf p4/build/*
 	@sudo rm -rf p4/log/*
 
 .PHONY: distclean
