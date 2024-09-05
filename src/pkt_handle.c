@@ -31,7 +31,7 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struc
     {
         steps++;
         /* look for the next one */
-        //         fprintf (fp_stdout, "%d %d\n", num_tcp_pairs, old_new_tcp_pairs);
+        //         fprintf (fp_log, "%d %d\n", num_tcp_pairs, old_new_tcp_pairs);
         num_ip_packets++;
         num_ip_packets = num_ip_packets % MAX_TCP_PACKETS;
     }
@@ -39,7 +39,7 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struc
     {
         if (warn_MAX_)
         {
-            fprintf(fp_stderr, "\n"
+            fprintf(fp_log, "\n"
                                "ooopsss: number of simultaneous connection opened is greater then the maximum supported number!\n"
                                "you have to rebuild the source with a larger LIST_SEARCH_DEPT defined!\n"
                                "or possibly with a larger MAX_TCP_PACKETS defined!\n");
@@ -104,7 +104,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     {
         if (debug > 0)
         {
-            fprintf(fp_stdout,
+            fprintf(fp_log,
                     "** out of memory when creating flows - considering a not_id_p\n");
         }
         not_id_p++;
@@ -120,7 +120,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     temp_pkt_desc_pp = (pkt_desc_t **)circular_buf_try_put(circ_buf, (void *)temp_pkt_desc_ptr);
     if (temp_pkt_desc_pp == NULL)
     {
-        fprintf(fp_stderr, "Error: Circular buffer is full\n");
+        fprintf(fp_log, "Error: Circular buffer is full\n");
         return NULL;
     }
     /* Create entry for hash table */
@@ -217,7 +217,7 @@ int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
     temp_flow_hash_pp = (flow_hash_t **)circular_buf_try_put(lazy_flow_hash_circ_buf, (void *)flow_hash_ptr);
     if (temp_flow_hash_pp == NULL)
     {
-        fprintf(fp_stderr, "Error: Lazy freeing circular buffer is full\n");
+        fprintf(fp_log, "Error: Lazy freeing circular buffer is full\n");
         return -1;
     }
 
@@ -252,9 +252,9 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     void *buf_slot;
 
     // struct ether_addr *eth_addr;
-    // fprintf(fp_stdout, "Ethernet Frame: %s",
+    // fprintf(fp_log, "Ethernet Frame: %s",
     //         ether_ntoa((struct ether_addr *)peth->ether_shost));
-    // fprintf(fp_stdout, "->%s\n",
+    // fprintf(fp_log, "->%s\n",
     //         ether_ntoa((struct ether_addr *)peth->ether_dhost));
 
     // use two string buffer for print the IP address transformed from inet_ntop
@@ -287,7 +287,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             {
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                fprintf(fp_stdout, "pkt_handle: S2C: from %s:%d to %s:%d with %d bytes of raw_packet %c%c.. at %ld\n",
+                fprintf(fp_log, "pkt_handle: S2C: from %s:%d to %s:%d with %d bytes of raw_packet %c%c.. at %ld\n",
                         ip_src_addr_print_buffer,
                         flow_hash_ptr->addr_pair.a_port,
                         ip_dst_addr_print_buffer,
@@ -307,7 +307,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                                        flow_hash_ptr->addr_pair.b_port,
                                        flow_hash_ptr->addr_pair.protocol))
             {
-                fprintf(fp_stderr, "Error: Failed to install flow entry\n");
+                fprintf(fp_log, "Error: Failed to install flow entry\n");
                 return -1;
             }
 
@@ -334,7 +334,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         pkt_time = flow_hash_ptr->pkt_desc_ptr->recv_time;
         gettimeofday(&current_time, NULL);
         time_diff = tv_sub_2(current_time, pkt_time);
-        fprintf(fp_stdout, "PKT_RX: cur_time - pkt_time =  %dus!\n", time_diff);
+        fprintf(fp_log, "PKT_RX: cur_time - pkt_time =  %dus!\n", time_diff);
 
         /* Weak up the timeout_mgmt thread */
         if (!circular_buf_empty(circ_buf_list[timeout_level]))
@@ -346,7 +346,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         {
             inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
             inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-            fprintf(fp_stdout, "PKT_RX: new request pkt stored: from %s:%d to %s:%d with %d bytes of raw_packet %s at %ld.%5ld\n",
+            fprintf(fp_log, "PKT_RX: new request pkt stored: from %s:%d to %s:%d with %d bytes of raw_packet %s at %ld.%5ld\n",
                     ip_src_addr_print_buffer,
                     ntohs(flow_hash_ptr->addr_pair.a_port),
                     ip_dst_addr_print_buffer,
@@ -449,10 +449,10 @@ void print_pkt_arr()
 
     for (p = 0; p < 20; p++)
     {
-        fprintf(fp_stdout, "[%2d]", p);
+        fprintf(fp_log, "[%2d]", p);
         if (pkt_arr[p] != NULL)
-            fprintf(fp_stdout, "->[ppkt] src_ip: %s src_port: %d \n", inet_ntoa(pkt_arr[p]->addr_pair.a_address.un.ip4), pkt_arr[p]->addr_pair.a_port);
+            fprintf(fp_log, "->[ppkt] src_ip: %s src_port: %d \n", inet_ntoa(pkt_arr[p]->addr_pair.a_address.un.ip4), pkt_arr[p]->addr_pair.a_port);
         else
-            fprintf(fp_stdout, "->[NULL]\n");
+            fprintf(fp_log, "->[NULL]\n");
     }
 }

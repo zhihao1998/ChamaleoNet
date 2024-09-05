@@ -16,7 +16,7 @@ int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_sh
 	temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
 	if (temp_table_entry_pp == NULL)
 	{
-		fprintf(fp_stderr, "Error: Circular buffer is full\n");
+		fprintf(fp_log, "Error: Circular buffer is full\n");
 		return -1;
 	}
 	return 0;

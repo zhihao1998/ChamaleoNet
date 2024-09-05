@@ -15,7 +15,7 @@
 #include <net/ethernet.h>
 #include <string.h>
 #include <assert.h>
-#include <pthread.h> 
+#include <pthread.h>
 #include <unistd.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
@@ -30,7 +30,7 @@
 #define ETHER_HDRLEN 14
 #endif
 
-#define ETH_P_ 
+#define ETH_P_
 
 /* Interfaces to capture and send packets */
 #define RECV_INTF "veth251"
@@ -52,7 +52,7 @@
 #define PIP_V6(pip) ((struct ipv6 *)(pip))
 #define PIP_V4(pip) ((struct ip *)(pip))
 #define PIP_EITHERFIELD(pip, fld4, fld6) \
-    (PIP_ISV4(pip) ? (PIP_V4(pip)->fld4) : (PIP_V6(pip)->fld6))
+  (PIP_ISV4(pip) ? (PIP_V4(pip)->fld4) : (PIP_V6(pip)->fld6))
 #define PIP_LEN(pip) (PIP_EITHERFIELD(pip, ip_len, ip6_lngth))
 
 /*
@@ -70,7 +70,6 @@ struct ipaddr *IPV6ADDR2ADDR(struct in6_addr *addr6);
 
 void IP_COPYADDR(ipaddr *toaddr, ipaddr fromaddr);
 int IP_SAMEADDR(ipaddr addr1, ipaddr addr2);
-
 
 /* TCP flags macros */
 #define SYN_SET(ptcp) ((ptcp)->th_flags & TH_SYN)
@@ -111,47 +110,47 @@ void InitGlobalArrays(void);
 
 /* Packet handle realated */
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time);
-struct tcphdr *gettcp (struct ip *pip, void **pplast);
-struct udphdr *getudp (struct ip *pip, void **pplast);
-struct icmphdr *geticmp (struct ip *pip, void **pplast);
+struct tcphdr *gettcp(struct ip *pip, void **pplast);
+struct udphdr *getudp(struct ip *pip, void **pplast);
+struct icmphdr *geticmp(struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
-void trace_init (void);
+void trace_init(void);
 void print_tpkt();
 
 /* Return Values for tcp_flow_stat() and udp_flow_stat() */
-#define FLOW_STAT_NULL  0
-#define FLOW_STAT_OK    1
-#define FLOW_STAT_DUP   2
-#define FLOW_STAT_NONE  3
+#define FLOW_STAT_NULL 0
+#define FLOW_STAT_OK 1
+#define FLOW_STAT_DUP 2
+#define FLOW_STAT_NONE 3
 #define FLOW_STAT_SHORT 4
 
 extern Bool warn_printtrunc;
 
 extern u_long pnum;
 
-int getpayloadlength (struct ip *pip, void *plast);
+int getpayloadlength(struct ip *pip, void *plast);
 
 /*
  * timeval compare macros
  */
-#define tv_ge(lhs,rhs) (tv_cmp((lhs),(rhs)) >= 0)
-#define tv_gt(lhs,rhs) (tv_cmp((lhs),(rhs)) >  0)
-#define tv_le(lhs,rhs) (tv_cmp((lhs),(rhs)) <= 0)
-#define tv_lt(lhs,rhs) (tv_cmp((lhs),(rhs)) <  0)
-#define tv_eq(lhs,rhs) (tv_cmp((lhs),(rhs)) == 0)
+#define tv_ge(lhs, rhs) (tv_cmp((lhs), (rhs)) >= 0)
+#define tv_gt(lhs, rhs) (tv_cmp((lhs), (rhs)) > 0)
+#define tv_le(lhs, rhs) (tv_cmp((lhs), (rhs)) <= 0)
+#define tv_lt(lhs, rhs) (tv_cmp((lhs), (rhs)) < 0)
+#define tv_eq(lhs, rhs) (tv_cmp((lhs), (rhs)) == 0)
 
-double elapsed (timeval, timeval);
-int tv_cmp (struct timeval lhs, struct timeval rhs);
+double elapsed(timeval, timeval);
+int tv_cmp(struct timeval lhs, struct timeval rhs);
 
-void tv_sub (struct timeval *plhs, struct timeval rhs);
+void tv_sub(struct timeval *plhs, struct timeval rhs);
 int tv_sub_2(struct timeval lhs, struct timeval rhs);
-void tv_add (struct timeval *plhs, struct timeval rhs);
-Bool tv_same (struct timeval lhs, struct timeval rhs);
+void tv_add(struct timeval *plhs, struct timeval rhs);
+Bool tv_same(struct timeval lhs, struct timeval rhs);
 
 /* handy constants */
-#define US_PER_SEC 1000000	/* microseconds per second */
-#define MS_PER_SEC 1000		/* milliseconds per second */
-#define US_PER_MS  1000     /* microseconds per millisecond */
+#define US_PER_SEC 1000000 /* microseconds per second */
+#define MS_PER_SEC 1000    /* milliseconds per second */
+#define US_PER_MS 1000     /* microseconds per millisecond */
 
 Bool internal_ip(struct in_addr adx);
 
@@ -164,13 +163,13 @@ struct pkt_list_elem
   ip_packet *ppkt;
 };
 
-struct pkt_list_elem *pktlist_alloc (void);
-void pktlist_release (struct pkt_list_elem *rel_pktlist);
+struct pkt_list_elem *pktlist_alloc(void);
+void pktlist_release(struct pkt_list_elem *rel_pktlist);
 
-ip_packet *pkt_alloc (void);
-void pkt_release (ip_packet * relesased_ip_packet);
+ip_packet *pkt_alloc(void);
+void pkt_release(ip_packet *relesased_ip_packet);
 
-void *MMmalloc (size_t size, const char *f_name);
+void *MMmalloc(size_t size, const char *f_name);
 
 /* Pkt descriptor */
 struct pkt_desc_list_elem
@@ -184,24 +183,24 @@ pkt_desc_t *pkt_desc_alloc();
 void pkt_desc_release(pkt_desc_t *rel_pkt_desc);
 
 /* Flow hash table */
-flow_hash_t*flow_hash_alloc();
-void flow_hash_release(flow_hash_t*flow_hash_ptr);
+flow_hash_t *flow_hash_alloc();
+void flow_hash_release(flow_hash_t *flow_hash_ptr);
 
 /* Circular Buffer Related */
 
 // Opaque circular buffer structure
 typedef struct circular_buf_t circular_buf_t;
 
-/// Pass in a storage buffer and size 
+/// Pass in a storage buffer and size
 /// Returns a circular buffer handle
-circular_buf_t* circular_buf_init(void ** buf_space, size_t size);
+circular_buf_t *circular_buf_init(void **buf_space, size_t size);
 
 /// Free a circular buffer structure.
 /// Does not free data buffer; owner is responsible for that
-void circular_buf_free(circular_buf_t* me);
+void circular_buf_free(circular_buf_t *me);
 
 /// Reset the circular buffer to empty, head == tail
-void circular_buf_reset(circular_buf_t* me);
+void circular_buf_reset(circular_buf_t *me);
 
 /// Put version 1 continues to add data
 void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr);
@@ -211,20 +210,18 @@ void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr);
 int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr);
 
 /// Returns true if the buffer is empty
-Bool circular_buf_empty(circular_buf_t* me);
+Bool circular_buf_empty(circular_buf_t *me);
 
 /// Returns true if the buffer is full
-Bool circular_buf_full(circular_buf_t* me);
+Bool circular_buf_full(circular_buf_t *me);
 
 /// Returns the maximum capacity of the buffer
-size_t circular_buf_capacity(circular_buf_t* me);
+size_t circular_buf_capacity(circular_buf_t *me);
 
 /// Returns the current number of elements in the buffer
-size_t circular_buf_size(circular_buf_t* me);
+size_t circular_buf_size(circular_buf_t *me);
 
 int circular_buf_peek_head(circular_buf_t *me, void **buf_slot_ptr_ptr);
-
-
 
 int LoadInternalNets(char *file);
 
@@ -247,7 +244,7 @@ circular_buf_t *circ_buf_list[TIMEOUT_LEVEL_NUM];
 pthread_mutex_t circ_buf_head_mutex_list[TIMEOUT_LEVEL_NUM];
 
 /* connection records are stored in a hash table.  */
-flow_hash_t**flow_hash_table;
+flow_hash_t **flow_hash_table;
 
 flow_hash_t **lazy_flow_hash_buf;
 circular_buf_t *lazy_flow_hash_circ_buf;
@@ -257,14 +254,14 @@ pthread_cond_t lazy_flow_hash_cond;
 /*
  * File Operations
  */
-char * readline(FILE *fp, int skip_comment, int skip_void_lines);
+char *readline(FILE *fp, int skip_comment, int skip_void_lines);
 #define BUF_SIZE 80
 
 /*
  * Output
  */
-#define ANSI_BOLD    "\x1b[1m"
-#define ANSI_RESET   "\x1b[0m"
+#define ANSI_BOLD "\x1b[1m"
+#define ANSI_RESET "\x1b[0m"
 
 void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr);
 int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2);
@@ -274,7 +271,6 @@ void FreePktDesc(pkt_desc_t *pkt_desc_ptr);
 void FreeFlowHash(flow_hash_t *flow_hash_ptr);
 int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr);
 
-
 /* Tofino Interaction */
 
 int bfrt_tcp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port);
@@ -282,12 +278,7 @@ int bfrt_udp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port
 int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip);
 void bfrt_grpc_destroy();
 void bfrt_grpc_init();
-void* install_drop_entry(void *args);
+void *install_drop_entry(void *args);
 int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
 
-
-
-
-
-
-
+FILE *fp_log;

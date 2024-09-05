@@ -5,7 +5,7 @@ void *lazy_free_flow_hash(void *args)
 {
     while (circular_buf_empty(lazy_flow_hash_circ_buf))
     {
-        fprintf(fp_stdout, "LAZY_FREE_FLOW_HASH: Circular Buffer empty, thread blocked!\n");
+        fprintf(fp_log, "LAZY_FREE_FLOW_HASH: Circular Buffer empty, thread blocked!\n");
         pthread_cond_wait(&lazy_flow_hash_cond, &lazy_flow_hash_mutex);
     }
     flow_hash_t *flow_hash_ptr;
@@ -15,10 +15,10 @@ void *lazy_free_flow_hash(void *args)
 
     while (1)
     {
-        // fprintf(fp_stderr, "LAZY_FREE_FLOW_HASH: size: %ld!\n", circular_buf_size(lazy_flow_hash_circ_buf));
+        // fprintf(fp_log, "LAZY_FREE_FLOW_HASH: size: %ld!\n", circular_buf_size(lazy_flow_hash_circ_buf));
         if (circular_buf_size(lazy_flow_hash_circ_buf) == 0)
         {
-            fprintf(fp_stdout, "LAZY_FREE_FLOW_HASH: Circular Buffer empty, thread blocked!\n");
+            fprintf(fp_log, "LAZY_FREE_FLOW_HASH: Circular Buffer empty, thread blocked!\n");
             pthread_cond_wait(&lazy_flow_hash_cond, &lazy_flow_hash_mutex);
         }
 
@@ -47,7 +47,7 @@ void *lazy_free_flow_hash(void *args)
             {
                 if (debug > 1)
                 {
-                    fprintf(fp_stderr, "LAZY_FREE_FLOW_HASH: Packet delayed more than Timeout. Should try to not let this happen!\n");
+                    fprintf(fp_log, "LAZY_FREE_FLOW_HASH: Packet delayed more than Timeout. Should try to not let this happen!\n");
                 }
             }
 
@@ -57,7 +57,7 @@ void *lazy_free_flow_hash(void *args)
                 char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
                 inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                fprintf(fp_stderr, "LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: %p, src: %s, dst: %s\n", flow_hash_ptr, ip_src_addr_print_buffer, ip_dst_addr_print_buffer);
+                fprintf(fp_log, "LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: %p, src: %s, dst: %s\n", flow_hash_ptr, ip_src_addr_print_buffer, ip_dst_addr_print_buffer);
             }
             FreeFlowHash(flow_hash_ptr);
         }

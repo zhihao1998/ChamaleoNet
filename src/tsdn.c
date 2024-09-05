@@ -279,6 +279,7 @@ int main(int argc, char *argv[])
 	int tlen;
 	void *plast;
 	long int location = 0;
+	fp_log = fopen("log/log.txt","w");
 
 	// /* Define the device */
 	// if (pcap_findalldevs(&all_devs, errbuf) == -1)
@@ -449,6 +450,7 @@ int main(int argc, char *argv[])
 	pthread_cancel(entry_install_thread);
 
 	bfrt_grpc_destroy();
+	fclose(fp_log);
 	return 0;
 }
 
