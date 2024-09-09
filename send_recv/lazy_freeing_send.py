@@ -5,7 +5,8 @@ from scapy.layers.l2 import Ether
 import time
 import random
 
-iface = "veth5"
+# iface = "veth5"
+iface = "veth251"
 
 for i in range(1,10):
     sendp(Ether()/IP(src="10.0.0."+str(i), dst="10.0.0.254")/TCP(sport=1,dport=2,flags="S")/str(i), iface=iface)

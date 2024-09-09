@@ -3,16 +3,13 @@
 Bool internal_src = TRUE;
 Bool internal_dst = TRUE;
 
-Bool warn_printtrunc = TRUE;
-
 /* option flags and default values */
 Bool live_flag = TRUE;
 
 /* Interaction with pcap */
-static struct ether_header eth_header;
 #define EH_SIZE sizeof(struct ether_header)
 
-static char *eth_buf; 
+static char *eth_buf;
 static char *ip_buf; /* [IP_MAXPACKET] */
 static void *callback_plast;
 
@@ -22,11 +19,44 @@ struct timeval current_time;
 
 int debug = 3;
 
-static u_long pcount = 0; // global packet counter
-static u_long fpnum = 0;  // per file packet counter
-static int file_count = 0;
+/* Statistic Counters */
+// Packet Counters
+u_long pkt_count = 0;
 
-u_long pnum = 0;
+u_long tot_tcp_pkt_count = 0;
+// u_long in_tcp_pkt_count = 0;
+// u_long out_tcp_pkt_count = 0;
+// u_long local_tcp_pkt_count = 0;
+
+u_long tot_udp_pkt_count = 0;
+// u_long in_udp_pkt_count = 0;
+// u_long out_udp_pkt_count = 0;
+// u_long local_udp_pkt_count = 0;
+
+u_long tot_icmp_pkt_count = 0;
+// u_long in_icmp_pkt_count = 0;
+// u_long out_icmp_pkt_count = 0;
+// u_long local_icmp_pkt_count = 0;
+
+// Data Structure Counters
+u_long flow_hash_count = 0;
+u_long pkt_desc_count = 0;
+u_long circ_buf_L1_count = 0;
+u_long circ_buf_L2_count = 0;
+u_long circ_buf_L3_count = 0;
+u_long lazy_flow_hash_count = 0;
+
+// Freelist Counters
+u_long tot_pkt_list_count = 0;
+u_long use_pkt_list_count = 0;
+u_long tot_flow_hash_list_count = 0;
+u_long use_flow_hash_list_count = 0;
+u_long use_pkt_desc_list_count = 0;
+u_long tot_pkt_desc_list_count = 0;
+
+// Functionality Counters
+u_long installed_entry_count = 0;
+u_long expired_pkt_count = 0;
 
 /* global pointer, the pcap info header */
 static pcap_t *pcap;
@@ -57,10 +87,6 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	pcap_current_hdr = *phdr;
 	pcap_current_buf = buf;
 
-	// if (debug > 2)
-	// 	fprintf(fp_stderr, "tcpdump: read a type %d IP frame\n", type);
-
-	/* kindof ugly, but about the only way to make them fit together :-( */
 	switch (type)
 	{
 	case 100:
@@ -68,10 +94,10 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 		/* this.  It looks just like ethernet to me */
 	case PCAP_DLT_EN10MB:
 		// offset = find_ip_eth(buf); /* Here we check if we are dealing with Straight Ethernet encapsulation or PPPoE */
-		offset = 14;
+		offset = ETHER_HDRLEN;
 		iplen -= offset;
 		// memcpy(&eth_header, buf, EH_SIZE); /* save ether header */
-		
+
 		eth_buf = buf;
 		/* now get rid of ethernet headers */
 		switch (offset)
@@ -98,7 +124,10 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 int pread_tcpdump(struct timeval *ptime,
 				  int *plen,
 				  int *ptlen,
-				  struct ether_header **pphys, int *pphystype, struct ip **ppip, void **pplast)
+				  struct ether_header **pphys,
+				  int *pphystype,
+				  struct ip **ppip,
+				  void **pplast)
 {
 	int ret;
 	while (1)
@@ -128,9 +157,8 @@ int pread_tcpdump(struct timeval *ptime,
 		}
 
 		/* fill in all of the return values */
-		// *pphys = &eth_header;	 /* everything assumed to be ethernet */
-		*pphys = (struct ether_header *)eth_buf;
-		*pphystype = PHYS_ETHER; /* everything assumed to be ethernet */
+		*pphys = (struct ether_header *)eth_buf; /* everything assumed to be ethernet */
+		*pphystype = PHYS_ETHER;				 /* everything assumed to be ethernet */
 		*ppip = (struct ip *)ip_buf;
 		*pplast = callback_plast; /* last byte in IP packet */
 
@@ -141,8 +169,7 @@ int pread_tcpdump(struct timeval *ptime,
 		*ptlen = pcap_current_hdr.caplen;
 
 		/* if it's not IP, then skip it */
-		if ((ntohs(eth_header.ether_type) != ETHERTYPE_IP) &&
-			(ntohs(eth_header.ether_type) != ETHERTYPE_IPV6))
+		if ((ntohs((*pphys)->ether_type) != ETHERTYPE_IP))
 		{
 			if (debug > 2)
 				fprintf(fp_stderr, "pread_tcpdump: not an IP packet\n");
@@ -161,34 +188,16 @@ static int ProcessPacket(struct timeval *pckt_time,
 						 int tlen,
 						 struct ether_header *peth,
 						 int phystype,
-						 u_long *fpnum,
-						 u_long *pcount,
-						 int file_count,
 						 long int location,
 						 int ip_direction)
 {
-	/* Header defintion */
-	struct icmphdr *picmp = NULL;
-
 	/* quick sanity check, better be an IPv4/v6 packet */
-	if (!PIP_ISV4(pip) && !PIP_ISV6(pip))
+	if (!PIP_ISV4(pip))
 	{
-		static Bool warned = FALSE;
-		if (!warned)
-		{
-			fprintf(fp_stderr, "Warning: saw at least one non-ip packet\n");
-			warned = TRUE;
-		}
 		if (debug > 1)
-#ifdef SUPPORT_IPV6
-			fprintf(fp_stderr,
-					"Skipping packet %lu, not an IPv4/v6 packet (version:%d)\n",
-					pnum, pip->ip_v);
-#else
 			fprintf(fp_stderr,
 					"Skipping packet %lu, not an IPv4 packet (version:%d)\n",
-					pnum, pip->ip_v);
-#endif
+					pkt_count, pip->ip_v);
 		return 0;
 	}
 
@@ -196,7 +205,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 	if (PIP_ISV4(pip) && (pip->ip_p == IPPROTO_IPIP || pip->ip_p == IPPROTO_IPV6))
 	{
 		pip = (struct ip *)((char *)pip + 4 * pip->ip_hl);
-		if (!PIP_ISV4(pip) && !PIP_ISV6(pip))
+		if (!PIP_ISV4(pip))
 		{
 			/* The same sanity check than above, but without warnings*/
 			return 0;
@@ -207,6 +216,10 @@ static int ProcessPacket(struct timeval *pckt_time,
 	// internal_ip(pip->ip_src);
 	// internal_ip(pip->ip_dst);
 
+	/* Count the packet */
+#ifdef DO_STATS
+	pkt_count++;
+#endif
 	/* Check the IP protocol ICMP/TCP/UDP */
 	switch (pip->ip_p)
 	{
@@ -215,6 +228,9 @@ static int ProcessPacket(struct timeval *pckt_time,
 		struct tcphdr *ptcp = NULL;
 		if ((ptcp = gettcp(pip, &plast)) != NULL)
 		{
+#ifdef DO_STATS
+			tot_tcp_pkt_count++;
+#endif
 			pkt_handle(peth, pip, ptcp, plast, pckt_time);
 		}
 		break;
@@ -224,15 +240,21 @@ static int ProcessPacket(struct timeval *pckt_time,
 		struct udphdr *pudp = NULL;
 		if ((pudp = getudp(pip, &plast)) != NULL)
 		{
+#ifdef DO_STATS
+			tot_udp_pkt_count++;
+#endif
 			pkt_handle(peth, pip, pudp, plast, pckt_time);
 		}
 		break;
 	}
 	case IPPROTO_ICMP:
-	{	
+	{
 		struct icmphdr *picmp = NULL;
 		if ((picmp = geticmp(pip, &plast)) != NULL)
 		{
+#ifdef DO_STATS
+			tot_icmp_pkt_count++;
+#endif
 			pkt_handle(peth, pip, picmp, plast, pckt_time);
 		}
 		break;
@@ -279,21 +301,8 @@ int main(int argc, char *argv[])
 	int tlen;
 	void *plast;
 	long int location = 0;
-	fp_log = fopen("log/log.txt","w");
-
-	// /* Define the device */
-	// if (pcap_findalldevs(&all_devs, errbuf) == -1)
-	// {
-	// 	fprintf(stderr, "error finding devices");
-	// 	return 1;
-	// }
-	// dev = all_devs->name;
-	// // or loop through all_devs to find the one you want
-	// if (all_devs == NULL)
-	// {
-	// 	printf("Error finding devices: %s\n", errbuf);
-	// 	return 1;
-	// }
+	fp_log = fopen("log/stats.log", "w");
+	log_add_fp(fp_log, LOG_TRACE);
 
 	printf("Capturing on the device: %s\n", RECV_INTF);
 
@@ -335,15 +344,18 @@ int main(int argc, char *argv[])
 		return (2);
 	}
 
-	memset(&eth_header, 0, EH_SIZE);
-	eth_header.ether_type = htons(ETHERTYPE_IP);
 	ip_buf = MallocZ(IP_MAXPACKET);
 
 	/* Use three threads to manage three levels of timeout */
 	/* timeout_level_1 thread */
 	pthread_t timeout_level_1_thread;
-	timeout_mgmt_args timeout_level_1_args = {TIMEOUT_LEVEL_1, circ_buf_list[0], &circ_buf_mutex_list[0], &circ_buf_cond_list[0], &circ_buf_head_mutex_list[0]};
-	if (pthread_create(&timeout_level_1_thread, NULL, timeout_mgmt, (void*)&timeout_level_1_args))
+	timeout_mgmt_args timeout_level_1_args = {TIMEOUT_LEVEL_1,
+											  circ_buf_list[0],
+											  &circ_buf_mutex_list[0],
+											  &circ_buf_cond_list[0],
+											  &circ_buf_head_mutex_list[0],
+											  &circ_buf_L1_count};
+	if (pthread_create(&timeout_level_1_thread, NULL, timeout_mgmt, (void *)&timeout_level_1_args))
 	{
 		fprintf(stderr, "Error creating timeout_level_1 thread\n");
 		return 1;
@@ -351,8 +363,13 @@ int main(int argc, char *argv[])
 
 	/* timeout_level_2 thread */
 	pthread_t timeout_level_2_thread;
-	timeout_mgmt_args timeout_level_2_args = {TIMEOUT_LEVEL_2, circ_buf_list[1], &circ_buf_mutex_list[1], &circ_buf_cond_list[1], &circ_buf_head_mutex_list[1]};
-	if (pthread_create(&timeout_level_2_thread, NULL, timeout_mgmt, (void*)&timeout_level_2_args))
+	timeout_mgmt_args timeout_level_2_args = {TIMEOUT_LEVEL_2,
+											  circ_buf_list[1],
+											  &circ_buf_mutex_list[1],
+											  &circ_buf_cond_list[1],
+											  &circ_buf_head_mutex_list[1],
+											  &circ_buf_L2_count};
+	if (pthread_create(&timeout_level_2_thread, NULL, timeout_mgmt, (void *)&timeout_level_2_args))
 	{
 		fprintf(stderr, "Error creating timeout_level_2 thread\n");
 		return 1;
@@ -360,8 +377,13 @@ int main(int argc, char *argv[])
 
 	/* timeout_level_3 thread */
 	pthread_t timeout_level_3_thread;
-	timeout_mgmt_args timeout_level_3_args = {TIMEOUT_LEVEL_3, circ_buf_list[2], &circ_buf_mutex_list[2], &circ_buf_cond_list[2], &circ_buf_head_mutex_list[2]};
-	if (pthread_create(&timeout_level_3_thread, NULL, timeout_mgmt, (void*)&timeout_level_3_args))
+	timeout_mgmt_args timeout_level_3_args = {TIMEOUT_LEVEL_3,
+											  circ_buf_list[2],
+											  &circ_buf_mutex_list[2],
+											  &circ_buf_cond_list[2],
+											  &circ_buf_head_mutex_list[2],
+											  &circ_buf_L3_count};
+	if (pthread_create(&timeout_level_3_thread, NULL, timeout_mgmt, (void *)&timeout_level_3_args))
 	{
 		fprintf(stderr, "Error creating timeout_level_3 thread\n");
 		return 1;
@@ -391,17 +413,33 @@ int main(int argc, char *argv[])
 	int i = 0;
 	do
 	{
-		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, &fpnum, &pcount,
-					  file_count, location, DEFAULT_NET);
+		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
 		i++;
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0) && i < 100);
 #else
 	do
 	{
-		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, &fpnum, &pcount,
-					  file_count, location, DEFAULT_NET);
+		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
+#ifdef DO_STATS
+		if (pkt_count % 10 == 0)
+		{
+			log_trace("pkt_count: %lu, tot_tcp_pkt_count: %lu, tot_udp_pkt_count : % lu, tot_icmp_pkt_count : % lu, flow_hash_count : % lu, pkt_desc_count : % lu, circ_buf_L1_count : % lu, circ_buf_L2_count : % lu, circ_buf_L3_count : % lu, lazy_flow_hash_count : % lu, tot_pkt_list_count : % lu, use_pkt_list_count : % lu, tot_flow_hash_list_count : % lu, use_flow_hash_list_count : % lu, use_pkt_desc_list_count : % lu, tot_pkt_desc_list_count : % lu, installed_entry_count : % lu, expired_pkt_count : % lu ",
+					  pkt_count,
+					  tot_tcp_pkt_count, tot_udp_pkt_count, tot_icmp_pkt_count,
+					  flow_hash_count, pkt_desc_count,
+					  circ_buf_L1_count, circ_buf_L2_count, circ_buf_L3_count,
+					  lazy_flow_hash_count,
+					  tot_pkt_list_count, use_pkt_list_count,
+					  tot_flow_hash_list_count, use_flow_hash_list_count,
+					  use_pkt_desc_list_count, tot_pkt_desc_list_count,
+					  installed_entry_count,
+					  expired_pkt_count);
+		}
+#endif
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
 #endif
+
+	/* */
 
 	/* free the circular buffer */
 	for (int i = 0; i < TIMEOUT_LEVEL_NUM; i++)

@@ -29,8 +29,8 @@ void *install_drop_entry(void *args)
 	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, MAX_TCP_PACKETS);
 	temp_table_entry_ptr = (table_entry_t *)MallocZ(sizeof(table_entry_t));
 	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
-	bfrt_grpc_init();
-	PyGILState_STATE ret = PyGILState_Ensure();
+	// bfrt_grpc_init();
+	// PyGILState_STATE ret = PyGILState_Ensure();
 
 	while (1)
 	{	
@@ -48,23 +48,23 @@ void *install_drop_entry(void *args)
 			{
 			case IPPROTO_TCP:
 			{
-				res = bfrt_tcp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
+				// res = bfrt_tcp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
 				break;
 			}
 			case IPPROTO_UDP:
 			{
-				res = bfrt_udp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
+				// res = bfrt_udp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
 				break;
 			}
 			case IPPROTO_ICMP:
 			{
-				res = bfrt_icmp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip);
+				// res = bfrt_icmp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip);
 				break;
 			}
 			}
 		}
 	}
-	PyGILState_Release(ret);
+	// PyGILState_Release(ret);
 }
 
 void bfrt_clear_tables()
@@ -88,13 +88,13 @@ void bfrt_grpc_init()
 	PyRun_SimpleString("import sys");
 	PyRun_SimpleString("sys.path.append('./bfrt_grpc')");
 
-	pModule = PyImport_ImportModule("bfrt_grpc_server");
+	pModule = PyImport_ImportModule("bfrt_grpc_client");
 	assert(pModule != NULL);
 	/* Call Py_INCREF() for objects that you want to keep around for a while.
 	 * A pointer to an object that has been INCREFed is said to be protected. */
 	Py_INCREF(pModule);
 
-	pClass = PyObject_GetAttrString(pModule, "Bfrt_GRPC_Server"); /* fetch module.class */
+	pClass = PyObject_GetAttrString(pModule, "Bfrt_GRPC_Client"); /* fetch module.class */
 	assert(pClass != NULL);
 	Py_INCREF(pClass);
 

@@ -21,6 +21,9 @@
 #include <sys/ioctl.h>
 #include <linux/if_packet.h>
 #include <Python.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <time.h>
 
 #include "struct.h"
 #include "param.h"
@@ -30,26 +33,12 @@
 #define ETHER_HDRLEN 14
 #endif
 
-#define ETH_P_
-
-/* Interfaces to capture and send packets */
-#define RECV_INTF "veth251"
-#define SEND_INTF "veth251"
-
-#define C2S 1
-#define S2C -1
 
 /*
  * Macros to simplify access to IPv4/IPv6 header fields
  */
 #define PIP_VERS(pip) (((struct ip *)(pip))->ip_v)
-#ifdef SUPPORT_IPV6
-#define PIP_ISV6(pip) (PIP_VERS(pip) == 6)
-#else
-#define PIP_ISV6(pip) FALSE
-#endif
 #define PIP_ISV4(pip) (PIP_VERS(pip) == 4)
-#define PIP_V6(pip) ((struct ipv6 *)(pip))
 #define PIP_V4(pip) ((struct ip *)(pip))
 #define PIP_EITHERFIELD(pip, fld4, fld6) \
   (PIP_ISV4(pip) ? (PIP_V4(pip)->fld4) : (PIP_V6(pip)->fld6))
@@ -60,13 +49,8 @@
  */
 #define ADDR_VERSION(paddr) ((paddr)->addr_vers)
 #define ADDR_ISV4(paddr) (ADDR_VERSION((paddr)) == 4)
-#ifdef SUPPORT_IPV6
-#define ADDR_ISV6(paddr) (ADDR_VERSION((paddr)) == 6)
-#else
-#define ADDR_ISV6(paddr) (FALSE)
-#endif
+
 struct ipaddr *IPV4ADDR2ADDR(struct in_addr *addr4);
-struct ipaddr *IPV6ADDR2ADDR(struct in6_addr *addr6);
 
 void IP_COPYADDR(ipaddr *toaddr, ipaddr fromaddr);
 int IP_SAMEADDR(ipaddr addr1, ipaddr addr2);
@@ -85,10 +69,15 @@ int IP_SAMEADDR(ipaddr addr1, ipaddr addr2);
 
 void *MallocZ(int);
 void *ReallocZ(void *oldptr, int obytes, int nbytes);
+void *MMmalloc(size_t size, const char *f_name);
+
 
 /* connection naming information */
 Bool internal_src;
 Bool internal_dst;
+
+#define C2S 1
+#define S2C -1
 
 extern int debug;
 
@@ -115,18 +104,8 @@ struct udphdr *getudp(struct ip *pip, void **pplast);
 struct icmphdr *geticmp(struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
 void trace_init(void);
-void print_tpkt();
 
-/* Return Values for tcp_flow_stat() and udp_flow_stat() */
-#define FLOW_STAT_NULL 0
-#define FLOW_STAT_OK 1
-#define FLOW_STAT_DUP 2
-#define FLOW_STAT_NONE 3
-#define FLOW_STAT_SHORT 4
 
-extern Bool warn_printtrunc;
-
-extern u_long pnum;
 
 int getpayloadlength(struct ip *pip, void *plast);
 
@@ -141,7 +120,6 @@ int getpayloadlength(struct ip *pip, void *plast);
 
 double elapsed(timeval, timeval);
 int tv_cmp(struct timeval lhs, struct timeval rhs);
-
 void tv_sub(struct timeval *plhs, struct timeval rhs);
 int tv_sub_2(struct timeval lhs, struct timeval rhs);
 void tv_add(struct timeval *plhs, struct timeval rhs);
@@ -152,9 +130,9 @@ Bool tv_same(struct timeval lhs, struct timeval rhs);
 #define MS_PER_SEC 1000    /* milliseconds per second */
 #define US_PER_MS 1000     /* microseconds per millisecond */
 
-Bool internal_ip(struct in_addr adx);
 
-/* memory management and garbage collection routines */
+
+/* memory management and garbage collection routines (freelist) */
 
 struct pkt_list_elem
 {
@@ -163,15 +141,6 @@ struct pkt_list_elem
   ip_packet *ppkt;
 };
 
-struct pkt_list_elem *pktlist_alloc(void);
-void pktlist_release(struct pkt_list_elem *rel_pktlist);
-
-ip_packet *pkt_alloc(void);
-void pkt_release(ip_packet *relesased_ip_packet);
-
-void *MMmalloc(size_t size, const char *f_name);
-
-/* Pkt descriptor */
 struct pkt_desc_list_elem
 {
   struct pkt_desc_list_elem *next;
@@ -179,6 +148,11 @@ struct pkt_desc_list_elem
   pkt_desc_t *pkt_desc_ptr;
 };
 
+ip_packet *pkt_alloc(void);
+void pkt_release(ip_packet *relesased_ip_packet);
+
+
+/* Pkt descriptor */
 pkt_desc_t *pkt_desc_alloc();
 void pkt_desc_release(pkt_desc_t *rel_pkt_desc);
 
@@ -186,45 +160,38 @@ void pkt_desc_release(pkt_desc_t *rel_pkt_desc);
 flow_hash_t *flow_hash_alloc();
 void flow_hash_release(flow_hash_t *flow_hash_ptr);
 
-/* Circular Buffer Related */
 
+/* Circular Buffer Related */
 // Opaque circular buffer structure
 typedef struct circular_buf_t circular_buf_t;
-
 /// Pass in a storage buffer and size
 /// Returns a circular buffer handle
 circular_buf_t *circular_buf_init(void **buf_space, size_t size);
-
 /// Free a circular buffer structure.
 /// Does not free data buffer; owner is responsible for that
 void circular_buf_free(circular_buf_t *me);
-
 /// Reset the circular buffer to empty, head == tail
 void circular_buf_reset(circular_buf_t *me);
-
 /// Put version 1 continues to add data
 void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr);
-
 /// Retrieve a value from the buffer
 /// Returns 0 on success, -1 if the buffer is empty
 int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr);
-
 /// Returns true if the buffer is empty
 Bool circular_buf_empty(circular_buf_t *me);
-
 /// Returns true if the buffer is full
 Bool circular_buf_full(circular_buf_t *me);
-
 /// Returns the maximum capacity of the buffer
 size_t circular_buf_capacity(circular_buf_t *me);
-
 /// Returns the current number of elements in the buffer
 size_t circular_buf_size(circular_buf_t *me);
-
 int circular_buf_peek_head(circular_buf_t *me, void **buf_slot_ptr_ptr);
 
+/* Internal Network / Host */
 int LoadInternalNets(char *file);
+Bool internal_ip(struct in_addr adx);
 
+/* Packet Sending */
 int SendPkt(char *sendbuf, int tx_len);
 int sockfd;
 struct ifreq if_idx;
@@ -281,4 +248,82 @@ void bfrt_grpc_init();
 void *install_drop_entry(void *args);
 int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
 
+/* Logging */
+#define DO_STATS
+
 FILE *fp_log;
+
+typedef struct {
+  va_list ap;
+  const char *fmt;
+  const char *file;
+  struct tm *time;
+  void *udata;
+  int line;
+  int level;
+} log_Event;
+
+typedef void (*log_LogFn)(log_Event *ev);
+typedef void (*log_LockFn)(bool lock, void *udata);
+
+enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
+
+#define log_trace(...) log_log(LOG_TRACE, __FILE__, __LINE__, __VA_ARGS__)
+#define log_debug(...) log_log(LOG_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
+#define log_info(...)  log_log(LOG_INFO,  __FILE__, __LINE__, __VA_ARGS__)
+#define log_warn(...)  log_log(LOG_WARN,  __FILE__, __LINE__, __VA_ARGS__)
+#define log_error(...) log_log(LOG_ERROR, __FILE__, __LINE__, __VA_ARGS__)
+#define log_fatal(...) log_log(LOG_FATAL, __FILE__, __LINE__, __VA_ARGS__)
+
+const char* log_level_string(int level);
+void log_set_lock(log_LockFn fn, void *udata);
+void log_set_level(int level);
+void log_set_quiet(bool enable);
+int log_add_callback(log_LogFn fn, void *udata, int level);
+int log_add_fp(FILE *fp, int level);
+
+void log_log(int level, const char *file, int line, const char *fmt, ...);
+
+
+/* Statistic Variables */
+#define DO_STATS
+
+// Packet Counters
+u_long pkt_count;
+
+u_long tot_tcp_pkt_count;
+// u_long in_tcp_pkt_count;
+// u_long out_tcp_pkt_count;
+// u_long local_tcp_pkt_count;
+
+u_long tot_udp_pkt_count;
+// u_long in_udp_pkt_count;
+// u_long out_udp_pkt_count;
+// u_long local_udp_pkt_count;
+
+u_long tot_icmp_pkt_count;
+// u_long in_icmp_pkt_count;
+// u_long out_icmp_pkt_count;
+// u_long local_icmp_pkt_count;
+
+// Data Structure Counters
+u_long flow_hash_count;
+u_long pkt_desc_count;
+u_long circ_buf_L1_count;
+u_long circ_buf_L2_count;
+u_long circ_buf_L3_count;
+u_long lazy_flow_hash_count;
+
+// Freelist Counters
+u_long tot_pkt_list_count;
+u_long use_pkt_list_count;
+u_long tot_flow_hash_list_count;
+u_long use_flow_hash_list_count;
+u_long use_pkt_desc_list_count;
+u_long tot_pkt_desc_list_count;
+
+// Functionality Counters
+u_long installed_entry_count;
+u_long expired_pkt_count;
+
+

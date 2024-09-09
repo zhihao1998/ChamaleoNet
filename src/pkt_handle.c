@@ -1,6 +1,6 @@
 #include "tsdn.h"
 
-/* tcp database stats */
+/* Log  */
 long not_id_p;
 int search_count = 0;
 
@@ -11,9 +11,6 @@ int num_ip_packets = -1;    /* how many packets we've allocated */
 ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
 
 Bool warn_MAX_ = TRUE;
-
-/* mutex lock for hash table  */
-static pthread_mutex_t mutex_hash_table;
 
 static ip_packet *
 NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
@@ -40,9 +37,9 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struc
         if (warn_MAX_)
         {
             fprintf(fp_log, "\n"
-                               "ooopsss: number of simultaneous connection opened is greater then the maximum supported number!\n"
-                               "you have to rebuild the source with a larger LIST_SEARCH_DEPT defined!\n"
-                               "or possibly with a larger MAX_TCP_PACKETS defined!\n");
+                            "ooopsss: number of simultaneous connection opened is greater then the maximum supported number!\n"
+                            "you have to rebuild the source with a larger LIST_SEARCH_DEPT defined!\n"
+                            "or possibly with a larger MAX_TCP_PACKETS defined!\n");
         }
         warn_MAX_ = FALSE;
         return (NULL);
@@ -112,7 +109,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     }
 
     /* Create packet descriptor */
-    temp_pkt_desc_ptr = pkt_desc_alloc();
+    temp_pkt_desc_ptr = pkt_desc_alloc(); // all packet descriptors are allocated from the same pool (share the same free list)
     temp_pkt_desc_ptr->pkt_ptr = temp_pkt;
     temp_pkt_desc_ptr->recv_time = *pckt_time;
 
@@ -327,7 +324,17 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     {
         int timeout_level = which_circular_buf(pip);
         flow_hash_ptr = CreateFlowHash(peth, pip, ptcp, plast, pckt_time, circ_buf_list[timeout_level]);
-
+#ifdef DO_STATS
+        switch (timeout_level)
+        {
+        case /* constant-expression */:
+            /* code */
+            break;
+        
+        default:
+            break;
+        }
+#endif
         /* Calculate the packet processing time */
         timeval current_time, pkt_time;
         int time_diff;
@@ -390,9 +397,6 @@ void trace_init(void)
     /* initialize the hash table */
     flow_hash_table = (flow_hash_t **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash_t *));
 
-    /* initialize the mutex for hash table */
-    pthread_mutex_init(&mutex_hash_table, NULL);
-
     /* initialize the circular buffer for lazy freeing */
     lazy_flow_hash_buf = (flow_hash_t **)MallocZ(MAX_TCP_PACKETS * sizeof(flow_hash_t *));
     lazy_flow_hash_circ_buf = circular_buf_init((void **)lazy_flow_hash_buf, MAX_TCP_PACKETS);
@@ -404,25 +408,21 @@ void trace_init(void)
     /* Initialize the params for sendpkt */
     /* Get interface name */
     strcpy(ifName, SEND_INTF);
-
     /* Open RAW socket to send on */
     if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1)
     {
         perror("socket");
     }
-
     /* Get the index of the interface to send on */
     memset(&if_idx, 0, sizeof(struct ifreq));
     strncpy(if_idx.ifr_name, ifName, IFNAMSIZ - 1);
     if (ioctl(sockfd, SIOCGIFINDEX, &if_idx) < 0)
         perror("SIOCGIFINDEX");
-
     /* Get the MAC address of the interface to send on */
     // memset(&if_mac, 0, sizeof(struct ifreq));
     // strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
     // if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0)
     //     perror("SIOCGIFHWADDR");
-
     /* Construct the Ethernet header, here we use raw packet */
     // memset(sendbuf, 0, BUF_SIZ);
     /* Ethernet header */
@@ -430,10 +430,8 @@ void trace_init(void)
     // /* Ethertype field */
     // eh->ether_type = htons(ETH_P_IP);
     // tx_len += sizeof(struct ether_header);
-
     // /* Fill packet data */
     // sendbuf[tx_len++] = 0xde;
-
     /* Index of the network device */
     socket_address.sll_ifindex = if_idx.ifr_ifindex;
     /* Address length*/

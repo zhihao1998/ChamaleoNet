@@ -112,6 +112,7 @@ typedef struct timeout_mgmt_args
   pthread_mutex_t *g_tMutex_ptr;
   pthread_cond_t *cond_ptr;
   pthread_mutex_t *head_mutex_ptr;
+  u_long *circ_buf_count;
 }timeout_mgmt_args;
 
 typedef struct table_entry_t

@@ -4,20 +4,14 @@
 ** Memory management with freelist instead of malloc and free.
 **
 */
-extern Bool bayes_engine;
-
 #ifdef MEMDEBUG
 long IN_USE_TP = 0;
-
 long TOT_TP = 0;
-extern long tot_adx_hash_count, bayes_new_count;
 
 void memory_debug()
 {
   fprintf(fp_stdout, "Using %ld over %ld TP\t(%ldK) (%ld MAX)\n",
           IN_USE_TP, TOT_TP, MAX_TCP_PACKETS, TOT_TP * sizeof(ip_packet) >> 10);
-  fprintf(fp_stdout, "Using %ld ADX\n", tot_adx_hash_count);
-  fprintf(fp_stdout, "Using %ld bayes_classifier\n", bayes_new_count);
 }
 #endif
 /*
@@ -65,7 +59,7 @@ pkt_alloc(void)
   if ((last_pkt_flist == NULL) || (last_pkt_flist->ppkt == NULL))
   { /* The LinkList stack is empty.         */
     /* fprintf (fp_stdout, "FList empty, top == last == NULL\n"); */
-    ppkt_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "pktlist_alloc");
+    ppkt_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "pkt_alloc");
 #ifdef MEMDEBUG
     TOT_TP++;
 #endif
@@ -96,7 +90,7 @@ void pkt_release(ip_packet *released_ip_packet)
   {
     new_pktlist_elem =
         (struct pkt_list_elem *)MMmalloc(sizeof(struct pkt_list_elem),
-                                        "pktlist_release");
+                                        "pkt_release");
     new_pktlist_elem->ppkt = released_ip_packet;
     new_pktlist_elem->prev = NULL;
     new_pktlist_elem->next = top_pkt_flist;

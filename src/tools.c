@@ -396,3 +396,11 @@ int SendPkt(char *sendbuf, int tx_len)
     }
     return r;   
 }
+
+void get_date(char *nowtime) {
+	time_t rawtime;
+	struct tm* ltime;
+	time(&rawtime);
+	ltime = localtime(&rawtime);
+	strftime(nowtime, 20, "%Y-%m-%d %H:%M:%S", ltime);
+}

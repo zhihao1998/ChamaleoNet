@@ -8,8 +8,9 @@ void *timeout_mgmt(void *args)
     circular_buf_t *thread_circ_buf = timeout_mgmt_args_ptr->circ_buf;
     pthread_mutex_t *thread_g_tMutex_ptr = timeout_mgmt_args_ptr->g_tMutex_ptr;
     pthread_cond_t *thread_cond_ptr = timeout_mgmt_args_ptr->cond_ptr;
-
     pthread_mutex_t *thread_head_mutex_ptr = timeout_mgmt_args_ptr->head_mutex_ptr;
+
+    u_long *thread_circ_buf_count = timeout_mgmt_args_ptr->circ_buf_count;
 
     while (circular_buf_empty(thread_circ_buf))
     {
@@ -37,6 +38,9 @@ void *timeout_mgmt(void *args)
 
         // pthread_mutex_lock(thread_head_mutex_ptr);
         res = circular_buf_get(thread_circ_buf, &buf_slot);
+#ifdef DO_STATS
+        (*thread_circ_buf_count)--;
+#endif
         /* Check the next timeout */
         if (res != -1)
         {

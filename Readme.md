@@ -54,7 +54,7 @@ p4 -p tf_honeypot
 
 sudo tcpdump -vvv -i veth2 -w pcap/test.pcap
 
-sudo tcpreplay -i veth4 --mbps 1 trace/old_trace.pcap
+sudo tcpreplay -i veth4 trace/ip_complete.pcap
 
 ```
 
@@ -74,6 +74,31 @@ sudo ifconfig virbr1 up
 
 
 ## Benchmarks
+
+### Indicators
+
+#### Packet Counter
+- total parsed packet number (log every 100 packets)
+- TCP packet number
+- UDP packet number
+- ICMP packet number
+
+#### Data Structure
+
+- hash table size
+- circular buffer size
+- lazy free buffer size
+- all free list size in use
+- all free list size in total
+
+#### Functionalities
+
+- installed flow number (returned by the grpc client)
+- expired packet number
+
+### Figures
+
+#### timeout v.s. data structure size
 
 
 

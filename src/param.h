@@ -41,6 +41,9 @@ Increase this number on high speed network will help ...*/
 
 #define LAZY_FREEING_TIMEOUT 100000000
 
-
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100
+
+/* Interfaces to capture and send packets */
+#define RECV_INTF "veth251"
+#define SEND_INTF "veth251"

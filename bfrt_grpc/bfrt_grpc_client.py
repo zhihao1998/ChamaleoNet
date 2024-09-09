@@ -9,7 +9,7 @@ def ip_to_int(ip):
 def mask_to_int(mask):
     return int(binascii.hexlify(socket.inet_aton(mask)),16)
 
-class Bfrt_GRPC_Server:
+class Bfrt_GRPC_Client:
     def __init__(self):
         self.bfrt = BfRtAPI(client_id=1)
         self.installed_flow_key = set()
@@ -49,7 +49,7 @@ class Bfrt_GRPC_Server:
                                     action_name='Ingress.drop')     
             except Exception as e:
                 print(e)                                                      
-            return 0
+            return 1
     
     def udp_flow_add_with_drop(self, src_ip, dst_ip, src_port, dst_port):
         match_key = (src_ip, dst_ip, src_port, dst_port, 'udp')
@@ -77,7 +77,7 @@ class Bfrt_GRPC_Server:
                                     action_name='Ingress.drop')
             except Exception as e:
                 print(e)
-            return 0
+            return 1
     
     def icmp_flow_add_with_drop(self, src_ip, dst_ip):
         match_key = (src_ip, dst_ip, 'icmp')
@@ -101,7 +101,7 @@ class Bfrt_GRPC_Server:
                                     action_name='Ingress.drop')
             except Exception as e:
                 print(e)
-            return 0
+            return 1
 
     def clear_tables(self):
         # self.bfrt.clear_tables()
