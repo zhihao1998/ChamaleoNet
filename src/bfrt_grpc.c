@@ -33,7 +33,7 @@ void *install_drop_entry(void *args)
 	// PyGILState_STATE ret = PyGILState_Ensure();
 
 	while (1)
-	{	
+	{
 		/* Check the next timeout */
 		if (circular_buf_get(p4_entry_circ_buf, &buf_slot) != -1)
 		{
@@ -49,16 +49,29 @@ void *install_drop_entry(void *args)
 			case IPPROTO_TCP:
 			{
 				// res = bfrt_tcp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
+#ifdef DO_STATS
+				installed_entry_count_tot += res;
+				installed_entry_count_tcp += res;
+#endif
+
 				break;
 			}
 			case IPPROTO_UDP:
 			{
 				// res = bfrt_udp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
+#ifdef DO_STATS
+				installed_entry_count_tot += res;
+				installed_entry_count_udp += res;
+#endif
 				break;
 			}
 			case IPPROTO_ICMP:
 			{
 				// res = bfrt_icmp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip);
+#ifdef DO_STATS
+				installed_entry_count_tot += res;
+				installed_entry_count_icmp += res;
+#endif
 				break;
 			}
 			}

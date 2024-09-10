@@ -1,6 +1,6 @@
 from scapy.sendrecv import sendp
 from scapy.all import conf
-from scapy.layers.inet import IP, TCP
+from scapy.layers.inet import IP, TCP, UDP
 from scapy.layers.l2 import Ether
 import time
 import random
@@ -10,6 +10,7 @@ iface = "veth251"
 
 for i in range(1,10):
     sendp(Ether()/IP(src="10.0.0."+str(i), dst="10.0.0.254")/TCP(sport=1,dport=2,flags="S")/str(i), iface=iface)
+    sendp(Ether()/IP(src="10.0.0."+str(i), dst="10.0.0.254")/UDP(sport=1,dport=2)/str(i), iface=iface)
 
 random.seed(41)
 

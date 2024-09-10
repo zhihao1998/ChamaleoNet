@@ -1,0 +1,135 @@
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+LAZY_FREE_FLOW_HASH: Circular Buffer empty, thread blocked!
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.1:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.95714
+TIMEOUT_MGMT: going to sleep for 4999608us!
+PKT_RX: new request pkt stored: from 10.0.0.1:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.160224
+TIMEOUT_MGMT: going to sleep for 49831us!
+PKT_RX: new request pkt stored: from 10.0.0.2:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.204324
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.1:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.160393
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.2:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.248198
+TIMEOUT_MGMT: going to sleep for 49887us!
+PKT_RX: new request pkt stored: from 10.0.0.3:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.284635
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.2:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.248311
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.3:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.332157
+TIMEOUT_MGMT: going to sleep for 49835us!
+PKT_RX: new request pkt stored: from 10.0.0.4:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.368331
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.3:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.332322
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.4:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.408154
+TIMEOUT_MGMT: going to sleep for 49835us!
+PKT_RX: new request pkt stored: from 10.0.0.5:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.448351
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.4:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.408319
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.5:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.495326
+TIMEOUT_MGMT: going to sleep for 49867us!
+PKT_RX: new request pkt stored: from 10.0.0.6:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.527332
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.5:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.495459
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.6:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.575390
+TIMEOUT_MGMT: going to sleep for 49847us!
+PKT_RX: new request pkt stored: from 10.0.0.7:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.611449
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.6:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.575543
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.7:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.647491
+TIMEOUT_MGMT: going to sleep for 49837us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.7:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.647654
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.8:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.700992
+PKT_RX: new request pkt stored: from 10.0.0.8:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.740042
+TIMEOUT_MGMT: going to sleep for 49708us!
+PKT_RX: new request pkt stored: from 10.0.0.9:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.784446
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.8:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.740334
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.9:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990846.844205
+TIMEOUT_MGMT: going to sleep for 49280us!
+pkt_handle: S2C: from 10.0.0.3:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990846
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.9:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990846.844925
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+pkt_handle: S2C: from 10.0.0.4:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990846
+pkt_handle: S2C: from 10.0.0.6:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990846
+pkt_handle: S2C: from 10.0.0.7:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990846
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b7640, src: 10.0.0.3, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b7d00, src: 10.0.0.4, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b8a80, src: 10.0.0.6, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b9140, src: 10.0.0.7, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Circular Buffer empty, thread blocked!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.1:256 to 10.0.0.254:512 with 55 bytes of raw packet RT.. at 1725990846.96106
+TIMEOUT_MGMT: going to sleep for 108515us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.2:256 to 10.0.0.254:512 with 55 bytes of raw packet RT.. at 1725990851.95809
+TIMEOUT_MGMT: Before sleeping skipped a packet descriptor which has already been freed.
+TIMEOUT_MGMT: Before sleeping skipped a packet descriptor which has already been freed.
+TIMEOUT_MGMT: going to sleep for 243962us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.5:256 to 10.0.0.254:512 with 55 bytes of raw packet RT.. at 1725990851.204389
+TIMEOUT_MGMT: Before sleeping skipped a packet descriptor which has already been freed.
+TIMEOUT_MGMT: Before sleeping skipped a packet descriptor which has already been freed.
+TIMEOUT_MGMT: going to sleep for 252525us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.8:256 to 10.0.0.254:512 with 55 bytes of raw packet RT.. at 1725990851.448467
+TIMEOUT_MGMT: going to sleep for 83360us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.9:256 to 10.0.0.254:512 with 55 bytes of raw packet RT.. at 1725990851.701086
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.1:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.387706
+TIMEOUT_MGMT: going to sleep for 4999714us!
+PKT_RX: new request pkt stored: from 10.0.0.1:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.424272
+TIMEOUT_MGMT: going to sleep for 49737us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.1:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990913.424535
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.2:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.480336
+PKT_RX: new request pkt stored: from 10.0.0.2:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.512206
+TIMEOUT_MGMT: going to sleep for 49728us!
+PKT_RX: new request pkt stored: from 10.0.0.3:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.560937
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.2:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990913.512478
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.3:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.600146
+TIMEOUT_MGMT: going to sleep for 49739us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.3:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990913.600407
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.4:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.652312
+PKT_RX: new request pkt stored: from 10.0.0.4:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.704149
+TIMEOUT_MGMT: going to sleep for 49807us!
+PKT_RX: new request pkt stored: from 10.0.0.5:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.752314
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.4:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990913.704342
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.5:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.808177
+TIMEOUT_MGMT: going to sleep for 49740us!
+PKT_RX: new request pkt stored: from 10.0.0.6:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.852359
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.5:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990913.808437
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.6:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.908240
+TIMEOUT_MGMT: going to sleep for 49739us!
+PKT_RX: new request pkt stored: from 10.0.0.7:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.940294
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.6:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990913.908501
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.7:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990913.992197
+TIMEOUT_MGMT: going to sleep for 49834us!
+PKT_RX: new request pkt stored: from 10.0.0.8:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990914.40822
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.7:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990913.992363
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.8:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990914.80230
+TIMEOUT_MGMT: going to sleep for 49784us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.8:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990914.80446
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+PKT_RX: new request pkt stored: from 10.0.0.9:1 to 10.0.0.254:2 with 55 bytes of raw_packet 52:54:0:1b:60:ed at 1725990914.148347
+PKT_RX: new request pkt stored: from 10.0.0.9:1 to 10.0.0.254:2 with 43 bytes of raw_packet 52:54:0:1b:60:ed at 1725990914.192151
+TIMEOUT_MGMT: going to sleep for 49727us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.9:256 to 10.0.0.254:512 with 43 bytes of raw packet RT.. at 1725990914.192424
+TIMEOUT_MGMT: Circular Buffer empty, thread blocked!
+pkt_handle: S2C: from 10.0.0.3:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990913
+pkt_handle: S2C: from 10.0.0.4:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990913
+pkt_handle: S2C: from 10.0.0.6:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990913
+pkt_handle: S2C: from 10.0.0.7:256 to 10.0.0.254:512 with 55 bytes of raw_packet RT.. at 1725990913
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b6f80, src: 10.0.0.3, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b83c0, src: 10.0.0.4, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b8a80, src: 10.0.0.6, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: 0x560a929b7d00, src: 10.0.0.7, dst: 10.0.0.254
+LAZY_FREE_FLOW_HASH: Circular Buffer empty, thread blocked!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.1:256 to 10.0.0.254:512 with 55 bytes of raw packet RT.. at 1725990913.387992
+TIMEOUT_MGMT: going to sleep for 92397us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.2:256 to 10.0.0.254:512 with 55 bytes of raw packet RT.. at 1725990918.387939
+TIMEOUT_MGMT: Before sleeping skipped a packet descriptor which has already been freed.
+TIMEOUT_MGMT: Before sleeping skipped a packet descriptor which has already been freed.
+TIMEOUT_MGMT: going to sleep for 271762us!
+TIMEOUT_MGMT: popping TCP SYN: from 10.0.0.5:256 to 10.0.0.254:512 with 55 byte

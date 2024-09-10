@@ -112,7 +112,27 @@ void *timeout_mgmt(void *args)
                 }
                 FreePkt(pkt_desc_ptr->pkt_ptr);
                 FreePktDesc(pkt_desc_ptr);
-                // fprintf(fp_log, "TIMEOUT_MGMT: size: %ld!\n", circular_buf_size(thread_circ_buf));
+
+#ifdef DO_STATS
+                pkt_buf_count--;
+                flow_hash_count--;
+                pkt_desc_count--;
+                expired_pkt_count_tot++;
+                switch (ip_protocol)
+                {
+                case IPPROTO_TCP:
+                    expired_pkt_count_tcp++;
+                    break;
+                case IPPROTO_UDP:
+                    expired_pkt_count_udp++;
+                    break;
+                case IPPROTO_ICMP:
+                    expired_pkt_count_icmp++;
+                    break;
+                default:
+                    break;
+                }
+#endif
             }
         }
         // pthread_mutex_unlock(thread_head_mutex_ptr);

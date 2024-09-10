@@ -1,11 +1,7 @@
 #include "tsdn.h"
 
 /* Log  */
-long not_id_p;
 int search_count = 0;
-
-extern unsigned long int fcount;
-extern unsigned long int f_TCP_count;
 
 int num_ip_packets = -1;    /* how many packets we've allocated */
 ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
@@ -102,12 +98,10 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
         if (debug > 0)
         {
             fprintf(fp_log,
-                    "** out of memory when creating flows - considering a not_id_p\n");
+                    "** out of memory when creating flowsp\n");
         }
-        not_id_p++;
         return (NULL);
     }
-
     /* Create packet descriptor */
     temp_pkt_desc_ptr = pkt_desc_alloc(); // all packet descriptors are allocated from the same pool (share the same free list)
     temp_pkt_desc_ptr->pkt_ptr = temp_pkt;
@@ -217,6 +211,9 @@ int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
         fprintf(fp_log, "Error: Lazy freeing circular buffer is full\n");
         return -1;
     }
+#ifdef DO_STATS
+    lazy_flow_hash_count++;
+#endif
 
     /* Activate the lazy freeing thread */
     pthread_cond_signal(&lazy_flow_hash_cond);
@@ -239,6 +236,7 @@ int which_circular_buf(struct ip *pip)
         return 2;
     }
     }
+    return -1;
 }
 
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
@@ -265,10 +263,14 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     {
         if (flow_hash_ptr->lazy_pending == TRUE)
         {
+#ifdef DO_STATS
+            lazy_flow_hash_hit++;
+#endif
             return 0;
         }
 
         int timeout_level = which_circular_buf(pip);
+        assert(timeout_level != -1);
 
         /* Same direction of this packet, probably another request */
         if (dir == C2S)
@@ -317,31 +319,69 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             FreePktDesc(pkt_desc_ptr);
             // FreeFlowHash(flow_hash_ptr);
             // pthread_mutex_unlock(&circ_buf_head_mutex_list[timeout_level]);
+#ifdef DO_STATS
+            replied_flow_count_tot++;
+            switch (timeout_level)
+            {
+            case 0:
+                replied_flow_count_tcp++;
+                pkt_buf_count--;
+                pkt_desc_count--;
+                break;
+            case 1:
+                replied_flow_count_udp++;
+
+                pkt_buf_count--;
+                pkt_desc_count--;
+                break;
+            case 2:
+                replied_flow_count_icmp++;
+                pkt_buf_count--;
+                pkt_desc_count--;
+                break;
+            default:
+                break;
+            }
+#endif
         }
     }
     /* Did not find the flow, create one */
     else
     {
         int timeout_level = which_circular_buf(pip);
+        assert(timeout_level != -1);
         flow_hash_ptr = CreateFlowHash(peth, pip, ptcp, plast, pckt_time, circ_buf_list[timeout_level]);
 #ifdef DO_STATS
         switch (timeout_level)
         {
-        case /* constant-expression */:
-            /* code */
+        case 0:
+            pkt_buf_count++;
+            flow_hash_count++;
+            pkt_desc_count++;
+            circ_buf_L1_count++;
             break;
-        
+        case 1:
+            pkt_buf_count++;
+            flow_hash_count++;
+            pkt_desc_count++;
+            circ_buf_L2_count++;
+            break;
+        case 2:
+            pkt_buf_count++;
+            flow_hash_count++;
+            pkt_desc_count++;
+            circ_buf_L3_count++;
+            break;
         default:
             break;
         }
 #endif
         /* Calculate the packet processing time */
-        timeval current_time, pkt_time;
-        int time_diff;
-        pkt_time = flow_hash_ptr->pkt_desc_ptr->recv_time;
-        gettimeofday(&current_time, NULL);
-        time_diff = tv_sub_2(current_time, pkt_time);
-        fprintf(fp_log, "PKT_RX: cur_time - pkt_time =  %dus!\n", time_diff);
+        // timeval current_time, pkt_time;
+        // int time_diff;
+        // pkt_time = flow_hash_ptr->pkt_desc_ptr->recv_time;
+        // gettimeofday(&current_time, NULL);
+        // time_diff = tv_sub_2(current_time, pkt_time);
 
         /* Weak up the timeout_mgmt thread */
         if (!circular_buf_empty(circ_buf_list[timeout_level]))

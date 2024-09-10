@@ -4,16 +4,6 @@
 ** Memory management with freelist instead of malloc and free.
 **
 */
-#ifdef MEMDEBUG
-long IN_USE_TP = 0;
-long TOT_TP = 0;
-
-void memory_debug()
-{
-  fprintf(fp_stdout, "Using %ld over %ld TP\t(%ldK) (%ld MAX)\n",
-          IN_USE_TP, TOT_TP, MAX_TCP_PACKETS, TOT_TP * sizeof(ip_packet) >> 10);
-}
-#endif
 /*
 **  Function  : void *MMmalloc(size_t size, const char * function_name)
 **  Return    : the pointer to the memory of the new allocated block
@@ -52,18 +42,17 @@ ip_packet *
 pkt_alloc(void)
 {
   ip_packet *ppkt_temp;
-#ifdef MEMDEBUG
-  IN_USE_TP++;
+#ifdef DO_STATS
+  pkt_list_count_use++;
 #endif
 
   if ((last_pkt_flist == NULL) || (last_pkt_flist->ppkt == NULL))
   { /* The LinkList stack is empty.         */
     /* fprintf (fp_stdout, "FList empty, top == last == NULL\n"); */
     ppkt_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "pkt_alloc");
-#ifdef MEMDEBUG
-    TOT_TP++;
+#ifdef DO_STATS
+    pkt_list_count_tot++;
 #endif
-
     return ppkt_temp;
   }
   else
@@ -80,8 +69,8 @@ void pkt_release(ip_packet *released_ip_packet)
 {
   struct pkt_list_elem *new_pktlist_elem;
 
-#ifdef MEMDEBUG
-  IN_USE_TP--;
+#ifdef DO_STATS
+  pkt_list_count_use--;
 #endif
 
   memset(released_ip_packet, 0, sizeof(ip_packet));
@@ -110,7 +99,7 @@ void pkt_release(ip_packet *released_ip_packet)
   }
 }
 
-void pkt_list_list()
+void pkt_list_print()
 {
   struct pkt_list_elem *new_pktlist_elem;
 
@@ -152,15 +141,15 @@ static struct pkt_desc_list_elem *last_pkt_desc_flist = NULL; /* Pointer to the 
 pkt_desc_t *pkt_desc_alloc()
 {
   pkt_desc_t *new_pkt_desc_ptr;
-#ifdef MEMDEBUG
-  IN_USE_PKT_DESC++;
+#ifdef DO_STATS
+  pkt_desc_list_count_use++;
 #endif
 
   if ((last_pkt_desc_flist == NULL) || (last_pkt_desc_flist->pkt_desc_ptr == NULL))
   { /* The LinkList stack is empty.         */
     new_pkt_desc_ptr = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
-#ifdef MEMDEBUG
-    TOT_PKT_DESC++;
+#ifdef DO_STATS
+    pkt_desc_list_count_tot++;
 #endif
     return new_pkt_desc_ptr;
   }
@@ -177,8 +166,8 @@ pkt_desc_t *pkt_desc_alloc()
 void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
 {
   struct pkt_desc_list_elem *new_pkt_desc_list_elem;
-#ifdef MEMDEBUG
-  IN_USE_PKT_DESC--;
+#ifdef DO_STATS
+  pkt_desc_list_count_use--;
 #endif
 
   memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
@@ -214,15 +203,15 @@ flow_hash_t*flow_hash_alloc()
 {
   struct flow_hash_t*new_flow_hash_ptr;
 
-#ifdef MEMDEBUG
-  IN_USE_FLOW_HASH++;
+#ifdef DO_STATS
+  flow_hash_list_count_use++;
 #endif
 
   if (top_flow_hash_flist == NULL)
   {
     new_flow_hash_ptr = (flow_hash_t*)MMmalloc(sizeof(flow_hash_t), "flow_hash_alloc");
-#ifdef MEMDEBUG
-    TOT_FLOW_HASH++;
+#ifdef DO_STATS
+    flow_hash_list_count_tot++;
 #endif
   }
   else
@@ -236,8 +225,8 @@ flow_hash_t*flow_hash_alloc()
 
 void flow_hash_release(flow_hash_t*rel_flow_hash_ptr)
 {
-#ifdef MEMDEBUG
-  IN_USE_FLOW_HASH--;
+#ifdef DO_STATS
+  flow_hash_list_count_use--;
 #endif
   memset(rel_flow_hash_ptr, 0, sizeof(flow_hash_t));
   rel_flow_hash_ptr->next = top_flow_hash_flist;

@@ -19,44 +19,58 @@ struct timeval current_time;
 
 int debug = 3;
 
-/* Statistic Counters */
-// Packet Counters
+#ifdef DO_STATS
 u_long pkt_count = 0;
 
-u_long tot_tcp_pkt_count = 0;
-// u_long in_tcp_pkt_count = 0;
-// u_long out_tcp_pkt_count = 0;
-// u_long local_tcp_pkt_count = 0;
+u_long tcp_pkt_count_tot = 0;
+// u_long in_tcp_pkt_count;
+// u_long out_tcp_pkt_count;
+// u_long local_tcp_pkt_count;
 
-u_long tot_udp_pkt_count = 0;
-// u_long in_udp_pkt_count = 0;
-// u_long out_udp_pkt_count = 0;
-// u_long local_udp_pkt_count = 0;
+u_long udp_pkt_count_tot = 0;
+// u_long in_udp_pkt_count;
+// u_long out_udp_pkt_count;
+// u_long local_udp_pkt_count;
 
-u_long tot_icmp_pkt_count = 0;
-// u_long in_icmp_pkt_count = 0;
-// u_long out_icmp_pkt_count = 0;
-// u_long local_icmp_pkt_count = 0;
+u_long icmp_pkt_count_tot = 0;
+// u_long in_icmp_pkt_count;
+// u_long out_icmp_pkt_count;
+// u_long local_icmp_pkt_count;
 
 // Data Structure Counters
+u_long pkt_buf_count = 0;
 u_long flow_hash_count = 0;
 u_long pkt_desc_count = 0;
 u_long circ_buf_L1_count = 0;
 u_long circ_buf_L2_count = 0;
 u_long circ_buf_L3_count = 0;
 u_long lazy_flow_hash_count = 0;
+u_long lazy_flow_hash_hit = 0;
 
 // Freelist Counters
-u_long tot_pkt_list_count = 0;
-u_long use_pkt_list_count = 0;
-u_long tot_flow_hash_list_count = 0;
-u_long use_flow_hash_list_count = 0;
-u_long use_pkt_desc_list_count = 0;
-u_long tot_pkt_desc_list_count = 0;
+u_long pkt_list_count_tot = 0;
+u_long pkt_list_count_use = 0;
+u_long flow_hash_list_count_tot = 0;
+u_long flow_hash_list_count_use = 0;
+u_long pkt_desc_list_count_tot = 0;
+u_long pkt_desc_list_count_use = 0;
 
 // Functionality Counters
-u_long installed_entry_count = 0;
-u_long expired_pkt_count = 0;
+u_long installed_entry_count_tot = 0;
+u_long installed_entry_count_tcp = 0;
+u_long installed_entry_count_udp = 0;
+u_long installed_entry_count_icmp = 0;
+
+u_long replied_flow_count_tot = 0;
+u_long replied_flow_count_tcp = 0;
+u_long replied_flow_count_udp = 0;
+u_long replied_flow_count_icmp = 0;
+
+u_long expired_pkt_count_tot = 0;
+u_long expired_pkt_count_tcp = 0;
+u_long expired_pkt_count_udp = 0;
+u_long expired_pkt_count_icmp = 0;
+#endif
 
 /* global pointer, the pcap info header */
 static pcap_t *pcap;
@@ -196,8 +210,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 	{
 		if (debug > 1)
 			fprintf(fp_stderr,
-					"Skipping packet %lu, not an IPv4 packet (version:%d)\n",
-					pkt_count, pip->ip_v);
+					"Skipping a packet, not an IPv4 packet (version:%d)\n", pip->ip_v);
 		return 0;
 	}
 
@@ -229,7 +242,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 		if ((ptcp = gettcp(pip, &plast)) != NULL)
 		{
 #ifdef DO_STATS
-			tot_tcp_pkt_count++;
+			tcp_pkt_count_tot++;
 #endif
 			pkt_handle(peth, pip, ptcp, plast, pckt_time);
 		}
@@ -241,7 +254,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 		if ((pudp = getudp(pip, &plast)) != NULL)
 		{
 #ifdef DO_STATS
-			tot_udp_pkt_count++;
+			udp_pkt_count_tot++;
 #endif
 			pkt_handle(peth, pip, pudp, plast, pckt_time);
 		}
@@ -253,7 +266,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 		if ((picmp = geticmp(pip, &plast)) != NULL)
 		{
 #ifdef DO_STATS
-			tot_icmp_pkt_count++;
+			icmp_pkt_count_tot++;
 #endif
 			pkt_handle(peth, pip, picmp, plast, pckt_time);
 		}
@@ -301,8 +314,10 @@ int main(int argc, char *argv[])
 	int tlen;
 	void *plast;
 	long int location = 0;
-	fp_log = fopen("log/stats.log", "w");
-	log_add_fp(fp_log, LOG_TRACE);
+	fp_log = fopen("log/log.log", "w");
+	fp_stats = fopen("log/stat.log", "w");
+
+	log_add_fp(fp_stats, LOG_TRACE);
 
 	printf("Capturing on the device: %s\n", RECV_INTF);
 
@@ -421,19 +436,10 @@ int main(int argc, char *argv[])
 	{
 		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
 #ifdef DO_STATS
-		if (pkt_count % 10 == 0)
+		if (pkt_count % 1 == 0)
 		{
-			log_trace("pkt_count: %lu, tot_tcp_pkt_count: %lu, tot_udp_pkt_count : % lu, tot_icmp_pkt_count : % lu, flow_hash_count : % lu, pkt_desc_count : % lu, circ_buf_L1_count : % lu, circ_buf_L2_count : % lu, circ_buf_L3_count : % lu, lazy_flow_hash_count : % lu, tot_pkt_list_count : % lu, use_pkt_list_count : % lu, tot_flow_hash_list_count : % lu, use_flow_hash_list_count : % lu, use_pkt_desc_list_count : % lu, tot_pkt_desc_list_count : % lu, installed_entry_count : % lu, expired_pkt_count : % lu ",
-					  pkt_count,
-					  tot_tcp_pkt_count, tot_udp_pkt_count, tot_icmp_pkt_count,
-					  flow_hash_count, pkt_desc_count,
-					  circ_buf_L1_count, circ_buf_L2_count, circ_buf_L3_count,
-					  lazy_flow_hash_count,
-					  tot_pkt_list_count, use_pkt_list_count,
-					  tot_flow_hash_list_count, use_flow_hash_list_count,
-					  use_pkt_desc_list_count, tot_pkt_desc_list_count,
-					  installed_entry_count,
-					  expired_pkt_count);
+			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, pkt_desc_count: %ld, circ_buf_L1_count: %ld, circ_buf_L2_count: %ld, circ_buf_L3_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, pkt_desc_list_count_tot: %ld, pkt_desc_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",
+					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, pkt_desc_count, circ_buf_L1_count, circ_buf_L2_count, circ_buf_L3_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, pkt_desc_list_count_tot, pkt_desc_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp);
 		}
 #endif
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));

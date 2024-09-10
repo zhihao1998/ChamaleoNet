@@ -252,6 +252,7 @@ int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_sh
 #define DO_STATS
 
 FILE *fp_log;
+FILE *fp_stats;
 
 typedef struct {
   va_list ap;
@@ -286,44 +287,57 @@ void log_log(int level, const char *file, int line, const char *fmt, ...);
 
 
 /* Statistic Variables */
-#define DO_STATS
 
 // Packet Counters
 u_long pkt_count;
 
-u_long tot_tcp_pkt_count;
+u_long tcp_pkt_count_tot;
 // u_long in_tcp_pkt_count;
 // u_long out_tcp_pkt_count;
 // u_long local_tcp_pkt_count;
 
-u_long tot_udp_pkt_count;
+u_long udp_pkt_count_tot;
 // u_long in_udp_pkt_count;
 // u_long out_udp_pkt_count;
 // u_long local_udp_pkt_count;
 
-u_long tot_icmp_pkt_count;
+u_long icmp_pkt_count_tot;
 // u_long in_icmp_pkt_count;
 // u_long out_icmp_pkt_count;
 // u_long local_icmp_pkt_count;
 
 // Data Structure Counters
+u_long pkt_buf_count;
 u_long flow_hash_count;
 u_long pkt_desc_count;
 u_long circ_buf_L1_count;
 u_long circ_buf_L2_count;
 u_long circ_buf_L3_count;
 u_long lazy_flow_hash_count;
+u_long lazy_flow_hash_hit;
 
 // Freelist Counters
-u_long tot_pkt_list_count;
-u_long use_pkt_list_count;
-u_long tot_flow_hash_list_count;
-u_long use_flow_hash_list_count;
-u_long use_pkt_desc_list_count;
-u_long tot_pkt_desc_list_count;
+u_long pkt_list_count_tot;
+u_long pkt_list_count_use;
+u_long flow_hash_list_count_tot;
+u_long flow_hash_list_count_use;
+u_long pkt_desc_list_count_tot;
+u_long pkt_desc_list_count_use;
 
 // Functionality Counters
-u_long installed_entry_count;
-u_long expired_pkt_count;
+u_long installed_entry_count_tot;
+u_long installed_entry_count_tcp;
+u_long installed_entry_count_udp;
+u_long installed_entry_count_icmp;
+
+u_long replied_flow_count_tot;
+u_long replied_flow_count_tcp;
+u_long replied_flow_count_udp;
+u_long replied_flow_count_icmp;
+
+u_long expired_pkt_count_tot;
+u_long expired_pkt_count_tcp;
+u_long expired_pkt_count_udp;
+u_long expired_pkt_count_icmp;
 
 

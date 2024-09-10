@@ -34,7 +34,7 @@ void *lazy_free_flow_hash(void *args)
             resp_time = flow_hash_ptr->resp_time;
             gettimeofday(&current_time, NULL);
             time_diff_us = tv_sub_2(current_time, resp_time);
-            
+
             /* if (cur_time – pkt_time) <= Timeout, sleeps for (Timeout - (cur_time – pkt_time)) */
             if (LAZY_FREEING_TIMEOUT >= time_diff_us)
             {
@@ -60,6 +60,10 @@ void *lazy_free_flow_hash(void *args)
                 fprintf(fp_log, "LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: %p, src: %s, dst: %s\n", flow_hash_ptr, ip_src_addr_print_buffer, ip_dst_addr_print_buffer);
             }
             FreeFlowHash(flow_hash_ptr);
+            
+#ifdef DO_STATS
+            flow_hash_count--;
+#endif
         }
     }
 }
