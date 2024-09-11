@@ -15,7 +15,7 @@
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
 // #define MAX_TCP_PACKETS 30
-#define MAX_TCP_PACKETS 360000
+#define MAX_TCP_PACKETS 10000000
 /* Each time the garbage collection is fired, it scans MAX_TCP_PACKETS_BURST tcp flows */
 // #define MAX_TCP_PACKETS_BURST (MAX_TCP_PACKETS / GARBAGE_SPLIT_RATIO)
 
@@ -31,11 +31,11 @@ Increase this number on high speed network will help ...*/
 /* connection records are stored in a hash table.  Buckets are linked	*/
 /* lists sorted by most recent access.					*/
 /* oughta be prime  and larger than MAX_TCP_PACKETS */
-#define HASH_TABLE_SIZE 2000000
+#define HASH_TABLE_SIZE 20000000
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
 #define TIMEOUT_LEVEL_NUM 3
-#define TIMEOUT_LEVEL_1 5000000
+#define TIMEOUT_LEVEL_1 100000
 #define TIMEOUT_LEVEL_2 50000  
 #define TIMEOUT_LEVEL_3 20000   
 
@@ -46,4 +46,6 @@ Increase this number on high speed network will help ...*/
 
 /* Interfaces to capture and send packets */
 #define RECV_INTF "veth251"
-#define SEND_INTF "veth251"
+#define SEND_INTF "veth1"
+
+#define LOG_BY_TIME

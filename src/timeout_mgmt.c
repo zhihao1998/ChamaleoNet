@@ -1,4 +1,6 @@
 #include "tsdn.h"
+static timeval start_time;
+static timeval end_time;
 
 /* timeout_mgmt thread */
 void *timeout_mgmt(void *args)
@@ -88,7 +90,6 @@ void *timeout_mgmt(void *args)
 
                 /* The packet descriptor and packet still exist. Start to clean. */
                 flow_hash_ptr = pkt_desc_ptr->flow_hash_ptr;
-                FreeFlowHash(flow_hash_ptr);
                 if (debug > 1)
                 {
                     char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
@@ -110,8 +111,18 @@ void *timeout_mgmt(void *args)
                 {
                     fprintf(fp_log, "TIMEOUT_MGMT: Error: Cannot send the packet!\n");
                 }
+                gettimeofday(&start_time, NULL);
                 FreePkt(pkt_desc_ptr->pkt_ptr);
                 FreePktDesc(pkt_desc_ptr);
+                FreeFlowHash(flow_hash_ptr);
+
+                gettimeofday(&end_time, NULL);
+                if (debug > 1)
+                {
+                    fprintf(fp_log, "TIMEOUT_MGMT: Packet free in %d us\n", tv_sub_2(end_time, start_time));
+                }
+                
+
 
 #ifdef DO_STATS
                 pkt_buf_count--;

@@ -212,6 +212,7 @@ pthread_mutex_t circ_buf_head_mutex_list[TIMEOUT_LEVEL_NUM];
 
 /* connection records are stored in a hash table.  */
 flow_hash_t **flow_hash_table;
+pthread_mutex_t flow_hash_mutex;
 
 flow_hash_t **lazy_flow_hash_buf;
 circular_buf_t *lazy_flow_hash_circ_buf;

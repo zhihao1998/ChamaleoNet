@@ -5,6 +5,7 @@ int search_count = 0;
 
 int num_ip_packets = -1;    /* how many packets we've allocated */
 ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
+u_long hash_table_size = HASH_TABLE_SIZE;
 
 Bool warn_MAX_ = TRUE;
 
@@ -68,17 +69,20 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
     CopyAddr(&pkt_in, pip, ptcp);
 
     /* grab the hash value (already computed by CopyAddr) */
-    hval = pkt_in.hash % HASH_TABLE_SIZE;
+    hval = pkt_in.hash % hash_table_size;
 
+    pthread_mutex_lock(&flow_hash_mutex);
     /* Search in the linked lists with the same hash value */
     for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
     {
         if (SameConn(&pkt_in, &flow_hash_ptr->addr_pair, pdir))
         {
             /* Found */
+            pthread_mutex_unlock(&flow_hash_mutex);
             return flow_hash_ptr;
         }
     }
+    pthread_mutex_unlock(&flow_hash_mutex);
     return NULL;
 }
 
@@ -115,30 +119,37 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
         return NULL;
     }
     /* Create entry for hash table */
-    hval = temp_pkt->addr_pair.hash % HASH_TABLE_SIZE;
+    hval = temp_pkt->addr_pair.hash % hash_table_size;
+    pthread_mutex_lock(&flow_hash_mutex);
+
     flow_hash_head_ptr = flow_hash_table[hval];
 
     temp_flow_hash_ptr = flow_hash_alloc();
     temp_flow_hash_ptr->addr_pair = temp_pkt->addr_pair;
     temp_flow_hash_ptr->pkt_desc_ptr = temp_pkt_desc_ptr;
     temp_flow_hash_ptr->pkt_desc_ptr_ptr = temp_pkt_desc_pp;
-    temp_flow_hash_ptr->prev = NULL;
-    temp_flow_hash_ptr->next = flow_hash_head_ptr;
     temp_flow_hash_ptr->lazy_pending = FALSE;
 
     if (flow_hash_head_ptr == NULL)
     {
         /* it is the first entry in the slot */
+        temp_flow_hash_ptr->prev = NULL;
+        temp_flow_hash_ptr->next = flow_hash_head_ptr;
         flow_hash_table[hval] = temp_flow_hash_ptr;
     }
     else
     {
-        /* it is not the first entry in the slot */
+        /* it is not the first entry in the slot, insert it to the head  */
         flow_hash_head_ptr->prev = temp_flow_hash_ptr;
+
+        temp_flow_hash_ptr->prev = NULL;
+        temp_flow_hash_ptr->next = flow_hash_head_ptr;
+        flow_hash_table[hval] = temp_flow_hash_ptr;
     }
 
     /* Store a pointer in packet descriptor */
     temp_pkt_desc_ptr->flow_hash_ptr = temp_flow_hash_ptr;
+    pthread_mutex_unlock(&flow_hash_mutex);
     return temp_flow_hash_ptr;
 }
 
@@ -155,14 +166,15 @@ void FreePktDesc(pkt_desc_t *pkt_desc_ptr)
 
 void FreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
-    if (flow_hash_ptr == NULL)
-    {
-        return;
-    }
+    
     hash hval;
     flow_hash_t *flow_hash_head_ptr;
 
-    hval = flow_hash_ptr->addr_pair.hash % HASH_TABLE_SIZE;
+    hval = flow_hash_ptr->addr_pair.hash % hash_table_size;
+    pthread_mutex_lock(&flow_hash_mutex);
+    
+    assert(flow_hash_table[hval] != NULL);
+    
     flow_hash_head_ptr = flow_hash_table[hval];
     if (flow_hash_ptr == flow_hash_table[hval])
     {
@@ -174,9 +186,13 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
     {
         /* it is the middle of the linked list */
         flow_hash_ptr->prev->next = flow_hash_ptr->next;
-        flow_hash_ptr->next->prev = flow_hash_ptr->prev;
+        if (flow_hash_ptr->next != NULL)
+        {
+            flow_hash_ptr->next->prev = flow_hash_ptr->prev;
+        }
         flow_hash_release(flow_hash_ptr);
     }
+    pthread_mutex_unlock(&flow_hash_mutex);
 }
 
 int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
@@ -314,6 +330,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
 
             /* TODO: should we lock this? */
             FreePkt(pkt_ptr);
+
             /* To handle the delay between the response packet is received and the flow rule is installed,
              * here we use a lazy-freeing strategy that put the hash table entry to be freed into another circular queue. */
             FreePktDesc(pkt_desc_ptr);
@@ -435,7 +452,8 @@ void trace_init(void)
     }
 
     /* initialize the hash table */
-    flow_hash_table = (flow_hash_t **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash_t *));
+    flow_hash_table = (flow_hash_t **)MallocZ(hash_table_size * sizeof(flow_hash_t *));
+    pthread_mutex_init(&flow_hash_mutex, NULL);
 
     /* initialize the circular buffer for lazy freeing */
     lazy_flow_hash_buf = (flow_hash_t **)MallocZ(MAX_TCP_PACKETS * sizeof(flow_hash_t *));

@@ -16,6 +16,7 @@ static void *callback_plast;
 struct pcap_pkthdr *callback_phdr;
 
 struct timeval current_time;
+struct timeval last_log_time;
 
 int debug = 3;
 
@@ -423,6 +424,7 @@ int main(int argc, char *argv[])
 	/* pkt_rx thread */
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
+	last_log_time = current_time;
 
 #ifdef PCAP_DEBUG
 	int i = 0;
@@ -436,8 +438,15 @@ int main(int argc, char *argv[])
 	{
 		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
 #ifdef DO_STATS
-		if (pkt_count % 1 == 0)
+
+#ifdef LOG_BY_TIME
+		if (tv_sub_2(current_time, last_log_time) > 10000)
 		{
+			last_log_time = current_time;
+#else
+		if (pkt_count % 10 == 0)
+		{
+#endif
 			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, pkt_desc_count: %ld, circ_buf_L1_count: %ld, circ_buf_L2_count: %ld, circ_buf_L3_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, pkt_desc_list_count_tot: %ld, pkt_desc_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",
 					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, pkt_desc_count, circ_buf_L1_count, circ_buf_L2_count, circ_buf_L3_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, pkt_desc_list_count_tot, pkt_desc_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp);
 		}
