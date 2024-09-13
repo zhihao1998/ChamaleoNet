@@ -60,6 +60,8 @@ void *lazy_free_flow_hash(void *args)
                 fprintf(fp_log, "LAZY_FREE_FLOW_HASH: Cleaning flow_hash_ptr: %p, src: %s, dst: %s\n", flow_hash_ptr, ip_src_addr_print_buffer, ip_dst_addr_print_buffer);
             }
             FreeFlowHash(flow_hash_ptr);
+            FreePkt(flow_hash_ptr->pkt_desc_ptr->pkt_ptr);
+            FreePktDesc(flow_hash_ptr->pkt_desc_ptr);
             
 #ifdef DO_STATS
             flow_hash_count--;

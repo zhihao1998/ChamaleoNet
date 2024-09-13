@@ -259,7 +259,7 @@ typedef struct {
   va_list ap;
   const char *fmt;
   const char *file;
-  struct tm *time;
+  struct timeval *time;
   void *udata;
   int line;
   int level;

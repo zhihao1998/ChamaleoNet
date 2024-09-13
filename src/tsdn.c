@@ -440,11 +440,11 @@ int main(int argc, char *argv[])
 #ifdef DO_STATS
 
 #ifdef LOG_BY_TIME
-		if (tv_sub_2(current_time, last_log_time) > 10000)
+		if (tv_sub_2(current_time, last_log_time) > 100000)
 		{
 			last_log_time = current_time;
 #else
-		if (pkt_count % 10 == 0)
+		if (pkt_count % 100 == 0)
 		{
 #endif
 			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, pkt_desc_count: %ld, circ_buf_L1_count: %ld, circ_buf_L2_count: %ld, circ_buf_L3_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, pkt_desc_list_count_tot: %ld, pkt_desc_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",

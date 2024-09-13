@@ -70,8 +70,9 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
 
     /* grab the hash value (already computed by CopyAddr) */
     hval = pkt_in.hash % hash_table_size;
-
+#ifdef HASH_TABLE_LOCK
     pthread_mutex_lock(&flow_hash_mutex);
+#endif
     /* Search in the linked lists with the same hash value */
     for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
     {
@@ -82,7 +83,9 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
             return flow_hash_ptr;
         }
     }
+#ifdef HASH_TABLE_LOCK
     pthread_mutex_unlock(&flow_hash_mutex);
+#endif
     return NULL;
 }
 
@@ -120,8 +123,9 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     }
     /* Create entry for hash table */
     hval = temp_pkt->addr_pair.hash % hash_table_size;
+#ifdef HASH_TABLE_LOCK
     pthread_mutex_lock(&flow_hash_mutex);
-
+#endif
     flow_hash_head_ptr = flow_hash_table[hval];
 
     temp_flow_hash_ptr = flow_hash_alloc();
@@ -149,7 +153,9 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
 
     /* Store a pointer in packet descriptor */
     temp_pkt_desc_ptr->flow_hash_ptr = temp_flow_hash_ptr;
+#ifdef HASH_TABLE_LOCK
     pthread_mutex_unlock(&flow_hash_mutex);
+#endif
     return temp_flow_hash_ptr;
 }
 
@@ -166,15 +172,17 @@ void FreePktDesc(pkt_desc_t *pkt_desc_ptr)
 
 void FreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
-    
+
     hash hval;
     flow_hash_t *flow_hash_head_ptr;
 
     hval = flow_hash_ptr->addr_pair.hash % hash_table_size;
+#ifdef HASH_TABLE_LOCK
     pthread_mutex_lock(&flow_hash_mutex);
-    
+#endif
+
     assert(flow_hash_table[hval] != NULL);
-    
+
     flow_hash_head_ptr = flow_hash_table[hval];
     if (flow_hash_ptr == flow_hash_table[hval])
     {
@@ -192,7 +200,9 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
         }
         flow_hash_release(flow_hash_ptr);
     }
+#ifdef HASH_TABLE_LOCK
     pthread_mutex_unlock(&flow_hash_mutex);
+#endif
 }
 
 int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
@@ -327,15 +337,8 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             }
 
             LazyFreeFlowHash(flow_hash_ptr);
+            *(flow_hash_ptr->pkt_desc_ptr_ptr) = NULL;
 
-            /* TODO: should we lock this? */
-            FreePkt(pkt_ptr);
-
-            /* To handle the delay between the response packet is received and the flow rule is installed,
-             * here we use a lazy-freeing strategy that put the hash table entry to be freed into another circular queue. */
-            FreePktDesc(pkt_desc_ptr);
-            // FreeFlowHash(flow_hash_ptr);
-            // pthread_mutex_unlock(&circ_buf_head_mutex_list[timeout_level]);
 #ifdef DO_STATS
             replied_flow_count_tot++;
             switch (timeout_level)
@@ -406,21 +409,21 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             pthread_cond_signal(&(circ_buf_cond_list[timeout_level]));
         }
 
-        if (debug > 1)
-        {
-            inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-            inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-            fprintf(fp_log, "PKT_RX: new request pkt stored: from %s:%d to %s:%d with %d bytes of raw_packet %s at %ld.%5ld\n",
-                    ip_src_addr_print_buffer,
-                    ntohs(flow_hash_ptr->addr_pair.a_port),
-                    ip_dst_addr_print_buffer,
-                    ntohs(flow_hash_ptr->addr_pair.b_port),
-                    flow_hash_ptr->pkt_desc_ptr->pkt_ptr->pkt_len,
-                    ether_ntoa((struct ether_addr *)flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt),
-                    // inet_ntoa(*(struct in_addr *)(flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt + 26)),
-                    flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec,
-                    flow_hash_ptr->pkt_desc_ptr->recv_time.tv_usec);
-        }
+        // if (debug > 1)
+        // {
+        //     inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
+        //     inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
+        //     fprintf(fp_log, "PKT_RX: new request pkt stored: from %s:%d to %s:%d with %d bytes of raw_packet %s at %ld.%5ld\n",
+        //             ip_src_addr_print_buffer,
+        //             ntohs(flow_hash_ptr->addr_pair.a_port),
+        //             ip_dst_addr_print_buffer,
+        //             ntohs(flow_hash_ptr->addr_pair.b_port),
+        //             flow_hash_ptr->pkt_desc_ptr->pkt_ptr->pkt_len,
+        //             ether_ntoa((struct ether_addr *)flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt),
+        //             // inet_ntoa(*(struct in_addr *)(flow_hash_ptr->pkt_desc_ptr->pkt_ptr->raw_pkt + 26)),
+        //             flow_hash_ptr->pkt_desc_ptr->recv_time.tv_sec,
+        //             flow_hash_ptr->pkt_desc_ptr->recv_time.tv_usec);
+        // }
     }
 }
 
@@ -453,7 +456,9 @@ void trace_init(void)
 
     /* initialize the hash table */
     flow_hash_table = (flow_hash_t **)MallocZ(hash_table_size * sizeof(flow_hash_t *));
+    #ifdef HASH_TABLE_LOCK
     pthread_mutex_init(&flow_hash_mutex, NULL);
+    #endif
 
     /* initialize the circular buffer for lazy freeing */
     lazy_flow_hash_buf = (flow_hash_t **)MallocZ(MAX_TCP_PACKETS * sizeof(flow_hash_t *));
