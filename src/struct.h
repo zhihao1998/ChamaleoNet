@@ -21,9 +21,6 @@ typedef struct ipaddr
   union
   {
     struct in_addr ip4;
-#ifdef SUPPORT_IPV6
-    struct in6_addr ip6;
-#endif
   } un;
 } ipaddr;
 
@@ -58,6 +55,9 @@ typedef struct ip_packet
 
   /* location in the pkt_arr array */
   int loc_pkt_arr;
+
+  /* Pointer to the hash table entry */
+  struct flow_hash_t *flow_hash_ptr;
 } ip_packet;
 
 /* incoming/outgoing based on Ethernet MAC addresses */
@@ -80,12 +80,6 @@ enum ip_direction {
 
 typedef struct flow_hash_t flow_hash_t;
 
-typedef struct pkt_desc_t {
-  ip_packet * pkt_ptr;
-  timeval recv_time;
-  flow_hash_t *flow_hash_ptr;
-} pkt_desc_t;
-
 typedef struct circular_buf_t {
   void ** buf_space;
 	size_t head;
@@ -98,22 +92,12 @@ typedef struct flow_hash_t
   flow_addrblock addr_pair;
   struct flow_hash_t*prev;
   struct flow_hash_t*next;
-  pkt_desc_t *pkt_desc_ptr;
-  pkt_desc_t **pkt_desc_ptr_ptr;
   Bool lazy_pending;
+  timeval recv_time;
   timeval resp_time;
+  ip_packet *ppkt;
 } flow_hash_t;
 
-
-typedef struct timeout_mgmt_args
-{
-  int timeout;
-  circular_buf_t *circ_buf;
-  pthread_mutex_t *g_tMutex_ptr;
-  pthread_cond_t *cond_ptr;
-  pthread_mutex_t *head_mutex_ptr;
-  u_long *circ_buf_count;
-}timeout_mgmt_args;
 
 typedef struct table_entry_t
 {

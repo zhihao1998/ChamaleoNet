@@ -1,6 +1,7 @@
+
 /* Define how often garbage collection scans the whole flow table */
 /* Historically, this is set to half TCP_SINGLETON_TIME */
-#define GARBAGE_PERIOD (TCP_SINGLETON_TIME/2)
+#define GARBAGE_PERIOD 20000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
@@ -14,8 +15,8 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-// #define MAX_TCP_PACKETS 30
-#define MAX_TCP_PACKETS 10000000
+
+#define MAX_TCP_PACKETS 100000
 /* Each time the garbage collection is fired, it scans MAX_TCP_PACKETS_BURST tcp flows */
 // #define MAX_TCP_PACKETS_BURST (MAX_TCP_PACKETS / GARBAGE_SPLIT_RATIO)
 
@@ -35,7 +36,7 @@ Increase this number on high speed network will help ...*/
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
 #define TIMEOUT_LEVEL_NUM 3
-#define TIMEOUT_LEVEL_1 50000
+#define TIMEOUT_LEVEL_1 20000
 #define TIMEOUT_LEVEL_2 50000  
 #define TIMEOUT_LEVEL_3 20000   
 

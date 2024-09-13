@@ -15,6 +15,8 @@ static void *callback_plast;
 
 struct pcap_pkthdr *callback_phdr;
 
+/* Timer for check expired packet (timeout mechanism) */
+struct timeval last_cleaned_time;
 struct timeval current_time;
 struct timeval last_log_time;
 
@@ -41,10 +43,6 @@ u_long icmp_pkt_count_tot = 0;
 // Data Structure Counters
 u_long pkt_buf_count = 0;
 u_long flow_hash_count = 0;
-u_long pkt_desc_count = 0;
-u_long circ_buf_L1_count = 0;
-u_long circ_buf_L2_count = 0;
-u_long circ_buf_L3_count = 0;
 u_long lazy_flow_hash_count = 0;
 u_long lazy_flow_hash_hit = 0;
 
@@ -53,8 +51,6 @@ u_long pkt_list_count_tot = 0;
 u_long pkt_list_count_use = 0;
 u_long flow_hash_list_count_tot = 0;
 u_long flow_hash_list_count_use = 0;
-u_long pkt_desc_list_count_tot = 0;
-u_long pkt_desc_list_count_use = 0;
 
 // Functionality Counters
 u_long installed_entry_count_tot = 0;
@@ -88,7 +84,6 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	int iplen;
 	static int offset = -1;
 
-	timeval current_time;
 	int time_diff;
 
 	iplen = phdr->caplen;
@@ -319,6 +314,8 @@ int main(int argc, char *argv[])
 	fp_stats = fopen("log/stat.log", "w");
 
 	log_add_fp(fp_stats, LOG_TRACE);
+	// log_add_fp(fp_log, LOG_DEBUG);
+	log_debug("Starting TSDN");
 
 	printf("Capturing on the device: %s\n", RECV_INTF);
 
@@ -362,57 +359,6 @@ int main(int argc, char *argv[])
 
 	ip_buf = MallocZ(IP_MAXPACKET);
 
-	/* Use three threads to manage three levels of timeout */
-	/* timeout_level_1 thread */
-	pthread_t timeout_level_1_thread;
-	timeout_mgmt_args timeout_level_1_args = {TIMEOUT_LEVEL_1,
-											  circ_buf_list[0],
-											  &circ_buf_mutex_list[0],
-											  &circ_buf_cond_list[0],
-											  &circ_buf_head_mutex_list[0],
-											  &circ_buf_L1_count};
-	if (pthread_create(&timeout_level_1_thread, NULL, timeout_mgmt, (void *)&timeout_level_1_args))
-	{
-		fprintf(stderr, "Error creating timeout_level_1 thread\n");
-		return 1;
-	}
-
-	/* timeout_level_2 thread */
-	pthread_t timeout_level_2_thread;
-	timeout_mgmt_args timeout_level_2_args = {TIMEOUT_LEVEL_2,
-											  circ_buf_list[1],
-											  &circ_buf_mutex_list[1],
-											  &circ_buf_cond_list[1],
-											  &circ_buf_head_mutex_list[1],
-											  &circ_buf_L2_count};
-	if (pthread_create(&timeout_level_2_thread, NULL, timeout_mgmt, (void *)&timeout_level_2_args))
-	{
-		fprintf(stderr, "Error creating timeout_level_2 thread\n");
-		return 1;
-	}
-
-	/* timeout_level_3 thread */
-	pthread_t timeout_level_3_thread;
-	timeout_mgmt_args timeout_level_3_args = {TIMEOUT_LEVEL_3,
-											  circ_buf_list[2],
-											  &circ_buf_mutex_list[2],
-											  &circ_buf_cond_list[2],
-											  &circ_buf_head_mutex_list[2],
-											  &circ_buf_L3_count};
-	if (pthread_create(&timeout_level_3_thread, NULL, timeout_mgmt, (void *)&timeout_level_3_args))
-	{
-		fprintf(stderr, "Error creating timeout_level_3 thread\n");
-		return 1;
-	}
-
-	/* lazy freeing thread */
-	pthread_t lazy_free_flow_hash_thread;
-	if (pthread_create(&lazy_free_flow_hash_thread, NULL, lazy_free_flow_hash, NULL))
-	{
-		fprintf(stderr, "Error creating lazy_free_flow_hash thread\n");
-		return 1;
-	}
-
 	/* install P4 table entry thread */
 	pthread_t entry_install_thread;
 	if (pthread_create(&entry_install_thread, NULL, install_drop_entry, NULL))
@@ -421,19 +367,10 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	/* pkt_rx thread */
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
-	last_log_time = current_time;
+	last_cleaned_time = last_log_time = current_time;
 
-#ifdef PCAP_DEBUG
-	int i = 0;
-	do
-	{
-		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
-		i++;
-	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0) && i < 100);
-#else
 	do
 	{
 		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
@@ -447,21 +384,12 @@ int main(int argc, char *argv[])
 		if (pkt_count % 100 == 0)
 		{
 #endif
-			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, pkt_desc_count: %ld, circ_buf_L1_count: %ld, circ_buf_L2_count: %ld, circ_buf_L3_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, pkt_desc_list_count_tot: %ld, pkt_desc_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",
-					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, pkt_desc_count, circ_buf_L1_count, circ_buf_L2_count, circ_buf_L3_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, pkt_desc_list_count_tot, pkt_desc_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp);
+			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",
+					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp);
 		}
 #endif
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
-#endif
 
-	/* */
-
-	/* free the circular buffer */
-	for (int i = 0; i < TIMEOUT_LEVEL_NUM; i++)
-	{
-		free(circ_buf_list[i]->buf_space);
-		free(circ_buf_list[i]);
-	}
 
 	/* free the flow hash table */
 	for (int i = 0; i < HASH_TABLE_SIZE; i++)
@@ -475,31 +403,9 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/* free the lazy flow hash table */
-	for (int i = 0; i < HASH_TABLE_SIZE; i++)
-	{
-		flow_hash_t *flow_hash_ptr = lazy_flow_hash_buf[i];
-		while (flow_hash_ptr != NULL)
-		{
-			flow_hash_t *temp = flow_hash_ptr;
-			flow_hash_ptr = flow_hash_ptr->next;
-			free(temp);
-		}
-	}
 
 	/* Release the mutex */
-	for (int i = 0; i < TIMEOUT_LEVEL_NUM; i++)
-	{
-		pthread_mutex_destroy(&circ_buf_mutex_list[i]);
-		pthread_cond_destroy(&circ_buf_cond_list[i]);
-	}
-	pthread_mutex_destroy(&lazy_flow_hash_mutex);
-	pthread_cond_destroy(&lazy_flow_hash_cond);
 
-	pthread_cancel(timeout_level_1_thread);
-	pthread_cancel(timeout_level_2_thread);
-	pthread_cancel(timeout_level_3_thread);
-	pthread_cancel(lazy_free_flow_hash_thread);
 	pthread_cancel(entry_install_thread);
 
 	bfrt_grpc_destroy();
@@ -507,28 +413,4 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void *
-MallocZ(int nbytes)
-{
-	char *ptr;
 
-	// ptr = malloc(nbytes);
-	ptr = calloc(1, nbytes);
-	if (ptr == NULL)
-	{
-		fprintf(fp_stderr, "Malloc failed, fatal: %s\n", strerror(errno));
-		fprintf(fp_stderr,
-				"when memory allocation fails, it's either because:\n"
-				"1) You're out of swap space, talk to your local "
-				"sysadmin about making more\n"
-				"(look for system commands 'swap' or 'swapon' for quick fixes)\n"
-				"2) The amount of memory that your OS gives each process "
-				"is too little\n"
-				"That's a system configuration issue that you'll need to discuss\n"
-				"with the system administrator\n");
-		exit(EXIT_FAILURE);
-	}
-
-	// memset(ptr, 0, nbytes); /* BZERO */
-	return (ptr);
-}

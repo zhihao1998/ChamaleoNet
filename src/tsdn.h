@@ -141,20 +141,9 @@ struct pkt_list_elem
   ip_packet *ppkt;
 };
 
-struct pkt_desc_list_elem
-{
-  struct pkt_desc_list_elem *next;
-  struct pkt_desc_list_elem *prev;
-  pkt_desc_t *pkt_desc_ptr;
-};
-
 ip_packet *pkt_alloc(void);
 void pkt_release(ip_packet *relesased_ip_packet);
 
-
-/* Pkt descriptor */
-pkt_desc_t *pkt_desc_alloc();
-void pkt_desc_release(pkt_desc_t *rel_pkt_desc);
 
 /* Flow hash table */
 flow_hash_t *flow_hash_alloc();
@@ -198,26 +187,9 @@ struct ifreq if_idx;
 struct sockaddr_ll socket_address;
 char ifName[IFNAMSIZ];
 
-/* Thread Operation Function */
-void *timeout_mgmt(void *args);
-void *lazy_free_flow_hash(void *args);
-
-/* Global structure for circular buffer and locks */
-pthread_mutex_t circ_buf_mutex_list[TIMEOUT_LEVEL_NUM];
-pthread_cond_t circ_buf_cond_list[TIMEOUT_LEVEL_NUM];
-pkt_desc_t **pkt_desc_buf_list[TIMEOUT_LEVEL_NUM];
-circular_buf_t *circ_buf_list[TIMEOUT_LEVEL_NUM];
-
-pthread_mutex_t circ_buf_head_mutex_list[TIMEOUT_LEVEL_NUM];
 
 /* connection records are stored in a hash table.  */
 flow_hash_t **flow_hash_table;
-pthread_mutex_t flow_hash_mutex;
-
-flow_hash_t **lazy_flow_hash_buf;
-circular_buf_t *lazy_flow_hash_circ_buf;
-pthread_mutex_t lazy_flow_hash_mutex;
-pthread_cond_t lazy_flow_hash_cond;
 
 /*
  * File Operations
@@ -235,9 +207,9 @@ void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr);
 int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2);
 int SameConn(flow_addrblock *ppkta1, flow_addrblock *ppkta2, int *pdir);
 void FreePkt(ip_packet *ppkt_temp);
-void FreePktDesc(pkt_desc_t *pkt_desc_ptr);
 void FreeFlowHash(flow_hash_t *flow_hash_ptr);
-int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr);
+
+void check_timeout_periodic();
 
 /* Tofino Interaction */
 
@@ -310,10 +282,6 @@ u_long icmp_pkt_count_tot;
 // Data Structure Counters
 u_long pkt_buf_count;
 u_long flow_hash_count;
-u_long pkt_desc_count;
-u_long circ_buf_L1_count;
-u_long circ_buf_L2_count;
-u_long circ_buf_L3_count;
 u_long lazy_flow_hash_count;
 u_long lazy_flow_hash_hit;
 
@@ -322,8 +290,6 @@ u_long pkt_list_count_tot;
 u_long pkt_list_count_use;
 u_long flow_hash_list_count_tot;
 u_long flow_hash_list_count_use;
-u_long pkt_desc_list_count_tot;
-u_long pkt_desc_list_count_use;
 
 // Functionality Counters
 u_long installed_entry_count_tot;
@@ -341,4 +307,8 @@ u_long expired_pkt_count_tcp;
 u_long expired_pkt_count_udp;
 u_long expired_pkt_count_icmp;
 
+
+extern timeval current_time;
+extern timeval last_log_time;
+extern timeval last_cleaned_time;
 
