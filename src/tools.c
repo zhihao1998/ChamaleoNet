@@ -387,7 +387,7 @@ int SendPkt(char *sendbuf, int tx_len)
      * Because the capturing and sending share the same interface, 
      * the Ethernet Type should be different to avoid the loopback,
      * which is done through the BPFfilter.*/
-    eh->ether_type = htons(ETH_P_IP + 1);
+    // eh->ether_type = htons(ETH_P_IP + 1);
 
 	/* Send packet */
 	if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) != -1)

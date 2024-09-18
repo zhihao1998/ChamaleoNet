@@ -1,14 +1,14 @@
 
 /* Define how often garbage collection scans the whole flow table */
 /* Historically, this is set to half TCP_SINGLETON_TIME */
-#define GARBAGE_PERIOD 20000
+#define GARBAGE_PERIOD 5000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
  but the workload is done in GARBAGE_SPLIT_RATIO times
  IMPORTANT: it must be a divisor of GARBAGE_PERIOD,
  MAX_TCP_PACKETS and MAX_UDP_PAIRS  */
-#define GARBAGE_SPLIT_RATIO 10000
+#define GARBAGE_SPLIT_RATIO 25000
 
 /* Define the interval for garbage collection routine to be fired */
 // #define GARBAGE_FIRE_TIME (GARBAGE_PERIOD/GARBAGE_SPLIT_RATIO)  
@@ -44,6 +44,9 @@ Increase this number on high speed network will help ...*/
 
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100
+
+/* Snap Length for libpcap */
+#define SNAPLEN 2000
 
 /* Interfaces to capture and send packets */
 #define RECV_INTF "veth251"

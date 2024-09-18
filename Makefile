@@ -76,6 +76,7 @@ clean:
 	@rm -f $(OBJ_PATH)/*
 	@rm -f $(DBG_PATH)/*
 	@rm -f $(PCAP_PATH)/*
+	@rm -f callgrind.out.*
 
 
 .PHONY: p4clean

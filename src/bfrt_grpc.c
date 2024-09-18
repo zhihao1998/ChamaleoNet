@@ -4,6 +4,8 @@ static PyObject *pModule, *pClass, *pInstance;
 static table_entry_t **p4_entry_buf;
 static circular_buf_t *p4_entry_circ_buf;
 static table_entry_t *temp_table_entry_ptr;
+static pthread_mutex_t entry_install_mutex;
+static pthread_cond_t entry_install_cond;
 
 int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol)
 {
@@ -19,6 +21,7 @@ int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_sh
 		fprintf(fp_log, "Error: Circular buffer is full\n");
 		return -1;
 	}
+	pthread_cond_signal(&entry_install_cond);
 	return 0;
 }
 
@@ -31,9 +34,23 @@ void *install_drop_entry(void *args)
 	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 	// bfrt_grpc_init();
 	// PyGILState_STATE ret = PyGILState_Ensure();
+	pthread_mutex_init(&entry_install_mutex, NULL);
+	pthread_cond_init(&entry_install_cond, NULL);
+
+	while (circular_buf_empty(p4_entry_circ_buf))
+	{
+		fprintf(fp_log, "Waiting for drop entry\n");
+		pthread_cond_wait(&entry_install_cond, &entry_install_mutex);
+	}
 
 	while (1)
 	{
+		if (circular_buf_empty(p4_entry_circ_buf))
+		{
+			pthread_cond_wait(&entry_install_cond, &entry_install_mutex);
+		}
+		fprintf(fp_log, "Installing drop entry\n");
+
 		/* Check the next timeout */
 		if (circular_buf_get(p4_entry_circ_buf, &buf_slot) != -1)
 		{

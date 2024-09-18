@@ -13,6 +13,9 @@ static char *eth_buf;
 static char *ip_buf; /* [IP_MAXPACKET] */
 static void *callback_plast;
 
+/* Buffer some packets of tcpdump to avoid packet loss */
+circular_buf_t *pkt_buf;
+
 struct pcap_pkthdr *callback_phdr;
 
 /* Timer for check expired packet (timeout mechanism) */
@@ -83,8 +86,6 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	int type;
 	int iplen;
 	static int offset = -1;
-
-	int time_diff;
 
 	iplen = phdr->caplen;
 	if (iplen > IP_MAXPACKET)
@@ -357,6 +358,18 @@ int main(int argc, char *argv[])
 		return (2);
 	}
 
+	if (pcap_set_buffer_size(pcap, 2000000000) == -1)
+	{
+		fprintf(stderr, "Error setting buffer size\n");
+		return (2);
+	}
+
+	// if (pcap_set_snaplen(pcap, 65535) == -1)
+	// {
+	// 	fprintf(stderr, "Error setting snaplen\n");
+	// 	return (2);
+	// }
+
 	ip_buf = MallocZ(IP_MAXPACKET);
 
 	/* install P4 table entry thread */
@@ -371,25 +384,29 @@ int main(int argc, char *argv[])
 						&plast);
 	last_cleaned_time = last_log_time = current_time;
 
+	struct timeval start_time, end_time;
+	start_time = current_time;
+
 	do
 	{
 		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
+
 #ifdef DO_STATS
 
-#ifdef LOG_BY_TIME
-		if (tv_sub_2(current_time, last_log_time) > 100000)
+		if (tv_sub_2(current_time, last_log_time) > 10000)
 		{
 			last_log_time = current_time;
-#else
-		if (pkt_count % 100 == 0)
-		{
-#endif
 			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",
 					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp);
 		}
+		if (pkt_count % 1000 == 0)
+		{
+			gettimeofday(&end_time, NULL);
+			log_trace("sampled at %d, in avg cost %.2f us", pkt_count, tv_sub_2(end_time, start_time) / 1000.0);
+			start_time = end_time;
+		}
 #endif
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
-
 
 	/* free the flow hash table */
 	for (int i = 0; i < HASH_TABLE_SIZE; i++)
@@ -403,7 +420,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-
 	/* Release the mutex */
 
 	pthread_cancel(entry_install_thread);
@@ -412,5 +428,3 @@ int main(int argc, char *argv[])
 	fclose(fp_log);
 	return 0;
 }
-
-

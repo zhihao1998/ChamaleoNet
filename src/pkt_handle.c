@@ -76,29 +76,23 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
     {
         /* Do the expired packet checking */
         last_cleaned_time = current_time;
-        struct timeval start_time, end_time;
-        gettimeofday(&start_time, NULL);
         check_timeout_periodic();
-        gettimeofday(&end_time, NULL);
-        if (debug > 1)
-        {
-            log_debug("check_timeout_periodic: cost %d us", tv_sub_2(end_time, start_time));
-        }
     }
     return NULL;
 }
 
 void check_timeout_periodic()
 {
-    int ix, tot_pkt = 0, elapsed_pkt = 0;
+    int ix, idx, tot_pkt = 0, elapsed_pkt = 0, over_elapsed_pkt = 0;
     double total_elapsed_time = 0.0;
     int elapsed_time = 0;
 
     ip_packet *ppkt;
     // for (ix = pkt_index; ix < MAX_TCP_PACKETS; ix += GARBAGE_SPLIT_RATIO)
-    for (ix = 0; ix < MAX_TCP_PACKETS; ix++)
+    for (ix = pkt_index; ix < pkt_index + GARBAGE_SPLIT_RATIO; ix++)
     {
-        ppkt = pkt_arr[ix];
+        idx = ix % MAX_TCP_PACKETS;
+        ppkt = pkt_arr[idx];
         if (ppkt == NULL)
         {
             continue;
@@ -109,6 +103,10 @@ void check_timeout_periodic()
 
         if (elapsed_time > TIMEOUT_LEVEL_1)
         {
+            if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
+            {
+                fprintf(fp_log, "Error: Cannot send the packet!\n");
+            }
             FreeFlowHash(ppkt->flow_hash_ptr);
             FreePkt(ppkt);
 #ifdef DO_STATS
@@ -116,15 +114,36 @@ void check_timeout_periodic()
             pkt_buf_count--;
             flow_hash_count--;
 #endif
-            pkt_arr[ix] = NULL;
+            pkt_arr[idx] = NULL;
+            over_elapsed_pkt++;
+            total_elapsed_time += elapsed_time;
+        }
+
+        else if (elapsed_time == TIMEOUT_LEVEL_1)
+        {
+            if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
+            {
+                fprintf(fp_log, "Error: Cannot send the packet!\n");
+            }
+            FreeFlowHash(ppkt->flow_hash_ptr);
+            FreePkt(ppkt);
+#ifdef DO_STATS
+            expired_pkt_count_tot++;
+            pkt_buf_count--;
+            flow_hash_count--;
+#endif
+            pkt_arr[idx] = NULL;
             elapsed_pkt++;
             total_elapsed_time += elapsed_time;
         }
     }
-
-    log_debug("check_timeout_periodic: %d/%d packets are expired, average delay: %.6f us", elapsed_pkt, tot_pkt, (total_elapsed_time / elapsed_pkt - TIMEOUT_LEVEL_1));
+    if (elapsed_pkt > 0)
+    {
+        log_debug("check_timeout_periodic: %d/%d/%d over/exact/total, timeout_bias: %.2f us",
+                  over_elapsed_pkt, elapsed_pkt, tot_pkt, (total_elapsed_time / (over_elapsed_pkt + elapsed_pkt) - TIMEOUT_LEVEL_1));
+    }
     /* Increasing starting index for the next function call */
-    pkt_index = (pkt_index + 1) % GARBAGE_SPLIT_RATIO;
+    pkt_index = (pkt_index + GARBAGE_SPLIT_RATIO) % MAX_TCP_PACKETS;
 }
 
 static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
@@ -136,14 +155,8 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
 
     /* Buffer packet */
     temp_ppkt = NewPkt(peth, pip, ptcp, plast, pckt_time);
-    if (temp_ppkt == NULL) /* not enough memory to store the new flow */
-    {
-        if (debug > 0)
-        {
-            log_debug("** out of memory when buffering packet!");
-        }
-        return (NULL);
-    }
+    assert(temp_ppkt != NULL);
+
     /* Create entry for hash table */
     hval = temp_ppkt->addr_pair.hash % HASH_TABLE_SIZE;
     flow_hash_head_ptr = flow_hash_table[hval];
@@ -290,10 +303,12 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         /* Reversed direction of this packet, probably a response */
         else if (dir == S2C)
         {
-            
+
             LazyFreeFlowHash(flow_hash_ptr);
 
             /* Install Flow Entry */
+            timeval start_time, end_time;
+            gettimeofday(&start_time, NULL);
             if (try_install_drop_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
                                        flow_hash_ptr->addr_pair.b_address.un.ip4,
                                        flow_hash_ptr->addr_pair.a_port,
@@ -303,6 +318,8 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                 log_debug("Error: Failed to install flow entry");
                 return -1;
             }
+            gettimeofday(&end_time, NULL);
+            log_debug("try_install_drop_entry: cost %d us", tv_sub_2(end_time, start_time));
 
 #ifdef DO_STATS
             replied_flow_count_tot++;
