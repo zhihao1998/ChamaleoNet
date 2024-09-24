@@ -11,3 +11,5 @@
 /p4/log
 */__pycache__
 /log
+/.venv
+

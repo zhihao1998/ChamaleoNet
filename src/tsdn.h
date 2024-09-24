@@ -24,6 +24,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <time.h>
+#include <signal.h>
 
 #include "struct.h"
 #include "param.h"
@@ -90,20 +91,18 @@ extern int debug;
 
 #define PCAP_DLT_EN10MB 1 /* Ethernet (10Mb) */
 
-struct pcap_pkthdr pcap_current_hdr;
-unsigned char *pcap_current_buf;
-
 #define PHYS_ETHER 1
 
 void InitGlobalArrays(void);
 
 /* Packet handle realated */
-int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time);
+int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast);
 struct tcphdr *gettcp(struct ip *pip, void **pplast);
 struct udphdr *getudp(struct ip *pip, void **pplast);
 struct icmphdr *geticmp(struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
 void trace_init(void);
+void trace_cleanup(void);
 
 
 
@@ -210,13 +209,14 @@ void FreePkt(ip_packet *ppkt_temp);
 void FreeFlowHash(flow_hash_t *flow_hash_ptr);
 
 void check_timeout_periodic();
+void check_timeout_lazy();
 
 /* Tofino Interaction */
 
 int bfrt_tcp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port);
 int bfrt_udp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port);
 int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip);
-void bfrt_grpc_destroy();
+int bfrt_grpc_destroy();
 void bfrt_grpc_init();
 void *install_drop_entry(void *args);
 int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
@@ -310,5 +310,6 @@ u_long expired_pkt_count_icmp;
 
 extern timeval current_time;
 extern timeval last_log_time;
-extern timeval last_cleaned_time;
+extern timeval last_pkt_cleaned_time;
+extern timeval last_hash_cleaned_time;
 

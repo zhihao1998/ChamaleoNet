@@ -94,7 +94,7 @@ typedef struct flow_hash_t
   struct flow_hash_t*next;
   Bool lazy_pending;
   timeval recv_time;
-  timeval resp_time;
+  timeval last_pkt_time;
   ip_packet *ppkt;
 } flow_hash_t;
 

@@ -137,17 +137,22 @@ void bfrt_grpc_init()
 	bfrt_clear_tables();
 }
 
-void bfrt_grpc_destroy()
+int bfrt_grpc_destroy()
 {
 	/* Clean up */
-	assert(pInstance != NULL);
-	assert(pClass != NULL);
-	assert(pModule != NULL);
+	if (pInstance == NULL || pClass == NULL || pModule == NULL)
+	{
+		return -1;
+	}
+	// assert(pInstance != NULL);
+	// assert(pClass != NULL);
+	// assert(pModule != NULL);
 
 	Py_DECREF(pInstance);
 	Py_DECREF(pClass);
 	Py_DECREF(pModule);
 	Py_Finalize();
+	return 0;
 }
 
 /* TCP Flow Table */

@@ -6,9 +6,13 @@ int search_count = 0;
 int num_ip_packets = -1;           /* how many packets we've allocated */
 static ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
 int pkt_index = 0;
+int entry_index = 0;
+
+/* Circular Buffer for lazy freeing */
+// static circular_buf_t *lazy_hash_buf;
 
 static ip_packet *
-NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
+NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 {
     ip_packet *ppkt;
     int old_new_ip_packets = num_ip_packets;
@@ -72,19 +76,58 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
         }
     }
 
-    if (elapsed(last_cleaned_time, current_time) > GARBAGE_PERIOD)
+    if (elapsed(last_pkt_cleaned_time, current_time) > GARBAGE_PERIOD)
     {
         /* Do the expired packet checking */
-        last_cleaned_time = current_time;
+        last_pkt_cleaned_time = current_time;
         check_timeout_periodic();
     }
+
+    /* Lazy Free */
+    if (elapsed(last_hash_cleaned_time, current_time) > LAZY_FREEING_PERIOD)
+    {
+        /* Do the lazy freeing */
+        last_hash_cleaned_time = current_time;
+        check_timeout_lazy();
+    }
+
     return NULL;
+}
+
+void check_timeout_lazy()
+{
+    int ix, tot_pkt = 0;
+
+    flow_hash_t *flow_hash_head_ptr, *flow_hash_ptr;
+
+    for (ix = entry_index; ix < entry_index + LAZY_FREEING_RATIO; ix++)
+    {
+        flow_hash_head_ptr = flow_hash_table[ix];
+        if (flow_hash_head_ptr == NULL)
+        {
+            continue;
+        }
+
+        for (flow_hash_ptr = flow_hash_head_ptr; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
+        {
+            if (flow_hash_ptr->lazy_pending == TRUE)
+            {
+                if (tv_sub_2(current_time, flow_hash_ptr->last_pkt_time) >= LAZY_FREEING_TIMEOUT)
+                {
+                    FreeFlowHash(flow_hash_ptr);
+#ifdef DO_STATS
+                    lazy_flow_hash_count--;
+#endif
+                }
+            }
+        }
+    }
+    entry_index = (entry_index + LAZY_FREEING_RATIO) % HASH_TABLE_SIZE;
 }
 
 void check_timeout_periodic()
 {
-    int ix, idx, tot_pkt = 0, elapsed_pkt = 0, over_elapsed_pkt = 0;
-    double total_elapsed_time = 0.0;
+    int ix, idx, tot_pkt = 0;
     int elapsed_time = 0;
 
     ip_packet *ppkt;
@@ -101,7 +144,7 @@ void check_timeout_periodic()
 
         elapsed_time = tv_sub_2(current_time, ppkt->flow_hash_ptr->recv_time);
 
-        if (elapsed_time > TIMEOUT_LEVEL_1)
+        if (elapsed_time >= TIMEOUT_LEVEL_1)
         {
             if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
             {
@@ -113,40 +156,20 @@ void check_timeout_periodic()
             expired_pkt_count_tot++;
             pkt_buf_count--;
             flow_hash_count--;
+            if (expired_pkt_count_tot % 1000 == 0)
+            {
+                log_trace("check_timeout_periodic: delayed for %d us", elapsed_time);
+            }
 #endif
             pkt_arr[idx] = NULL;
-            over_elapsed_pkt++;
-            total_elapsed_time += elapsed_time;
         }
+    }
 
-        else if (elapsed_time == TIMEOUT_LEVEL_1)
-        {
-            if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
-            {
-                fprintf(fp_log, "Error: Cannot send the packet!\n");
-            }
-            FreeFlowHash(ppkt->flow_hash_ptr);
-            FreePkt(ppkt);
-#ifdef DO_STATS
-            expired_pkt_count_tot++;
-            pkt_buf_count--;
-            flow_hash_count--;
-#endif
-            pkt_arr[idx] = NULL;
-            elapsed_pkt++;
-            total_elapsed_time += elapsed_time;
-        }
-    }
-    if (elapsed_pkt > 0)
-    {
-        log_debug("check_timeout_periodic: %d/%d/%d over/exact/total, timeout_bias: %.2f us",
-                  over_elapsed_pkt, elapsed_pkt, tot_pkt, (total_elapsed_time / (over_elapsed_pkt + elapsed_pkt) - TIMEOUT_LEVEL_1));
-    }
     /* Increasing starting index for the next function call */
     pkt_index = (pkt_index + GARBAGE_SPLIT_RATIO) % MAX_TCP_PACKETS;
 }
 
-static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
+static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 {
     static ip_packet *temp_ppkt;
     flow_hash_t *temp_flow_hash_ptr;
@@ -154,7 +177,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     hash hval;
 
     /* Buffer packet */
-    temp_ppkt = NewPkt(peth, pip, ptcp, plast, pckt_time);
+    temp_ppkt = NewPkt(peth, pip, ptcp, plast);
     assert(temp_ppkt != NULL);
 
     /* Create entry for hash table */
@@ -164,7 +187,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     temp_flow_hash_ptr = flow_hash_alloc();
     temp_flow_hash_ptr->addr_pair = temp_ppkt->addr_pair;
     temp_flow_hash_ptr->lazy_pending = FALSE;
-    temp_flow_hash_ptr->recv_time = *pckt_time;
+    temp_flow_hash_ptr->recv_time = current_time;
     temp_flow_hash_ptr->ppkt = temp_ppkt;
 
     if (flow_hash_head_ptr == NULL)
@@ -224,15 +247,10 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
 int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
     assert(flow_hash_ptr != NULL);
-
     /* Mark the lazy pending flag */
     flow_hash_ptr->lazy_pending = TRUE;
-
     /* The time when we receive response packet */
-    timeval current_time;
-    gettimeofday(&current_time, NULL);
-    flow_hash_ptr->resp_time = current_time;
-
+    flow_hash_ptr->last_pkt_time = current_time;
     FreePkt(flow_hash_ptr->ppkt);
 }
 
@@ -256,7 +274,8 @@ int which_circular_buf(struct ip *pip)
     return -1;
 }
 
-int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast, struct timeval *pckt_time)
+/* Main entry of packet handler */
+int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 {
     flow_hash_t *flow_hash_ptr;
     int dir = 0;
@@ -276,22 +295,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
 #ifdef DO_STATS
             lazy_flow_hash_hit++;
 #endif
-            if (elapsed(flow_hash_ptr->resp_time, flow_hash_ptr->recv_time) > TIMEOUT_LEVEL_1)
-            {
-                if (debug > 1)
-                {
-                    inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.a_address.un.ip4), ip_src_addr_print_buffer, INET_ADDRSTRLEN);
-                    inet_ntop(AF_INET, &(flow_hash_ptr->addr_pair.b_address.un.ip4), ip_dst_addr_print_buffer, INET_ADDRSTRLEN);
-                    log_debug("pkt_handle: freeing pending hash entry: from %s:%d to %s:%d at %ld.%ld",
-                              ip_src_addr_print_buffer,
-                              flow_hash_ptr->addr_pair.a_port,
-                              ip_dst_addr_print_buffer,
-                              flow_hash_ptr->addr_pair.b_port,
-                              flow_hash_ptr->recv_time.tv_sec,
-                              flow_hash_ptr->recv_time.tv_usec);
-                }
-                FreeFlowHash(flow_hash_ptr);
-            }
+            flow_hash_ptr->last_pkt_time = current_time;
             return 0;
         }
 
@@ -303,9 +307,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         /* Reversed direction of this packet, probably a response */
         else if (dir == S2C)
         {
-
             LazyFreeFlowHash(flow_hash_ptr);
-
             /* Install Flow Entry */
             timeval start_time, end_time;
             gettimeofday(&start_time, NULL);
@@ -344,7 +346,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     /* Did not find the flow, create one */
     else
     {
-        flow_hash_ptr = CreateFlowHash(peth, pip, ptcp, plast, pckt_time);
+        flow_hash_ptr = CreateFlowHash(peth, pip, ptcp, plast);
 
 #ifdef DO_STATS
         pkt_buf_count++;
@@ -401,4 +403,30 @@ void trace_init(void)
     socket_address.sll_halen = ETH_ALEN;
     /* Destination MAC */
     // socket_address.sll_addr[0] = MY_DEST_MAC0;
+}
+
+void trace_cleanup()
+{
+    /* free the flow hash table */
+    for (int i = 0; i < HASH_TABLE_SIZE; i++)
+    {
+        flow_hash_t *flow_hash_ptr = flow_hash_table[i];
+        while (flow_hash_ptr != NULL)
+        {
+            flow_hash_t *temp = flow_hash_ptr;
+            flow_hash_ptr = flow_hash_ptr->next;
+            free(temp);
+        }
+    }
+    free(flow_hash_table);
+
+    /* free the packet buffer */
+    for (int i = 0; i < MAX_TCP_PACKETS; i++)
+    {
+        if (pkt_arr[i] != NULL)
+        {
+            free(pkt_arr[i]);
+        }
+    }
+    free(pkt_arr);
 }
