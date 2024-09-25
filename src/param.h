@@ -1,13 +1,13 @@
 
 /* Define how often garbage collection scans the whole flow table */
 /* Historically, this is set to half TCP_SINGLETON_TIME */
-#define GARBAGE_PERIOD 1000
+#define GARBAGE_PERIOD 2500
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
  but the workload is done in GARBAGE_SPLIT_RATIO times
  IMPORTANT: it must be a divisor of GARBAGE_PERIOD,
- MAX_TCP_PACKETS and MAX_UDP_PAIRS  */
+ PKT_BUF_SIZE and MAX_UDP_PAIRS  */
 #define GARBAGE_SPLIT_RATIO 5000
 
 /* Define the interval for garbage collection routine to be fired */
@@ -16,9 +16,9 @@
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
 
-#define MAX_TCP_PACKETS 50000
-/* Each time the garbage collection is fired, it scans MAX_TCP_PACKETS_BURST tcp flows */
-// #define MAX_TCP_PACKETS_BURST (MAX_TCP_PACKETS / GARBAGE_SPLIT_RATIO)
+#define PKT_BUF_SIZE 10000
+/* Each time the garbage collection is fired, it scans PKT_BUF_SIZE_BURST tcp flows */
+// #define PKT_BUF_SIZE_BURST (PKT_BUF_SIZE / GARBAGE_SPLIT_RATIO)
 
 
 /* max depth of the linear search in the previous vector... */
@@ -26,20 +26,20 @@ Increase this number on high speed network will help ...*/
 
 /* connection records are stored in a hash table.  Buckets are linked	*/
 /* lists sorted by most recent access.					*/
-/* oughta be prime  and larger than MAX_TCP_PACKETS */
-#define HASH_TABLE_SIZE 200000
+/* oughta be prime  and larger than PKT_BUF_SIZE */
+#define HASH_TABLE_SIZE 20000
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
 #define TIMEOUT_LEVEL_NUM 3
-#define TIMEOUT_LEVEL_1 20000
+#define TIMEOUT_LEVEL_1 100000
 #define TIMEOUT_LEVEL_2 50000  
 #define TIMEOUT_LEVEL_3 20000   
 
 /* Every LAZY_FREEING_PERIOD, scan LAZY_FREEING_RATIO entries. */
 /* After LAZY_FREEING_PERIOD / (HASH_TABLE_SIZE / LAZY_FREEING_RATIO), the whole hash table is completely scanned once */
 /* So the lazy free timeout should be 2*LAZY_FREEING_PERIOD / (HASH_TABLE_SIZE / LAZY_FREEING_RATIO) */
-#define LAZY_FREEING_RATIO 20000
-#define LAZY_FREEING_PERIOD 100000
+#define LAZY_FREEING_RATIO 2000
+#define LAZY_FREEING_PERIOD 50000
 #define LAZY_FREEING_TIMEOUT 1000000
 
 

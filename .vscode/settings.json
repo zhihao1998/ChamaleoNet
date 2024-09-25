@@ -11,6 +11,14 @@
         "python.h": "c",
         "stdlib.h": "c",
         "ip.h": "c",
-        "ioctl.h": "c"
+        "ioctl.h": "c",
+        "if_packet.h": "c",
+        "random": "c",
+        "vector": "c",
+        "memory": "c",
+        "optional": "c",
+        "string_view": "c",
+        "string": "c",
+        "system_error": "c"
     }
 }

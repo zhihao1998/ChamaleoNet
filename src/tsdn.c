@@ -10,7 +10,7 @@ Bool live_flag = TRUE;
 #define EH_SIZE sizeof(struct ether_header)
 
 static char *eth_buf;
-static char *ip_buf; /* [IP_MAXPACKET] */
+static char *ip_buf; /* [MAX_IP_PKT_LENGTH] */
 static void *callback_plast;
 
 /* Buffer some packets of tcpdump to avoid packet loss */
@@ -98,8 +98,8 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	static int offset = -1;
 
 	iplen = phdr->caplen;
-	if (iplen > IP_MAXPACKET)
-		iplen = IP_MAXPACKET;
+	if (iplen > MAX_IP_PKT_LENGTH)
+		iplen = MAX_IP_PKT_LENGTH;
 
 	type = pcap_datalink(pcap);
 
@@ -281,7 +281,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 	}
 
 	default:
-		fprintf(fp_stderr, "ProcessPacket: Un-supported IP Protocol!");
+		fprintf(fp_stderr, "ProcessPacket: Un-supported IP Protocol!\n");
 		break;
 	}
 
@@ -351,8 +351,8 @@ int main(int argc, char *argv[])
 	void *plast;
 	long int location = 0;
 	char log_file_name[60] = "log/log.log";
-	char stat_file_name[60];
-	sprintf(stat_file_name, "log/stat-timeout%dms-GC%dms.log", (MAX_TCP_PACKETS / GARBAGE_SPLIT_RATIO) * GARBAGE_PERIOD / 1000 * 2, GARBAGE_PERIOD / 1000);
+	char stat_file_name[60] = "log/stat.log";
+	// sprintf(stat_file_name, "log/stat-timeout%dms-GC%dms.log", (PKT_BUF_SIZE / GARBAGE_SPLIT_RATIO) * GARBAGE_PERIOD / 1000 * 2, GARBAGE_PERIOD / 1000);
 
 	fp_log = fopen(log_file_name, "w");
 	fp_stats = fopen(stat_file_name, "w");
@@ -417,7 +417,7 @@ int main(int argc, char *argv[])
 		return (2);
 	}
 
-	ip_buf = MallocZ(IP_MAXPACKET);
+	ip_buf = MallocZ(MAX_IP_PKT_LENGTH);
 
 	/* install P4 table entry thread */
 

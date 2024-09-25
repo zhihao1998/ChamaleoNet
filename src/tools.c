@@ -100,17 +100,17 @@ Bool internal_ip(struct in_addr adx)
 {
     int i;
 
-    fprintf(fp_stdout, "Checking %s \n",inet_ntoa(adx));
+    fprintf(fp_stdout, "Checking %s \n", inet_ntoa(adx));
     for (i = 0; i < tot_internal_nets; i++)
     {
         // fprintf(fp_stdout, " Against: %s \n",inet_ntoa(internal_net_list[i]));
         if ((adx.s_addr & internal_net_mask[i]) == internal_net_list[i].s_addr)
         {
-            fprintf(fp_stdout, "Internal: %s\n",inet_ntoa(adx));
+            fprintf(fp_stdout, "Internal: %s\n", inet_ntoa(adx));
             return 1;
         }
     }
-    fprintf(fp_stdout, "External: %s\n",inet_ntoa(adx));
+    fprintf(fp_stdout, "External: %s\n", inet_ntoa(adx));
     return 0;
 }
 
@@ -373,34 +373,42 @@ char *readline(FILE *fp, int skip_comment, int skip_void_lines)
  * Packet sender.
  */
 // int SendPkt(char *sendbuf, int tx_len)
-// {   
-//     return 0;   
+// {
+//     return 0;
 // }
 
 int SendPkt(char *sendbuf, int tx_len)
-{   
+{
     int r = -1;
 
-	// struct ifreq if_mac;
-	struct ether_header *eh = (struct ether_header *) sendbuf;
-    /* Here we modified the Ethernet Type into 0x0801.
-     * Because the capturing and sending share the same interface, 
-     * the Ethernet Type should be different to avoid the loopback,
-     * which is done through the BPFfilter.*/
-    // eh->ether_type = htons(ETH_P_IP + 1);
+    // struct ifreq if_mac;
+    struct ether_header *eh = (struct ether_header *)sendbuf;
+    struct ip *pip = (struct ip *)(sendbuf + ETH_HLEN);
 
-	/* Send packet */
-	if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) != -1)
+    /* Check if it's truncated. */
+    if (ntohs(pip->ip_len) + ETH_HLEN > tx_len)
     {
-        return 0;
+        memcpy(sendbuf_padding, sendbuf, tx_len);
+        if (sendto(sockfd, sendbuf_padding, ntohs(pip->ip_len) + ETH_HLEN, 0, (struct sockaddr *)&socket_address, sizeof(struct sockaddr_ll)) != -1)
+        {
+            return 0;
+        }
     }
-    return r;   
+    else
+    {
+        if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr *)&socket_address, sizeof(struct sockaddr_ll)) != -1)
+        {
+            return 0;
+        }
+    }
+    return r;
 }
 
-void get_date(char *nowtime) {
-	time_t rawtime;
-	struct tm* ltime;
-	time(&rawtime);
-	ltime = localtime(&rawtime);
-	strftime(nowtime, 20, "%Y-%m-%d %H:%M:%S", ltime);
+void get_date(char *nowtime)
+{
+    time_t rawtime;
+    struct tm *ltime;
+    time(&rawtime);
+    ltime = localtime(&rawtime);
+    strftime(nowtime, 20, "%Y-%m-%d %H:%M:%S", ltime);
 }

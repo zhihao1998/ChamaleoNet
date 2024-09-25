@@ -19,7 +19,7 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
     int steps = 0;
 
     /* look for the next eventually available free block */
-    num_ip_packets = (num_ip_packets + 1) % MAX_TCP_PACKETS;
+    num_ip_packets = (num_ip_packets + 1) % PKT_BUF_SIZE;
 
     /* make a new one, if possible */
     while ((num_ip_packets != old_new_ip_packets) && (pkt_arr[num_ip_packets] != NULL) && (steps < LIST_SEARCH_DEPT))
@@ -28,13 +28,13 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
         /* look for the next one */
         //         fprintf (fp_log, "%d %d\n", num_tcp_pairs, old_new_tcp_pairs);
         num_ip_packets++;
-        num_ip_packets = num_ip_packets % MAX_TCP_PACKETS;
+        num_ip_packets = num_ip_packets % PKT_BUF_SIZE;
     }
     if (pkt_arr[num_ip_packets] != NULL)
     {
         log_debug("ooopsss: number of simultaneous connection opened is greater then the maximum supported number!\n"
                   "you have to rebuild the source with a larger LIST_SEARCH_DEPT defined!\n"
-                  "or possibly with a larger MAX_TCP_PACKETS defined!");
+                  "or possibly with a larger PKT_BUF_SIZE defined!");
         return (NULL);
     }
 
@@ -49,6 +49,11 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 
     /* Here we store raw packets starting from Ether header */
     ppkt->pkt_len = ntohs(pip->ip_len) + ETHER_HDR_LEN;
+    if (ppkt->pkt_len > MAX_PKT_MTU)
+    {
+        ppkt->pkt_len = MAX_PKT_MTU;
+    }
+
     memcpy(ppkt->raw_pkt, peth, ppkt->pkt_len);
     ppkt->loc_pkt_arr = num_ip_packets;
     return pkt_arr[num_ip_packets];
@@ -82,7 +87,6 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
         last_pkt_cleaned_time = current_time;
         check_timeout_periodic();
     }
-
     /* Lazy Free */
     if (elapsed(last_hash_cleaned_time, current_time) > LAZY_FREEING_PERIOD)
     {
@@ -117,6 +121,8 @@ void check_timeout_lazy()
                     FreeFlowHash(flow_hash_ptr);
 #ifdef DO_STATS
                     lazy_flow_hash_count--;
+                    lazy_flow_hash_hit++;
+                    flow_hash_count--;
 #endif
                 }
             }
@@ -127,20 +133,18 @@ void check_timeout_lazy()
 
 void check_timeout_periodic()
 {
-    int ix, idx, tot_pkt = 0;
+    int ix, idx;
     int elapsed_time = 0;
 
     ip_packet *ppkt;
-    // for (ix = pkt_index; ix < MAX_TCP_PACKETS; ix += GARBAGE_SPLIT_RATIO)
     for (ix = pkt_index; ix < pkt_index + GARBAGE_SPLIT_RATIO; ix++)
     {
-        idx = ix % MAX_TCP_PACKETS;
+        idx = ix % PKT_BUF_SIZE;
         ppkt = pkt_arr[idx];
         if (ppkt == NULL)
         {
             continue;
         }
-        tot_pkt++;
 
         elapsed_time = tv_sub_2(current_time, ppkt->flow_hash_ptr->recv_time);
 
@@ -156,7 +160,7 @@ void check_timeout_periodic()
             expired_pkt_count_tot++;
             pkt_buf_count--;
             flow_hash_count--;
-            if (expired_pkt_count_tot % 1000 == 0)
+            if (expired_pkt_count_tot % 100 == 0)
             {
                 log_trace("check_timeout_periodic: delayed for %d us", elapsed_time);
             }
@@ -166,7 +170,7 @@ void check_timeout_periodic()
     }
 
     /* Increasing starting index for the next function call */
-    pkt_index = (pkt_index + GARBAGE_SPLIT_RATIO) % MAX_TCP_PACKETS;
+    pkt_index = (pkt_index + GARBAGE_SPLIT_RATIO) % PKT_BUF_SIZE;
 }
 
 static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
@@ -252,6 +256,11 @@ int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
     /* The time when we receive response packet */
     flow_hash_ptr->last_pkt_time = current_time;
     FreePkt(flow_hash_ptr->ppkt);
+#ifdef DO_STATS
+    lazy_flow_hash_count++;
+    pkt_buf_count--;
+#endif
+    return 0;
 }
 
 int which_circular_buf(struct ip *pip)
@@ -309,8 +318,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         {
             LazyFreeFlowHash(flow_hash_ptr);
             /* Install Flow Entry */
-            timeval start_time, end_time;
-            gettimeofday(&start_time, NULL);
             if (try_install_drop_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
                                        flow_hash_ptr->addr_pair.b_address.un.ip4,
                                        flow_hash_ptr->addr_pair.a_port,
@@ -320,12 +327,9 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                 log_debug("Error: Failed to install flow entry");
                 return -1;
             }
-            gettimeofday(&end_time, NULL);
-            log_debug("try_install_drop_entry: cost %d us", tv_sub_2(end_time, start_time));
 
 #ifdef DO_STATS
             replied_flow_count_tot++;
-            pkt_buf_count--;
             switch (timeout_level)
             {
             case 0:
@@ -365,12 +369,14 @@ void trace_init(void)
     initted = TRUE;
 
     /* create an array to hold any pairs that we might create */
-    pkt_arr = (ip_packet **)MallocZ(MAX_TCP_PACKETS * sizeof(ip_packet *));
+    pkt_arr = (ip_packet **)MallocZ(PKT_BUF_SIZE * sizeof(ip_packet *));
 
     /* initialize the hash table */
     flow_hash_table = (flow_hash_t **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash_t *));
 
     /* Initialize the params for sendpkt */
+    memset(&sendbuf_padding, 0, MAX_IP_PKT_LENGTH);
+
     /* Get interface name */
     strcpy(ifName, SEND_INTF);
     /* Open RAW socket to send on */
@@ -421,7 +427,7 @@ void trace_cleanup()
     free(flow_hash_table);
 
     /* free the packet buffer */
-    for (int i = 0; i < MAX_TCP_PACKETS; i++)
+    for (int i = 0; i < PKT_BUF_SIZE; i++)
     {
         if (pkt_arr[i] != NULL)
         {

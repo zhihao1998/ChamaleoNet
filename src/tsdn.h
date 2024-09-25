@@ -85,10 +85,6 @@ extern int debug;
 #define fp_stdout stdout
 #define fp_stderr stderr
 
-#ifndef IP_MAXPACKET
-#define IP_MAXPACKET 65535
-#endif /* IP_MAXPACKET */
-
 #define PCAP_DLT_EN10MB 1 /* Ethernet (10Mb) */
 
 #define PHYS_ETHER 1
@@ -185,6 +181,7 @@ int sockfd;
 struct ifreq if_idx;
 struct sockaddr_ll socket_address;
 char ifName[IFNAMSIZ];
+char sendbuf_padding[MAX_IP_PKT_LENGTH];
 
 
 /* connection records are stored in a hash table.  */

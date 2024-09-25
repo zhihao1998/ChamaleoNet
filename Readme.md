@@ -28,13 +28,6 @@ This project is developed with the following dependencies:
 5. Send some packets to the interface.
 
 
-## TODO
-- design and execute some benchmarks and stress tests to check the the codebase is solid and measure some performance indicators 
-- you can use some trace and replay it 
-- do a worst case scenario with sender doing a syn flooding attack
-- check malformed packets effects (e.g., using nmap -O option would aready create some funzy packets)
-- Do some analysis on the 1h trace we captured some time ago to check timers&dealy, this is used to define timeouts for instance, observe the new flow arrival rate, and the memory usage with a real use case
-
 ## Data Plane
 
 ### Build and Run
@@ -75,7 +68,7 @@ sudo ifconfig virbr1 up
 ### SYN Flood
 
 ```bash
-
+sudo tcpreplay -i veth250 --mbps 1000 trace/syn_flood.pcap
 ```
 
 
@@ -103,10 +96,8 @@ sudo ifconfig virbr1 up
 - installed flow number (returned by the grpc client)
 - expired packet number
 
-### Figures
 
-#### timeout v.s. data structure size
-
+### Explore the 
 
 
 ## Performance Profile

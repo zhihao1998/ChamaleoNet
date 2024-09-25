@@ -28,12 +28,12 @@ int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_sh
 void *install_drop_entry(void *args)
 {
 	void *buf_slot;
-	p4_entry_buf = (table_entry_t **)MallocZ(MAX_TCP_PACKETS * sizeof(table_entry_t *));
-	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, MAX_TCP_PACKETS);
+	p4_entry_buf = (table_entry_t **)MallocZ(PKT_BUF_SIZE * sizeof(table_entry_t *));
+	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, PKT_BUF_SIZE);
 	temp_table_entry_ptr = (table_entry_t *)MallocZ(sizeof(table_entry_t));
 	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
-	// bfrt_grpc_init();
-	// PyGILState_STATE ret = PyGILState_Ensure();
+	bfrt_grpc_init();
+	PyGILState_STATE ret = PyGILState_Ensure();
 	pthread_mutex_init(&entry_install_mutex, NULL);
 	pthread_cond_init(&entry_install_cond, NULL);
 
@@ -65,7 +65,7 @@ void *install_drop_entry(void *args)
 			{
 			case IPPROTO_TCP:
 			{
-				// res = bfrt_tcp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
+				res = bfrt_tcp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
 #ifdef DO_STATS
 				installed_entry_count_tot += res;
 				installed_entry_count_tcp += res;
@@ -75,7 +75,7 @@ void *install_drop_entry(void *args)
 			}
 			case IPPROTO_UDP:
 			{
-				// res = bfrt_udp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
+				res = bfrt_udp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
 #ifdef DO_STATS
 				installed_entry_count_tot += res;
 				installed_entry_count_udp += res;
@@ -84,7 +84,7 @@ void *install_drop_entry(void *args)
 			}
 			case IPPROTO_ICMP:
 			{
-				// res = bfrt_icmp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip);
+				res = bfrt_icmp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip);
 #ifdef DO_STATS
 				installed_entry_count_tot += res;
 				installed_entry_count_icmp += res;

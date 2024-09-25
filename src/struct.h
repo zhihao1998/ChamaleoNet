@@ -11,7 +11,8 @@ typedef u_char Bool;
 #define FALSE 0
 #define BOOL2STR(b) (b) ? "TRUE" : "FALSE"
 
-#define MAX_PKT_LENGTH 1518
+#define MAX_PKT_MTU 1518
+#define MAX_IP_PKT_LENGTH 65535
 
 /* type for an IP address */
 /* IP address can be either IPv4 or IPv6 */
@@ -51,7 +52,7 @@ typedef struct ip_packet
 
   /* raw packet (from Ether) information */
   int pkt_len;
-  u_char raw_pkt[MAX_PKT_LENGTH]; /* start of the whole raw packet */
+  u_char raw_pkt[MAX_PKT_MTU]; /* start of the whole raw packet */
 
   /* location in the pkt_arr array */
   int loc_pkt_arr;

@@ -82,6 +82,8 @@ clean:
 .PHONY: p4clean
 p4clean:
 	@sudo rm -rf p4/log/*
+	@sudo rm -rf p4/model_*.log
+	
 
 .PHONY: distclean
 distclean:
