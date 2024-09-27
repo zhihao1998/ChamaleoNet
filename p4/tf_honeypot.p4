@@ -26,7 +26,9 @@ const bit<8> IPV4_MIN_HEAD_LEN = 20;
 const bit<8> UDP_HEADER_LEN = 8;
 
 /* Port Number */
-const PortId_t CPU_PORT = 64; 
+const PortId_t CPU_PORT_1 = 64; 
+const PortId_t CPU_PORT_2 = 66; 
+
 const PortId_t COLLECTOR_PORT = 1; /*veth2, 3*/
 
 /*Table Sizing=*/
@@ -137,7 +139,6 @@ parser IngressParser(packet_in        pkt,
         pkt.extract(hdr.ethernet);
         transition select(hdr.ethernet.ether_type) {
             ETHERTYPE_IPV4:     parse_ipv4;
-            ETHERTYPE_HONEYPOT: accept;
             default:            accept;
         }
     }
@@ -179,7 +180,7 @@ control Ingress(
     inout ingress_intrinsic_metadata_for_tm_t        ig_tm_md)
 {
     action send_to_cpu() {
-        ig_tm_md.ucast_egress_port = CPU_PORT;
+        ig_tm_md.ucast_egress_port = CPU_PORT_1;
         // ig_tm_md.copy_to_cpu       = 1;
     }
     action set_egress_port(PortId_t port) {
@@ -240,12 +241,6 @@ control Ingress(
     }
     
     apply {
-        if (ig_intr_md.ingress_port == CPU_PORT && hdr.ethernet.ether_type == ETHERTYPE_HONEYPOT) {
-            set_egress_port(COLLECTOR_PORT);
-            /* Resotre the original IP type */
-            hdr.ethernet.ether_type = ETHERTYPE_IPV4;
-        }
-        else{
             if (hdr.ipv4.isValid()) {
                 if (hdr.icmp.isValid()){
                     icmp_flow.apply();
@@ -258,7 +253,6 @@ control Ingress(
                 }
             }
         }
-    }
 }
 
     /*********************  D E P A R S E R  ************************/

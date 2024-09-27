@@ -61,10 +61,10 @@ class Bfrt_GRPC_Client:
                 print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
                 self.installed_flow_key.add(match_key)
                 self.bfrt.entry_add(table_name='pipe.Ingress.udp_flow', 
-                                    keys=[('hdr.ipv4.src_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
-                                        ('hdr.ipv4.dst_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
-                                        ('hdr.udp.src_port', dst_port), 
-                                        ('hdr.udp.dst_port', src_port)],
+                                    keys=[('hdr.ipv4.src_addr', ip_to_int(src_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.ipv4.dst_addr', ip_to_int(dst_ip), ip_to_int('255.255.255.255')),
+                                        ('hdr.udp.src_port', src_port), 
+                                        ('hdr.udp.dst_port', dst_port)],
                                     data=[],
                                     action_name='Ingress.drop')
                 self.installed_flow_key.add(match_key_reverse)
@@ -111,11 +111,12 @@ class Bfrt_GRPC_Client:
         return 0
     
 if __name__ == "__main__":
-    controller = Bfrt_GRPC_Server()
-    # controller.tcp_flow_add_with_drop('10.0.0.1', '10.0.0.2', 10, 20)
+    controller = Bfrt_GRPC_Client()
+    controller.clear_tables()
+    controller.tcp_flow_add_with_drop('10.0.0.1', '10.0.0.2', 10, 20)
     controller.udp_flow_add_with_drop('130.192.9.161', '8.8.8.8', 61434, 53)
     # controller.icmp_flow_add_with_drop('10.0.0.5', '10.0.0.6')
-    # controller.dump_table('pipe.Ingress.tcp_flow')
-    # controller.dump_table('pipe.Ingress.udp_flow')
-    # controller.dump_table('pipe.Ingress.icmp_flow')
+    controller.dump_table('pipe.Ingress.tcp_flow')
+    controller.dump_table('pipe.Ingress.udp_flow')
+    controller.dump_table('pipe.Ingress.icmp_flow')
     # controller.clear_tables()

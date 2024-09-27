@@ -390,6 +390,12 @@ int main(int argc, char *argv[])
 		return (2);
 	}
 
+	if (pcap_set_promisc(pcap, 1) != 0)
+	{
+		fprintf(stderr, "Error setting promiscuous mode\n");
+		return (2);
+	}
+
 	/* Activate the pcap handle. */
 	if (pcap_activate(pcap) == -1)
 	{
