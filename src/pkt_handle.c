@@ -135,6 +135,7 @@ void check_timeout_periodic()
 {
     int ix, idx;
     int elapsed_time = 0;
+    int ip_p;
 
     ip_packet *ppkt;
     for (ix = pkt_index; ix < pkt_index + GARBAGE_SPLIT_RATIO; ix++)
@@ -154,12 +155,28 @@ void check_timeout_periodic()
             {
                 fprintf(fp_log, "Error: Cannot send the packet!\n");
             }
+            ip_p = ppkt->addr_pair.protocol;
             FreeFlowHash(ppkt->flow_hash_ptr);
             FreePkt(ppkt);
 #ifdef DO_STATS
             expired_pkt_count_tot++;
             pkt_buf_count--;
             flow_hash_count--;
+            switch (ip_p)
+            {
+            case IPPROTO_TCP:
+                expired_pkt_count_tcp++;
+                break;
+            case IPPROTO_UDP:
+                expired_pkt_count_udp++;
+                break;
+            case IPPROTO_ICMP:
+                expired_pkt_count_icmp++;
+                break;
+
+            default:
+                break;
+            }
             if (expired_pkt_count_tot % 100 == 0)
             {
                 log_trace("check_timeout_periodic: delayed for %d us", elapsed_time);

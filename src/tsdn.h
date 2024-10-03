@@ -217,6 +217,8 @@ int bfrt_grpc_destroy();
 void bfrt_grpc_init();
 void *install_drop_entry(void *args);
 int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
+int bfrt_get_table_entry_num(char *table_name);
+int clean_all_idle_entries();
 
 /* Logging */
 #define DO_STATS
@@ -304,9 +306,17 @@ u_long expired_pkt_count_tcp;
 u_long expired_pkt_count_udp;
 u_long expired_pkt_count_icmp;
 
+// Flow Entry Counters
+int tcp_flow_entry_count;
+int udp_flow_entry_count;
+int icmp_flow_entry_count;
+
 
 extern timeval current_time;
 extern timeval last_log_time;
 extern timeval last_pkt_cleaned_time;
 extern timeval last_hash_cleaned_time;
+extern timeval last_idle_cleaned_time;
+
+
 

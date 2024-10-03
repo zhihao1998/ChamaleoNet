@@ -3,6 +3,9 @@ from bfrt_grpc_helper import BfRtAPI
 import binascii
 import socket
 
+remote_grpc_addr = '192.168.24.69:50052'
+local_grpc_addr = 'localhost:50052'
+
 def ip_to_int(ip):
     return int(binascii.hexlify(socket.inet_aton(ip)),16)
 
@@ -10,9 +13,16 @@ def mask_to_int(mask):
     return int(binascii.hexlify(socket.inet_aton(mask)),16)
 
 class Bfrt_GRPC_Client:
-    def __init__(self):
-        self.bfrt = BfRtAPI(client_id=1)
+    def __init__(self, grpc_addr=remote_grpc_addr):
+        self.bfrt = BfRtAPI(client_id=1, grpc_addr=grpc_addr)
         self.installed_flow_key = set()
+        
+
+    def init_key_annotation(self):
+         for table_name in ['pipe.Ingress.tcp_flow', 'pipe.Ingress.udp_flow', 'pipe.Ingress.icmp_flow']:
+              table = self.bfrt.table_get(table_name)
+              table.info.key_field_annotation_add("hdr.ipv4.src_addr", "ipv4")
+              table.info.key_field_annotation_add("hdr.ipv4.dst_addr", "ipv4")
     
     def print_tables_info(self):
         return self.bfrt.print_tables_info()
@@ -22,6 +32,9 @@ class Bfrt_GRPC_Client:
     
     def dump_table(self, table_name):
         return self.bfrt.dump_table(table_name)
+    
+    def get_table_entry_number(self, table_name):
+        return int(self.bfrt.get_table_entry_number(table_name))
 
     def tcp_flow_add_with_drop(self, src_ip, dst_ip, src_port, dst_port):
         match_key = (src_ip, dst_ip, src_port, dst_port, 'tcp')
@@ -110,13 +123,22 @@ class Bfrt_GRPC_Client:
         self.bfrt.clear_table('pipe.Ingress.icmp_flow')
         return 0
     
+  
+    def clean_all_idle_entries(self):
+        for table_name in ['pipe.Ingress.tcp_flow', 'pipe.Ingress.udp_flow', 'pipe.Ingress.icmp_flow']:
+            self.bfrt.clean_idle_entries(table_name)
+        return 0
+    
+    
+    
 if __name__ == "__main__":
-    controller = Bfrt_GRPC_Client()
+    controller = Bfrt_GRPC_Client(grpc_addr='localhost:50052')
+    controller.print_table_info('icmp_flow')
     controller.clear_tables()
     controller.tcp_flow_add_with_drop('10.0.0.1', '10.0.0.2', 10, 20)
     controller.udp_flow_add_with_drop('130.192.9.161', '8.8.8.8', 61434, 53)
-    # controller.icmp_flow_add_with_drop('10.0.0.5', '10.0.0.6')
+    controller.icmp_flow_add_with_drop('10.0.0.5', '10.0.0.6')
     controller.dump_table('pipe.Ingress.tcp_flow')
     controller.dump_table('pipe.Ingress.udp_flow')
     controller.dump_table('pipe.Ingress.icmp_flow')
-    # controller.clear_tables()
+    controller.clear_tables()

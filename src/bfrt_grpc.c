@@ -16,11 +16,8 @@ int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_sh
 	temp_table_entry_ptr->dst_port = dst_port;
 	temp_table_entry_ptr->protocol = protocol;
 	temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
-	if (temp_table_entry_pp == NULL)
-	{
-		fprintf(fp_log, "Error: Circular buffer is full\n");
-		return -1;
-	}
+	assert(temp_table_entry_pp != NULL);
+	
 	pthread_cond_signal(&entry_install_cond);
 	return 0;
 }
@@ -28,14 +25,17 @@ int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_sh
 void *install_drop_entry(void *args)
 {
 	void *buf_slot;
-	p4_entry_buf = (table_entry_t **)MallocZ(PKT_BUF_SIZE * sizeof(table_entry_t *));
-	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, PKT_BUF_SIZE);
+	p4_entry_buf = (table_entry_t **)MallocZ(ENTRY_BUF_SIZE * sizeof(table_entry_t *));
+	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, ENTRY_BUF_SIZE);
 	temp_table_entry_ptr = (table_entry_t *)MallocZ(sizeof(table_entry_t));
+
 	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 	bfrt_grpc_init();
 	PyGILState_STATE ret = PyGILState_Ensure();
 	pthread_mutex_init(&entry_install_mutex, NULL);
 	pthread_cond_init(&entry_install_cond, NULL);
+
+	tcp_flow_entry_count = udp_flow_entry_count = icmp_flow_entry_count = 0;
 
 	while (circular_buf_empty(p4_entry_circ_buf))
 	{
@@ -49,7 +49,6 @@ void *install_drop_entry(void *args)
 		{
 			pthread_cond_wait(&entry_install_cond, &entry_install_mutex);
 		}
-		fprintf(fp_log, "Installing drop entry\n");
 
 		/* Check the next timeout */
 		if (circular_buf_get(p4_entry_circ_buf, &buf_slot) != -1)
@@ -93,8 +92,34 @@ void *install_drop_entry(void *args)
 			}
 			}
 		}
+		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_IDLE_TIMEOUT)
+		{
+			clean_all_idle_entries();
+			last_idle_cleaned_time = current_time;
+		}
+#ifdef DO_STATS
+		tcp_flow_entry_count = bfrt_get_table_entry_num("tcp_flow");
+		udp_flow_entry_count = bfrt_get_table_entry_num("udp_flow");
+		icmp_flow_entry_count = bfrt_get_table_entry_num("icmp_flow");
+#endif
 	}
-	// PyGILState_Release(ret);
+	PyGILState_Release(ret);
+}
+
+int clean_all_idle_entries()
+{
+	assert(pInstance != NULL);
+	PyObject *pArgs, *pRes, *pFunc;
+	int ret = -1;
+
+	pFunc = PyObject_GetAttrString(pInstance, "clean_all_idle_entries");
+	pArgs = Py_BuildValue("()");
+	pRes = PyEval_CallObject(pFunc, pArgs);
+	// PyArg_Parse(pRes, "i", &ret);
+	Py_DECREF(pFunc);
+	Py_DECREF(pArgs);
+	Py_DECREF(pRes);
+	return ret;
 }
 
 void bfrt_clear_tables()
@@ -211,6 +236,23 @@ int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip)
 
 	pFunc = PyObject_GetAttrString(pInstance, "icmp_flow_add_with_drop");
 	pArgs = Py_BuildValue("(ss)", ip_src_addr_str, ip_dst_addr_str);
+	pRes = PyEval_CallObject(pFunc, pArgs);
+	PyArg_Parse(pRes, "i", &ret);
+	Py_DECREF(pFunc);
+	Py_DECREF(pArgs);
+	Py_DECREF(pRes);
+	return ret;
+}
+
+/* Get Entry Table Number */
+int bfrt_get_table_entry_num(char *table_name)
+{
+	assert(pInstance != NULL);
+	PyObject *pArgs, *pRes, *pFunc;
+	int ret = -1;
+
+	pFunc = PyObject_GetAttrString(pInstance, "get_table_entry_number");
+	pArgs = Py_BuildValue("(s)", table_name);
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
 	Py_DECREF(pFunc);

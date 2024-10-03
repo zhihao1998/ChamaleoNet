@@ -186,6 +186,10 @@ class BfRtAPI:
         table = self.bfrt_info.table_get(table_name)
         for (data, key) in table.entry_get(self.target):
             print(key.to_dict(), data.to_dict())
+    
+    def get_table_entry_number(self, table_name):
+        table = self.bfrt_info.table_get(table_name)
+        return len(list(table.entry_get(self.target)))
 
     def entry_add(self, table_name, keys=[], data=[], action_name=None):
         """Adds entry to table.
@@ -198,14 +202,19 @@ class BfRtAPI:
         """
         table = self.bfrt_info.table_get(table_name)
         _keys = table.make_key([gc.KeyTuple(*k) for k in keys])
+        data = [gc.DataTuple(*d) for d in data]
+        data.append(gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE"))
         _data = table.make_data(
-            [gc.DataTuple(*d) for d in data], action_name)
+            data, action_name)
 
-        table.entry_add(
-            self.target,
-            [_keys],
-            [_data]
-        )
+        try:
+            table.entry_add(
+                self.target,
+                [_keys],
+                [_data]
+            )
+        except gc.BfruntimeReadWriteRpcException as e:
+            print(e)
 
     def add_mirroring(self, eg_port, session_id, direction="BOTH"):
         """configures mirroring session"""
@@ -380,3 +389,57 @@ class BfRtAPI:
     # Traffic Manager Helpers
 
     # Traffic Generator Helpers
+
+    # IDLE Timeout Helpers
+    # def update_hit_state(self, table_name):
+    #     """Updates hit state of a table entry.
+
+    #     Args:
+    #         table_name (str) : Name of the table
+    #     """
+    #     table = self.bfrt_info.table_get(table_name)
+    #     table.operations_execute(self.target, 'UpdateHitState')
+
+    def get_hit_state(self, table_name, keys=[], from_hw=False):
+        """Gets hit state of a table entry.
+
+        Args:
+            table_name (str) : Name of the table
+            keys (list)      : List of tuples ``(key_name, key_value)``
+        """
+        table = self.bfrt_info.table_get(table_name)
+        _keys = table.make_key([gc.KeyTuple(*k) for k in keys])
+        hit_state = None
+
+        try:
+            data = next(table.entry_get(
+                self.target,
+                [
+                    _keys
+                ],
+                flags={"from_hw": from_hw}
+            ))[0].to_dict()
+            hit_state = True if data["$ENTRY_HIT_STATE"] == 'ENTRY_ACTIVE' else False
+
+        except gc.BfruntimeReadWriteRpcException:
+            print("Entry not found!")
+
+        return hit_state
+    
+    
+    def clean_idle_entries(self, table_name):
+        """
+        Clean all idle entries in the table
+        
+        Args:
+            table_name (str) : Name of the table
+        """
+        table = self.bfrt_info.table_get(table_name)
+        # Update all hit state before deleting
+        table.operations_execute(self.target, 'UpdateHitState')
+
+        for (data, key) in table.entry_get(self.target):
+            if data.to_dict()["$ENTRY_HIT_STATE"] == "ENTRY_IDLE":
+                print("Deleting entry with key: {}".format(key))
+                table.entry_del(self.target, [key])
+    

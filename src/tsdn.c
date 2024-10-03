@@ -28,6 +28,9 @@ struct timeval last_log_time;
 /* Timer for lazy free */
 struct timeval last_hash_cleaned_time;
 
+/* Timer for cleaning idle entries */
+struct timeval last_idle_cleaned_time;
+
 int debug = 3;
 
 #ifdef DO_STATS
@@ -389,8 +392,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Error setting buffer size\n");
 		return (2);
 	}
-
-	if (pcap_set_promisc(pcap, 1) != 0)
+		if (pcap_set_promisc(pcap, 1) != 0)
 	{
 		fprintf(stderr, "Error setting promiscuous mode\n");
 		return (2);
@@ -435,7 +437,7 @@ int main(int argc, char *argv[])
 
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
-	last_hash_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
+	last_idle_cleaned_time = last_hash_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
 
 	struct timeval end_time;
 
@@ -447,18 +449,14 @@ int main(int argc, char *argv[])
 		if (tv_sub_2(current_time, last_log_time) > 10000)
 		{
 			last_log_time = current_time;
-			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",
-					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp);
+			log_trace("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, tcp_flow_entry_count: %d, udp_flow_entry_count: %d, icmp_flow_entry_count: %d",
+					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp, tcp_flow_entry_count, udp_flow_entry_count, icmp_flow_entry_count);
 		}
 		if (pkt_count % 100 == 0)
 		{
 			gettimeofday(&end_time, NULL);
 			log_trace("sampled at %d, cost %d us", pkt_count, tv_sub_2(end_time, current_time));
 		}
-		// if (pkt_count >= max_pkt)
-		// {
-		// 	break;
-		// }
 #endif
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
 
