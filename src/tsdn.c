@@ -71,6 +71,8 @@ void stats_init()
 	u_long installed_entry_count_udp = 0;
 	u_long installed_entry_count_icmp = 0;
 
+	u_long install_buf_size = 0;
+
 	u_long replied_flow_count_tot = 0;
 	u_long replied_flow_count_tcp = 0;
 	u_long replied_flow_count_udp = 0;
@@ -284,7 +286,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 	}
 
 	default:
-		fprintf(fp_stderr, "ProcessPacket: Un-supported IP Protocol!\n");
+		fprintf(fp_log, "ProcessPacket: Un-supported IP Protocol!\n");
 		break;
 	}
 
@@ -294,8 +296,8 @@ static int ProcessPacket(struct timeval *pckt_time,
 void print_all_stats()
 {
 	printf("\nProgram Exiting... \n");
-	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld",
-		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp);
+	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, unsupported_pkt_count: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, tcp_flow_entry_count: %ld, udp_flow_entry_count: %ld, icmp_flow_entry_count: %ld\n",
+		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count, pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp, tcp_flow_entry_count, udp_flow_entry_count, icmp_flow_entry_count);
 
 	/* Print the statistics */
 	if (pcap_stats(pcap, &stats_pcap) >= 0)
@@ -361,13 +363,13 @@ int main(int argc, char *argv[])
 					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
 					  "pkt_list_count_tot,pkt_list_count_use,"
 					  "flow_hash_list_count_tot,flow_hash_list_count_use,"
-					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,"
+					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
 					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
 					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
 					  "tcp_flow_entry_count,udp_flow_entry_count,icmp_flow_entry_count\n");
 
 	log_add_fp(fp_stats, LOG_STATS);
-	// log_add_fp(fp_log, LOG_DEBUG);
+	log_set_quiet(TRUE);
 
 	printf("Capturing on the device: %s\n", RECV_INTF);
 
@@ -451,17 +453,19 @@ int main(int argc, char *argv[])
 		if (tv_sub_2(current_time, last_log_time) > STATS_LOG_SAMPLE_TIME)
 		{
 			last_log_time = current_time;
+			install_buf_size = entry_circ_buf_size();
+
 			log_stats("stats,%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld,%ld,"
+					  "%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld",
 					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
 					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
 					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use,
-					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp,
+					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp,install_buf_size,
 					  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
 					  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
 					  tcp_flow_entry_count, udp_flow_entry_count, icmp_flow_entry_count);

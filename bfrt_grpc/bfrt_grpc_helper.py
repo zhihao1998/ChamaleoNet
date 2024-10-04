@@ -136,6 +136,10 @@ class BfRtAPI:
         t = self.bfrt_info.table_get(table_name)
         print("{:<30}: {}".format("TableName", t.info.name_get()))
         print("{:<30}: {}".format("Size", t.info.size_get()))
+        try:
+            print("{:<30}: {}".format("Usage", next(t.usage_get(self.target))))
+        except:
+            print("{:<30}: {}".format("Usage", 'n/a'))
         print("{:<30}: {}".format("Actions", t.info.action_name_list_get()))
         print("{:<30}:".format("KeyFields"))
         for field in sorted(t.info.key_field_name_list_get()):
@@ -187,9 +191,9 @@ class BfRtAPI:
         for (data, key) in table.entry_get(self.target):
             print(key.to_dict(), data.to_dict())
     
-    def get_table_entry_number(self, table_name):
+    def get_table_usage(self, table_name):
         table = self.bfrt_info.table_get(table_name)
-        return len(list(table.entry_get(self.target)))
+        return next(table.usage_get(self.target, flags={"from_hw":False}))
 
     def entry_add(self, table_name, keys=[], data=[], action_name=None):
         """Adds entry to table.

@@ -428,6 +428,7 @@ void trace_init(void)
 void trace_cleanup()
 {
     /* free the flow hash table */
+    printf("Freeing flow hash table\n");
     for (int i = 0; i < HASH_TABLE_SIZE; i++)
     {
         flow_hash_t *flow_hash_ptr = flow_hash_table[i];
@@ -440,6 +441,7 @@ void trace_cleanup()
     }
     free(flow_hash_table);
 
+    printf("Freeing packet buffer\n");
     /* free the packet buffer */
     for (int i = 0; i < PKT_BUF_SIZE; i++)
     {

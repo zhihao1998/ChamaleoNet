@@ -86,6 +86,7 @@ typedef struct circular_buf_t {
 	size_t head;
 	size_t tail;
 	size_t max; //of the buffer
+  Bool full;
 }circular_buf_t;
 
 typedef struct flow_hash_t

@@ -7,6 +7,11 @@ static table_entry_t *temp_table_entry_ptr;
 static pthread_mutex_t entry_install_mutex;
 static pthread_cond_t entry_install_cond;
 
+u_long entry_circ_buf_size()
+{
+	return circular_buf_size(p4_entry_circ_buf);
+}
+
 int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol)
 {
 	static table_entry_t **temp_table_entry_pp;
@@ -17,7 +22,7 @@ int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_sh
 	temp_table_entry_ptr->protocol = protocol;
 	temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
 	assert(temp_table_entry_pp != NULL);
-	
+
 	pthread_cond_signal(&entry_install_cond);
 	return 0;
 }
@@ -28,6 +33,8 @@ void *install_drop_entry(void *args)
 	p4_entry_buf = (table_entry_t **)MallocZ(ENTRY_BUF_SIZE * sizeof(table_entry_t *));
 	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, ENTRY_BUF_SIZE);
 	temp_table_entry_ptr = (table_entry_t *)MallocZ(sizeof(table_entry_t));
+
+	timeval start_time, end_time;
 
 	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 	bfrt_grpc_init();
@@ -51,6 +58,10 @@ void *install_drop_entry(void *args)
 		}
 
 		/* Check the next timeout */
+#ifdef DO_STATS
+		gettimeofday(&start_time, NULL);
+#endif
+
 		if (circular_buf_get(p4_entry_circ_buf, &buf_slot) != -1)
 		{
 			int res;
@@ -92,17 +103,31 @@ void *install_drop_entry(void *args)
 			}
 			}
 		}
+
+#ifdef DO_STATS
+		// gettimeofday(&end_time, NULL);
+		// printf("entry_adding_time: %d\n", tv_sub_2(end_time, start_time));
+#endif
 		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_IDLE_TIMEOUT)
 		{
 			clean_all_idle_entries();
 			last_idle_cleaned_time = current_time;
 		}
 #ifdef DO_STATS
-		tcp_flow_entry_count = bfrt_get_table_entry_num("tcp_flow");
-		udp_flow_entry_count = bfrt_get_table_entry_num("udp_flow");
-		icmp_flow_entry_count = bfrt_get_table_entry_num("icmp_flow");
+		// gettimeofday(&end_time, NULL);
+		// printf("cleaning time: %d\n", tv_sub_2(end_time, start_time));
+#endif
+
+#ifdef DO_STATS
+		tcp_flow_entry_count = bfrt_get_table_usage("tcp_flow");
+		udp_flow_entry_count = bfrt_get_table_usage("udp_flow");
+		icmp_flow_entry_count = bfrt_get_table_usage("icmp_flow");
+
+		// gettimeofday(&end_time, NULL);
+		// printf("get_table_entry_num_time: %d\n", tv_sub_2(end_time, start_time));
 #endif
 	}
+
 	PyGILState_Release(ret);
 }
 
@@ -245,13 +270,13 @@ int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip)
 }
 
 /* Get Entry Table Number */
-int bfrt_get_table_entry_num(char *table_name)
+int bfrt_get_table_usage(char *table_name)
 {
 	assert(pInstance != NULL);
 	PyObject *pArgs, *pRes, *pFunc;
 	int ret = -1;
 
-	pFunc = PyObject_GetAttrString(pInstance, "get_table_entry_number");
+	pFunc = PyObject_GetAttrString(pInstance, "get_table_usage");
 	pArgs = Py_BuildValue("(s)", table_name);
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);

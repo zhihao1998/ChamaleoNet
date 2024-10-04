@@ -19,6 +19,7 @@
         "optional": "c",
         "string_view": "c",
         "string": "c",
-        "system_error": "c"
+        "system_error": "c",
+        "*.tcc": "c"
     }
 }

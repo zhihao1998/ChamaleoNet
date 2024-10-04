@@ -33,8 +33,8 @@ class Bfrt_GRPC_Client:
     def dump_table(self, table_name):
         return self.bfrt.dump_table(table_name)
     
-    def get_table_entry_number(self, table_name):
-        return int(self.bfrt.get_table_entry_number(table_name))
+    def get_table_usage(self, table_name) -> int:
+        return int(self.bfrt.get_table_usage(table_name))
 
     def tcp_flow_add_with_drop(self, src_ip, dst_ip, src_port, dst_port):
         match_key = (src_ip, dst_ip, src_port, dst_port, 'tcp')
@@ -132,13 +132,14 @@ class Bfrt_GRPC_Client:
     
     
 if __name__ == "__main__":
-    controller = Bfrt_GRPC_Client(grpc_addr='localhost:50052')
-    controller.print_table_info('icmp_flow')
-    controller.clear_tables()
-    controller.tcp_flow_add_with_drop('10.0.0.1', '10.0.0.2', 10, 20)
-    controller.udp_flow_add_with_drop('130.192.9.161', '8.8.8.8', 61434, 53)
-    controller.icmp_flow_add_with_drop('10.0.0.5', '10.0.0.6')
-    controller.dump_table('pipe.Ingress.tcp_flow')
-    controller.dump_table('pipe.Ingress.udp_flow')
-    controller.dump_table('pipe.Ingress.icmp_flow')
-    controller.clear_tables()
+    controller = Bfrt_GRPC_Client(grpc_addr=remote_grpc_addr)
+    controller.print_tables_info()
+    controller.print_table_info('tcp_flow')
+    # controller.clear_tables()
+    # controller.tcp_flow_add_with_drop('10.0.0.1', '10.0.0.2', 10, 20)
+    # controller.udp_flow_add_with_drop('130.192.9.161', '8.8.8.8', 61434, 53)
+    # controller.icmp_flow_add_with_drop('10.0.0.5', '10.0.0.6')
+    # controller.dump_table('pipe.Ingress.tcp_flow')
+    # controller.dump_table('pipe.Ingress.udp_flow')
+    # controller.dump_table('pipe.Ingress.icmp_flow')
+    # controller.clear_tables()

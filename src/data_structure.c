@@ -170,11 +170,18 @@ void flow_hash_release(flow_hash_t*rel_flow_hash_ptr)
 /* Reference: https://github.com/embeddedartistry/embedded-resources/tree/master/examples/c/circular_buffer */
 static inline size_t advance_headtail_value(size_t value, size_t max)
 {
-  if (++value == max)
+  return (value + 1) % max;
+}
+
+static void advance_tail_pointer(circular_buf_t *me)
+{
+  assert(me);
+  if (!circular_buf_empty(me))
   {
-    value = 0;
+    me->head = advance_headtail_value(me->head, me->max);
   }
-  return value;
+  me->tail = advance_headtail_value(me->tail, me->max);
+  me->full = (me->tail == me->head);
 }
 
 circular_buf_t *circular_buf_init(void **buf_space, size_t size)
@@ -199,6 +206,7 @@ void circular_buf_reset(circular_buf_t *me)
 
   me->tail = 0;
   me->head = 0;
+  me->full = FALSE;
 }
 
 void circular_buf_free(circular_buf_t *me)
@@ -209,8 +217,8 @@ void circular_buf_free(circular_buf_t *me)
 
 Bool circular_buf_full(circular_buf_t *me)
 {
-  // We want to check, not advance, so we don't save the output here
-  return advance_headtail_value(me->tail, me->max) == me->head;
+  assert(me);
+  return me->full;
 }
 
 Bool circular_buf_empty(circular_buf_t *me)
@@ -276,11 +284,13 @@ void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr)
 int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr)
 {
   int r = -1;
+  assert(me && me->buf_space && buf_slot_ptr_ptr);
 
-  if (me && !circular_buf_empty(me))
+  if (!circular_buf_empty(me))
   {
     *buf_slot_ptr_ptr = me->buf_space[me->head];
     me->head = advance_headtail_value(me->head, me->max);
+    me->full = FALSE;
     r = 0;
   }
 

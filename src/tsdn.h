@@ -210,8 +210,9 @@ int bfrt_grpc_destroy();
 void bfrt_grpc_init();
 void *install_drop_entry(void *args);
 int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
-int bfrt_get_table_entry_num(char *table_name);
+int bfrt_get_table_usage(char *table_name);
 int clean_all_idle_entries();
+u_long entry_circ_buf_size();
 
 /* Logging */
 #define DO_STATS
@@ -290,6 +291,8 @@ u_long installed_entry_count_tot;
 u_long installed_entry_count_tcp;
 u_long installed_entry_count_udp;
 u_long installed_entry_count_icmp;
+
+u_long install_buf_size;
 
 u_long replied_flow_count_tot;
 u_long replied_flow_count_tcp;
