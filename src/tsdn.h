@@ -80,8 +80,6 @@ Bool internal_dst;
 #define C2S 1
 #define S2C -1
 
-extern int debug;
-
 #define fp_stdout stdout
 #define fp_stderr stderr
 
@@ -193,11 +191,6 @@ flow_hash_t **flow_hash_table;
 char *readline(FILE *fp, int skip_comment, int skip_void_lines);
 #define BUF_SIZE 80
 
-/*
- * Output
- */
-#define ANSI_BOLD "\x1b[1m"
-#define ANSI_RESET "\x1b[0m"
 
 void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr);
 int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2);
@@ -239,9 +232,9 @@ typedef struct {
 typedef void (*log_LogFn)(log_Event *ev);
 typedef void (*log_LockFn)(bool lock, void *udata);
 
-enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
+enum { LOG_STATS, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
 
-#define log_trace(...) log_log(LOG_TRACE, __FILE__, __LINE__, __VA_ARGS__)
+#define log_stats(...) log_log(LOG_STATS, __FILE__, __LINE__, __VA_ARGS__)
 #define log_debug(...) log_log(LOG_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
 #define log_info(...)  log_log(LOG_INFO,  __FILE__, __LINE__, __VA_ARGS__)
 #define log_warn(...)  log_log(LOG_WARN,  __FILE__, __LINE__, __VA_ARGS__)
@@ -277,6 +270,8 @@ u_long icmp_pkt_count_tot;
 // u_long in_icmp_pkt_count;
 // u_long out_icmp_pkt_count;
 // u_long local_icmp_pkt_count;
+
+u_long unsupported_pkt_count;
 
 // Data Structure Counters
 u_long pkt_buf_count;

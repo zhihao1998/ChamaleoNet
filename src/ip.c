@@ -86,10 +86,7 @@ findheader(u_int ipproto, struct ip *pip, void **pplast)
        it's useless (offset part of field must be 0 */
     if ((ntohs(pip->ip_off) & 0x1fff) != 0)
     {
-      if (debug > 1)
-      {
-        fprintf(fp_stdout, "findheader: Skipping IPv4 non-initial fragment\n");
-      }
+        fprintf(fp_log, "findheader: Skipping IPv4 non-initial fragment\n");
       return NULL;
     }
 

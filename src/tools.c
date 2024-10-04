@@ -182,7 +182,7 @@ int ParseNetFile(FILE *fp, char *qualifier, int max_entries,
                     }
                     else if (mask_bits == 0)
                     {
-                        fprintf(fp_stderr, ANSI_BOLD "Warning:" ANSI_RESET " IPv4 mask set to 0 bits in %s config n.%d\n\tAny IPv4 address will be considered internal\n",
+                        fprintf(fp_stderr, "Warning: IPv4 mask set to 0 bits in %s config n.%d\n\tAny IPv4 address will be considered internal\n",
                                 qualifier, (i + 1));
                         CLASS_net_list[j].s_addr = 0;
                     }
@@ -242,17 +242,15 @@ int ParseNetFile(FILE *fp, char *qualifier, int max_entries,
             CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
             is_ipv4 = 1;
         }
-        if (debug)
+        
+        if (is_ipv4 == 1)
         {
-            if (is_ipv4 == 1)
-            {
-                mask2.s_addr = CLASS_net_mask[j];
-                fprintf(fp_stdout, "Adding: %s as %s ",
-                        inet_ntoa(CLASS_net_list[j]), qualifier);
-                fprintf(fp_stdout, "with mask %s (%u)\n",
-                        inet_ntoa(mask2),
-                        CLASS_net_mask[j]);
-            }
+            mask2.s_addr = CLASS_net_mask[j];
+            fprintf(fp_log, "Adding: %s as %s ",
+                    inet_ntoa(CLASS_net_list[j]), qualifier);
+            fprintf(fp_log, "with mask %s (%u)\n",
+                    inet_ntoa(mask2),
+                    CLASS_net_mask[j]);
         }
 
         if (is_ipv4 == 1)

@@ -21,7 +21,7 @@ MMmalloc(size_t size, const char *f_name)
     /* If problems arise from the memory allocation, an error message is    */
     /* printed before exiting the program execution.                        */
     fprintf(stderr,
-            "\nError:  Memory allocation error in Tstat function %s\n", f_name);
+            "\nError:  Memory allocation error in %s\n", f_name);
     exit(1);
   }
   memset(temp_pointer, 0, size);

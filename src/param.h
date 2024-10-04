@@ -20,8 +20,6 @@ Increase this number on high speed network will help ...*/
 /* Each time the garbage collection is fired, it scans PKT_BUF_SIZE_BURST tcp flows */
 // #define PKT_BUF_SIZE_BURST (PKT_BUF_SIZE / GARBAGE_SPLIT_RATIO)
 
-#define ENTRY_BUF_SIZE 100000
-
 /* max depth of the linear search in the previous vector... */
 #define LIST_SEARCH_DEPT 200
 
@@ -43,7 +41,16 @@ Increase this number on high speed network will help ...*/
 #define LAZY_FREEING_PERIOD 50000
 #define LAZY_FREEING_TIMEOUT 1000000
 
+/* 
+* Switch GRPC Client 
+*/
+
+/* size of the circular buffer of the pending entry list to be installed */
+#define ENTRY_BUF_SIZE 100000
+
+/* polling time for checking the idle entries in P4 tables */
 #define ENTRY_IDLE_TIMEOUT 5000000
+
 
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100
@@ -52,3 +59,8 @@ Increase this number on high speed network will help ...*/
 /* Interfaces to capture and send packets */
 #define RECV_INTF "enp8s0"
 #define SEND_INTF "brtest"
+
+/* Logging Sampling granularity */
+#define PKT_LOG_SAMPLE_CNT 1000      // pkt_count
+#define TIMEOUT_SAMPLE_CNT 1000      // tot_expired_pkt_count
+#define STATS_LOG_SAMPLE_TIME 10000  //us

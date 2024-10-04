@@ -30,13 +30,7 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
         num_ip_packets++;
         num_ip_packets = num_ip_packets % PKT_BUF_SIZE;
     }
-    if (pkt_arr[num_ip_packets] != NULL)
-    {
-        log_debug("ooopsss: number of simultaneous connection opened is greater then the maximum supported number!\n"
-                  "you have to rebuild the source with a larger LIST_SEARCH_DEPT defined!\n"
-                  "or possibly with a larger PKT_BUF_SIZE defined!");
-        return (NULL);
-    }
+    assert(pkt_arr[num_ip_packets] == NULL);
 
     /* create a new TCP pair record and remember where you put it */
     ppkt = pkt_arr[num_ip_packets] = pkt_alloc();
@@ -81,12 +75,14 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
         }
     }
 
+    /* Garbage Collection */
     if (elapsed(last_pkt_cleaned_time, current_time) > GARBAGE_PERIOD)
     {
         /* Do the expired packet checking */
         last_pkt_cleaned_time = current_time;
         check_timeout_periodic();
     }
+
     /* Lazy Free */
     if (elapsed(last_hash_cleaned_time, current_time) > LAZY_FREEING_PERIOD)
     {
@@ -177,9 +173,10 @@ void check_timeout_periodic()
             default:
                 break;
             }
-            if (expired_pkt_count_tot % 100 == 0)
+
+            if (expired_pkt_count_tot % PKT_LOG_SAMPLE_CNT == 0)
             {
-                log_trace("check_timeout_periodic: delayed for %d us", elapsed_time);
+                log_stats("timeout,%d", elapsed_time);
             }
 #endif
             pkt_arr[idx] = NULL;
@@ -341,7 +338,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                                        flow_hash_ptr->addr_pair.b_port,
                                        flow_hash_ptr->addr_pair.protocol))
             {
-                log_debug("Error: Failed to install flow entry");
+                fprintf(fp_log, "Error: Failed to install flow entry!");
                 return -1;
             }
 

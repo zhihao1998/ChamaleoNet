@@ -1,3 +1,8 @@
+# TODO
+
+- throughput
+- the long-live flow (new packets after deleting the entry in switch)
+
 # C-based Controller for Transparent SDN Honeypot
 
 Source code of the host-based solution of Transparent SDN Honeypot. 
@@ -27,8 +32,6 @@ This project is developed with the following dependencies:
 4. Run the main executable object by `sudo ./bin/tsdn`. Typically, libpcap requires root privilege. If the current user has root privilege to execute packet capturing, `sudo` can be omitted.
 5. Send some packets to the interface.
 
-
-## Data Plane
 
 ### Build and Run
 
@@ -71,6 +74,9 @@ sudo ifconfig virbr1 up
 sudo tcpreplay -i veth250 --mbps 1000 trace/syn_flood.pcap
 ```
 
+```bash
+sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 -i enp8s0 --stats=5 --mtu-trunc --mbps=1000 trace/polito_with_syn_flood.pcap
+```
 
 
 ## Benchmarks
@@ -78,7 +84,8 @@ sudo tcpreplay -i veth250 --mbps 1000 trace/syn_flood.pcap
 ### Indicators
 
 #### Packet Counter
-- total parsed packet number (log every 100 packets)
+
+- total parsed packet number
 - TCP packet number
 - UDP packet number
 - ICMP packet number
@@ -97,32 +104,26 @@ sudo tcpreplay -i veth250 --mbps 1000 trace/syn_flood.pcap
 - expired packet number
 
 
-### Explore the 
-
-
 ## Performance Profile
 
+### Memory Usage Monitoring
+
+valgrind degrades the performance of the target program a lot, so do the memory usage profiling separately.
+
 ```bash
-sudo valgrind --tool=callgrind --separate-threads=yes --collect-systime=nsec debug/tsdn
+sudo valgrind --tool=massif ./debug/tsdn
+```
+
+```bash
+sudo valgrind --tool=callgrind --collect-systime=nsec debug/tsdn
 sudo rm -rf *.out.*
 sudo chmod 777  callgrind.out*
 ```
 
-## Note
+### Traffic Monitoring
 
-1. Only considers the Ethernet frames.
+Once the response of one request packet is received, it will be identified as a flow originated or destined to an active service, which is very possible a legitimate flow. The controller installs an entry to the switch to drop all packets from this flow, alleviating the traffic load that it has to process. Here we monitor the traffic speed of the interface that receives traffic from switch, to evaluate how many legitimate flow can be filtered.
 
-### Long latency between libpcap timestamp and the time when we get the packet
-It's the problem of packet buffer mechanism in Libpcap, which buffers packets for a specific period of time. 
-
-To fix this, if the libpcap on your system has the pcap_set_immediate_mode() function, then:
-- use pcap_create() and pcap_activate(), rather than pcap_open_live(), to open the capture device;
-- call pcap_set_immediate_mode() between the pcap_create() and pcap_activate() calls.
-
-**Reference:**
-
-- official explanation of the latency: https://www.tcpdump.org/faq.html#q15
-- packet buffer timeout of libpcap: https://www.tcpdump.org/manpages/pcap.3pcap.html
-- solution: https://stackoverflow.com/questions/36597189/libpcap-delay-between-receiving-frames-and-call-of-callback-function
-
-
+```bash
+vnstat --live -i enp8s0  --json > log/speed_log.json
+```

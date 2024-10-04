@@ -24,7 +24,7 @@
 
 #include "tsdn.h"
 
-#define MAX_CALLBACKS 32
+#define MAX_CALLBACKS 4
 
 typedef struct
 {
@@ -45,14 +45,14 @@ static struct
 struct timeval t;
 
 static const char *level_strings[] = {
-    "TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
+    "STATS", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
 
 static void stdout_callback(log_Event *ev)
 {
   // char buf[16];
   // buf[strftime(buf, sizeof(buf), "%H:%M:%S:", ev->time->sec)] = '\0';
   fprintf(
-      ev->udata, "%ld.%06ld %-5s %s: %d, ",
+      ev->udata, "%ld.%06ld,%-5s,%s,%d,",
       ev->time->tv_sec, ev->time->tv_usec, level_strings[ev->level], ev->file, ev->line);
   vfprintf(ev->udata, ev->fmt, ev->ap);
   fprintf(ev->udata, "\n");
@@ -64,7 +64,7 @@ static void file_callback(log_Event *ev)
   // char buf[64];
   // buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
   fprintf(
-      ev->udata, "%ld.%06ld %-5s %s: %d, ",
+      ev->udata, "%ld.%06ld,%-5s,%s,%d,",
       ev->time->tv_sec, ev->time->tv_usec, level_strings[ev->level], ev->file, ev->line);
   vfprintf(ev->udata, ev->fmt, ev->ap);
   fprintf(ev->udata, "\n");
