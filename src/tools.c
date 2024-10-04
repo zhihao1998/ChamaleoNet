@@ -100,17 +100,17 @@ Bool internal_ip(struct in_addr adx)
 {
     int i;
 
-    fprintf(fp_stdout, "Checking %s \n", inet_ntoa(adx));
+    // fprintf(fp_stdout, "Checking %s \n", inet_ntoa(adx));
     for (i = 0; i < tot_internal_nets; i++)
     {
         // fprintf(fp_stdout, " Against: %s \n",inet_ntoa(internal_net_list[i]));
         if ((adx.s_addr & internal_net_mask[i]) == internal_net_list[i].s_addr)
         {
-            fprintf(fp_stdout, "Internal: %s\n", inet_ntoa(adx));
+            // fprintf(fp_stdout, "Internal: %s\n", inet_ntoa(adx));
             return 1;
         }
     }
-    fprintf(fp_stdout, "External: %s\n", inet_ntoa(adx));
+    // fprintf(fp_stdout, "External: %s\n", inet_ntoa(adx));
     return 0;
 }
 

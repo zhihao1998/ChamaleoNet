@@ -296,8 +296,20 @@ static int ProcessPacket(struct timeval *pckt_time,
 void print_all_stats()
 {
 	printf("\nProgram Exiting... \n");
-	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, unsupported_pkt_count: %ld, pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, tcp_flow_entry_count: %ld, udp_flow_entry_count: %ld, icmp_flow_entry_count: %ld\n",
-		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count, pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size, replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp, tcp_flow_entry_count, udp_flow_entry_count, icmp_flow_entry_count);
+	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, unsupported_pkt_count: %ld, "
+		   "pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, "
+		   "pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, "
+		   "installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, "
+		   "replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, "
+		   "expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, "
+		   "active_host_tbl_entry_count: %ld\n",
+		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count, 
+		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, 
+		   pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, 
+		   installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size, 
+		   replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, 
+		   expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp, 
+		   active_host_tbl_entry_count);
 
 	/* Print the statistics */
 	if (pcap_stats(pcap, &stats_pcap) >= 0)
@@ -353,7 +365,7 @@ int main(int argc, char *argv[])
 	void *plast;
 	long int location = 0;
 	char log_file_name[60] = "log/log.log";
-	char stat_file_name[60] = "log/stat.log";
+	char stat_file_name[60] = "log/stat.csv";
 	// sprintf(stat_file_name, "log/stat-timeout%dms-GC%dms.log", (PKT_BUF_SIZE / GARBAGE_SPLIT_RATIO) * GARBAGE_PERIOD / 1000 * 2, GARBAGE_PERIOD / 1000);
 
 	fp_log = fopen(log_file_name, "w");
@@ -366,7 +378,7 @@ int main(int argc, char *argv[])
 					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
 					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
 					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-					  "tcp_flow_entry_count,udp_flow_entry_count,icmp_flow_entry_count\n");
+					  "active_host_tbl_entry_count\n");
 
 	log_add_fp(fp_stats, LOG_STATS);
 	log_set_quiet(TRUE);
@@ -461,14 +473,14 @@ int main(int argc, char *argv[])
 					  "%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld",
+					  "%ld",
 					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
 					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
 					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use,
-					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp,install_buf_size,
+					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
 					  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
 					  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
-					  tcp_flow_entry_count, udp_flow_entry_count, icmp_flow_entry_count);
+					  active_host_tbl_entry_count);
 		}
 		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
 		{

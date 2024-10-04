@@ -1,5 +1,6 @@
 # TODO
 
+- some problem with size of circular buffer
 - throughput
 - the long-live flow (new packets after deleting the entry in switch)
 

@@ -203,9 +203,7 @@ void check_timeout_lazy();
 
 /* Tofino Interaction */
 
-int bfrt_tcp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port);
-int bfrt_udp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port);
-int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip);
+int bfrt_active_host_tbl_add_with_drop(in_addr internal_ip, u_short internal_port, u_short ip_protocol);
 int bfrt_grpc_destroy();
 void bfrt_grpc_init();
 void *install_drop_entry(void *args);
@@ -305,9 +303,7 @@ u_long expired_pkt_count_udp;
 u_long expired_pkt_count_icmp;
 
 // Flow Entry Counters
-int tcp_flow_entry_count;
-int udp_flow_entry_count;
-int icmp_flow_entry_count;
+u_long active_host_tbl_entry_count;
 
 
 extern timeval current_time;

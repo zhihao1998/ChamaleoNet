@@ -224,23 +224,21 @@ Bool circular_buf_full(circular_buf_t *me)
 Bool circular_buf_empty(circular_buf_t *me)
 {
   assert(me);
-  return (me->tail == me->head);
+  return (!circular_buf_full(me) && (me->head == me->tail));
 }
 
 size_t circular_buf_capacity(circular_buf_t *me)
 {
   assert(me);
 
-  // We account for the space we can't use for thread safety
-  return me->max - 1;
+  return me->max;
 }
 
 size_t circular_buf_size(circular_buf_t *me)
 {
   assert(me);
 
-  // We account for the space we can't use for thread safety
-  size_t size = me->max - 1;
+  size_t size = me->max;
 
   if (!circular_buf_full(me))
   {
@@ -269,7 +267,7 @@ void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr)
   {
     me->buf_space[me->tail] = buf_slot_ptr;
     temp_buf_slot_ptr_ptr = &(me->buf_space[me->tail]);
-    me->tail = advance_headtail_value(me->tail, me->max);
+    advance_tail_pointer(me);
     return temp_buf_slot_ptr_ptr;
   }
   else

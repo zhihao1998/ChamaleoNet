@@ -42,7 +42,7 @@ void *install_drop_entry(void *args)
 	pthread_mutex_init(&entry_install_mutex, NULL);
 	pthread_cond_init(&entry_install_cond, NULL);
 
-	tcp_flow_entry_count = udp_flow_entry_count = icmp_flow_entry_count = 0;
+	active_host_tbl_entry_count = 0;
 
 	while (circular_buf_empty(p4_entry_circ_buf))
 	{
@@ -68,41 +68,41 @@ void *install_drop_entry(void *args)
 			table_entry_t *table_entry_ptr = (table_entry_t *)buf_slot;
 			assert(table_entry_ptr != NULL);
 
-			inet_ntop(AF_INET, &(table_entry_ptr->src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
-			inet_ntop(AF_INET, &(table_entry_ptr->dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
+			if (internal_ip(table_entry_ptr->src_ip))
+			{
+				res = bfrt_active_host_tbl_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->src_port, table_entry_ptr->protocol);
+			}
+			else if (internal_ip(table_entry_ptr->dst_ip))
+			{
+				res = bfrt_active_host_tbl_add_with_drop(table_entry_ptr->dst_ip, table_entry_ptr->dst_port, table_entry_ptr->protocol);
+			}
+			else
+			{
+				fprintf(fp_log, "Error: Non of the src nor dst IP is internal!\n");
+				continue;
+			}
 
+#ifdef DO_STATS
+			installed_entry_count_tot += res;
 			switch (table_entry_ptr->protocol)
 			{
 			case IPPROTO_TCP:
 			{
-				res = bfrt_tcp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
-#ifdef DO_STATS
-				installed_entry_count_tot += res;
 				installed_entry_count_tcp += res;
-#endif
-
 				break;
 			}
 			case IPPROTO_UDP:
 			{
-				res = bfrt_udp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip, table_entry_ptr->src_port, table_entry_ptr->dst_port);
-#ifdef DO_STATS
-				installed_entry_count_tot += res;
 				installed_entry_count_udp += res;
-#endif
-				break;
 			}
 			case IPPROTO_ICMP:
 			{
-				res = bfrt_icmp_flow_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->dst_ip);
-#ifdef DO_STATS
-				installed_entry_count_tot += res;
 				installed_entry_count_icmp += res;
-#endif
 				break;
 			}
 			}
 		}
+#endif
 
 #ifdef DO_STATS
 		// gettimeofday(&end_time, NULL);
@@ -119,9 +119,7 @@ void *install_drop_entry(void *args)
 #endif
 
 #ifdef DO_STATS
-		tcp_flow_entry_count = bfrt_get_table_usage("tcp_flow");
-		udp_flow_entry_count = bfrt_get_table_usage("udp_flow");
-		icmp_flow_entry_count = bfrt_get_table_usage("icmp_flow");
+		active_host_tbl_entry_count = bfrt_get_table_usage("active_host_tbl");
 
 		// gettimeofday(&end_time, NULL);
 		// printf("get_table_entry_num_time: %d\n", tv_sub_2(end_time, start_time));
@@ -206,62 +204,19 @@ int bfrt_grpc_destroy()
 }
 
 /* TCP Flow Table */
-int bfrt_tcp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port)
+int bfrt_active_host_tbl_add_with_drop(in_addr internal_ip, u_short internal_port, u_short ip_protocol)
 {
 	assert(pInstance != NULL);
 	PyObject *pArgs, *pRes, *pFunc;
-	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
+	char ip_addr_str[INET_ADDRSTRLEN];
 	int ret = 0;
 
-	inet_ntop(AF_INET, &(src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
-	inet_ntop(AF_INET, &(dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
+	inet_ntop(AF_INET, &(internal_ip), ip_addr_str, INET_ADDRSTRLEN);
 
-	pFunc = PyObject_GetAttrString(pInstance, "tcp_flow_add_with_drop");
-	pArgs = Py_BuildValue("(ssii)", ip_src_addr_str, ip_dst_addr_str, ntohs(src_port), ntohs(dst_port));
+	pFunc = PyObject_GetAttrString(pInstance, "internal_host_add_with_drop");
+	pArgs = Py_BuildValue("(sii)", ip_addr_str, ntohs(internal_port), ip_protocol);
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	assert(pRes != NULL);
-	PyArg_Parse(pRes, "i", &ret);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
-	Py_DECREF(pRes);
-	return ret;
-}
-
-/* UDP Flow Table */
-int bfrt_udp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip, u_short src_port, u_short dst_port)
-{
-	assert(pInstance != NULL);
-	PyObject *pArgs, *pRes, *pFunc;
-	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
-	int ret = 0;
-
-	inet_ntop(AF_INET, &(src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
-	inet_ntop(AF_INET, &(dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
-
-	pFunc = PyObject_GetAttrString(pInstance, "udp_flow_add_with_drop");
-	pArgs = Py_BuildValue("(ssii)", ip_src_addr_str, ip_dst_addr_str, ntohs(src_port), ntohs(dst_port));
-	pRes = PyEval_CallObject(pFunc, pArgs);
-	PyArg_Parse(pRes, "i", &ret);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
-	Py_DECREF(pRes);
-	return ret;
-}
-
-/* ICMP Flow Table */
-int bfrt_icmp_flow_add_with_drop(in_addr src_ip, in_addr dst_ip)
-{
-	assert(pInstance != NULL);
-	PyObject *pArgs, *pRes, *pFunc;
-	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
-	int ret = 0;
-
-	inet_ntop(AF_INET, &(src_ip), ip_src_addr_str, INET_ADDRSTRLEN);
-	inet_ntop(AF_INET, &(dst_ip), ip_dst_addr_str, INET_ADDRSTRLEN);
-
-	pFunc = PyObject_GetAttrString(pInstance, "icmp_flow_add_with_drop");
-	pArgs = Py_BuildValue("(ss)", ip_src_addr_str, ip_dst_addr_str);
-	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
 	Py_DECREF(pFunc);
 	Py_DECREF(pArgs);
