@@ -315,6 +315,12 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     {
         if (flow_hash_ptr->lazy_pending == TRUE)
         {
+            // fprintf(fp_log, "Lazy Free Flow Hash Hit! (%s:%d -> %s:%d, protocol: %d)\n",
+            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+            //         ntohs(flow_hash_ptr->addr_pair.a_port),
+            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+            //         ntohs(flow_hash_ptr->addr_pair.b_port),
+            //         flow_hash_ptr->addr_pair.protocol);
 #ifdef DO_STATS
             lazy_flow_hash_hit++;
 #endif
@@ -331,8 +337,15 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         else if (dir == S2C)
         {
             LazyFreeFlowHash(flow_hash_ptr);
+            // fprintf(fp_log, "Lazy Free Flow Hash(%s:%d -> %s:%d, protocol: %d)\n",
+            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+            //         ntohs(flow_hash_ptr->addr_pair.a_port),
+            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+            //         ntohs(flow_hash_ptr->addr_pair.b_port),
+            //         flow_hash_ptr->addr_pair.protocol)
+#ifdef SWITCH_ENABLED
             /* Install Flow Entry */
-            if (try_install_drop_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
+            if (try_install_p4_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
                                        flow_hash_ptr->addr_pair.b_address.un.ip4,
                                        flow_hash_ptr->addr_pair.a_port,
                                        flow_hash_ptr->addr_pair.b_port,
@@ -341,7 +354,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                 fprintf(fp_log, "Error: Failed to install flow entry!");
                 return -1;
             }
-
 #ifdef DO_STATS
             replied_flow_count_tot++;
             switch (timeout_level)
@@ -359,6 +371,8 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                 break;
             }
 #endif
+#endif
+            return 0;
         }
     }
     /* Did not find the flow, create one */

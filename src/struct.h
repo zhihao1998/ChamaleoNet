@@ -86,7 +86,6 @@ typedef struct circular_buf_t {
 	size_t head;
 	size_t tail;
 	size_t max; //of the buffer
-  Bool full;
 }circular_buf_t;
 
 typedef struct flow_hash_t
@@ -103,9 +102,7 @@ typedef struct flow_hash_t
 
 typedef struct table_entry_t
 {
-  in_addr src_ip;
-  in_addr dst_ip;
-  u_short src_port;
-  u_short dst_port;
+  in_addr internal_ip;
+  u_short internal_port;
   u_short protocol;
 }table_entry_t;

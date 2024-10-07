@@ -1,7 +1,7 @@
 # TODO
 
-- some problem with size of circular buffer
 - throughput
+    - cannot do it because of the performance
 - the long-live flow (new packets after deleting the entry in switch)
 
 # C-based Controller for Transparent SDN Honeypot
@@ -67,6 +67,22 @@ sudo ifconfig virbr0 up
 sudo ifconfig virbr1 up
 ```
 
+```bash
+sudo bridge fdb add 52:54:00:50:f6:6f dev vnet2 master temp
+sudo bridge fdb add 90:2d:77:3f:b5:a2 dev ens5f1 master temp
+
+sudo bridge fdb del 52:54:00:50:f6:6f dev vnet2 master temp
+sudo bridge fdb del 90:2d:77:3f:b5:a2 dev ens5f1 master temp
+
+sudo bridge fdb del 90:2d:77:3f:b5:a2 dev vnet14 master temp
+```
+
+```bash
+ sudo brctl show br1
+sudo brctl showmacs br1
+sudo brctl showstp br1
+```
+
 ## Attack Simulation
 
 ### SYN Flood
@@ -76,7 +92,13 @@ sudo tcpreplay -i veth250 --mbps 1000 trace/syn_flood.pcap
 ```
 
 ```bash
-sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 -i enp8s0 --stats=5 --mtu-trunc --mbps=1000 trace/polito_with_syn_flood.pcap
+sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 -i enp8s0 --stats=2 --mtu-trunc --mbps=2000 trace/polito_with_syn_flood.pcap
+
+sudo tcpreplay-edit -i enp8s0 --stats=5 --mtu-trunc --mbps=1000 trace/polito_with_syn_flood.pcap
+
+sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 --enet-smac=52:54:00:16:f4:4c -i enp8s0 --stats=2 --mtu-trunc --mbps=2000 trace/rand_syn_flood.pcap
+
+trafgen --cpp --dev enp8s0 --conf trace/syn_flood.traf -n 10000000 --verbose -b 5Gbit
 ```
 
 

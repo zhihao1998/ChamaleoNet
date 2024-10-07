@@ -137,11 +137,20 @@ struct pkt_list_elem
 ip_packet *pkt_alloc(void);
 void pkt_release(ip_packet *relesased_ip_packet);
 
-
 /* Flow hash table */
 flow_hash_t *flow_hash_alloc();
 void flow_hash_release(flow_hash_t *flow_hash_ptr);
 
+/* Table Entry Buffer */
+struct table_entry_list_elem
+{
+  struct table_entry_list_elem *next;
+  struct table_entry_list_elem *prev;
+  table_entry_t *table_entry_ptr;
+};
+
+table_entry_t *table_entry_alloc();
+void table_entry_release(table_entry_t *rel_table_entry_ptr);
 
 /* Circular Buffer Related */
 // Opaque circular buffer structure
@@ -206,8 +215,8 @@ void check_timeout_lazy();
 int bfrt_active_host_tbl_add_with_drop(in_addr internal_ip, u_short internal_port, u_short ip_protocol);
 int bfrt_grpc_destroy();
 void bfrt_grpc_init();
-void *install_drop_entry(void *args);
-int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
+void *install_thead_main(void *args);
+int try_install_p4_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
 int bfrt_get_table_usage(char *table_name);
 int clean_all_idle_entries();
 u_long entry_circ_buf_size();

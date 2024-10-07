@@ -286,7 +286,9 @@ static int ProcessPacket(struct timeval *pckt_time,
 	}
 
 	default:
-		fprintf(fp_log, "ProcessPacket: Un-supported IP Protocol!\n");
+#ifdef DO_STATS
+		unsupported_pkt_count++;
+#endif
 		break;
 	}
 
@@ -295,7 +297,8 @@ static int ProcessPacket(struct timeval *pckt_time,
 
 void print_all_stats()
 {
-	printf("\nProgram Exiting... \n");
+	printf("----------------------------------------\n");
+	printf("\nDoing Statistics... \n");
 	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, unsupported_pkt_count: %ld, "
 		   "pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, "
 		   "pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, "
@@ -315,10 +318,9 @@ void print_all_stats()
 	if (pcap_stats(pcap, &stats_pcap) >= 0)
 	{
 		printf("\nPcap Statistics\n");
-		printf("Received: %d\n", stats_pcap.ps_recv);
-		printf("Dropped: %d\n", stats_pcap.ps_drop);
-		printf("Dropped by interface: %d\n", stats_pcap.ps_ifdrop);
+		printf("Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
 	}
+	
 }
 
 void clean_all()
@@ -445,7 +447,7 @@ int main(int argc, char *argv[])
 
 	/* install P4 table entry thread */
 
-	if (pthread_create(&entry_install_thread, NULL, install_drop_entry, NULL))
+	if (pthread_create(&entry_install_thread, NULL, install_thead_main, NULL))
 	{
 		fprintf(stderr, "Error creating entry_install_thread thread\n");
 		return 1;
@@ -486,6 +488,11 @@ int main(int argc, char *argv[])
 		{
 			gettimeofday(&end_time, NULL);
 			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(end_time, current_time));
+
+			if (pkt_count % 100000 == 0)
+			{
+				print_all_stats();
+			}
 		}
 #endif
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));

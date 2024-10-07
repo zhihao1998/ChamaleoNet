@@ -34,9 +34,9 @@ MMmalloc(size_t size, const char *f_name)
  */
 
 static struct pkt_list_elem *top_pkt_flist = NULL;  /* Pointer to the top of      */
-                                                  /* the 'pktlist' free list.    */
+                                                    /* the 'pktlist' free list.    */
 static struct pkt_list_elem *last_pkt_flist = NULL; /* Pointer to the last used   */
-                                                  /* element list.              */
+                                                    /* element list.              */
 
 ip_packet *
 pkt_alloc(void)
@@ -79,7 +79,7 @@ void pkt_release(ip_packet *released_ip_packet)
   {
     new_pktlist_elem =
         (struct pkt_list_elem *)MMmalloc(sizeof(struct pkt_list_elem),
-                                        "pkt_release");
+                                         "pkt_release");
     new_pktlist_elem->ppkt = released_ip_packet;
     new_pktlist_elem->prev = NULL;
     new_pktlist_elem->next = top_pkt_flist;
@@ -128,13 +128,13 @@ void pkt_list_print()
 }
 
 /* Garbage collector for Flow Hash Table */
-static flow_hash_t*top_flow_hash_flist = NULL; /* Pointer to the top of      */
-                                              /* the 'flow_hash' free list.    */
+static flow_hash_t *top_flow_hash_flist = NULL; /* Pointer to the top of      */
+                                                /* the 'flow_hash' free list.    */
 
 /* Alloc a new space for entry in flow hash table */
-flow_hash_t*flow_hash_alloc()
+flow_hash_t *flow_hash_alloc()
 {
-  struct flow_hash_t*new_flow_hash_ptr;
+  struct flow_hash_t *new_flow_hash_ptr;
 
 #ifdef DO_STATS
   flow_hash_list_count_use++;
@@ -142,7 +142,7 @@ flow_hash_t*flow_hash_alloc()
 
   if (top_flow_hash_flist == NULL)
   {
-    new_flow_hash_ptr = (flow_hash_t*)MMmalloc(sizeof(flow_hash_t), "flow_hash_alloc");
+    new_flow_hash_ptr = (flow_hash_t *)MMmalloc(sizeof(flow_hash_t), "flow_hash_alloc");
 #ifdef DO_STATS
     flow_hash_list_count_tot++;
 #endif
@@ -156,7 +156,7 @@ flow_hash_t*flow_hash_alloc()
   return (new_flow_hash_ptr);
 }
 
-void flow_hash_release(flow_hash_t*rel_flow_hash_ptr)
+void flow_hash_release(flow_hash_t *rel_flow_hash_ptr)
 {
 #ifdef DO_STATS
   flow_hash_list_count_use--;
@@ -171,17 +171,6 @@ void flow_hash_release(flow_hash_t*rel_flow_hash_ptr)
 static inline size_t advance_headtail_value(size_t value, size_t max)
 {
   return (value + 1) % max;
-}
-
-static void advance_tail_pointer(circular_buf_t *me)
-{
-  assert(me);
-  if (!circular_buf_empty(me))
-  {
-    me->head = advance_headtail_value(me->head, me->max);
-  }
-  me->tail = advance_headtail_value(me->tail, me->max);
-  me->full = (me->tail == me->head);
 }
 
 circular_buf_t *circular_buf_init(void **buf_space, size_t size)
@@ -206,7 +195,6 @@ void circular_buf_reset(circular_buf_t *me)
 
   me->tail = 0;
   me->head = 0;
-  me->full = FALSE;
 }
 
 void circular_buf_free(circular_buf_t *me)
@@ -218,13 +206,13 @@ void circular_buf_free(circular_buf_t *me)
 Bool circular_buf_full(circular_buf_t *me)
 {
   assert(me);
-  return me->full;
+  return ((me->head == me->tail) && (me->head != 0)) || (me->tail == me->max);
 }
 
 Bool circular_buf_empty(circular_buf_t *me)
 {
   assert(me);
-  return (!circular_buf_full(me) && (me->head == me->tail));
+  return ((me->head == me->tail) && (me->head == 0));
 }
 
 size_t circular_buf_capacity(circular_buf_t *me)
@@ -255,10 +243,6 @@ size_t circular_buf_size(circular_buf_t *me)
   return size;
 }
 
-/// For thread safety, do not use put - use try_put.
-/// Because this version, which will overwrite the existing contents
-/// of the buffer, will involve modifying the tail pointer, which is also
-/// modified by get.
 void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr)
 {
   assert(me && me->buf_space);
@@ -267,7 +251,11 @@ void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr)
   {
     me->buf_space[me->tail] = buf_slot_ptr;
     temp_buf_slot_ptr_ptr = &(me->buf_space[me->tail]);
-    advance_tail_pointer(me);
+    me->tail = advance_headtail_value(me->tail, me->max);
+    if (me->tail == me->max)
+    {
+      me->tail = 0;
+    }
     return temp_buf_slot_ptr_ptr;
   }
   else
@@ -282,13 +270,21 @@ void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr)
 int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr)
 {
   int r = -1;
-  assert(me && me->buf_space && buf_slot_ptr_ptr);
+  assert(me && me->buf_space);
 
   if (!circular_buf_empty(me))
   {
     *buf_slot_ptr_ptr = me->buf_space[me->head];
+    if (me->tail == me->max)
+    {
+      me->tail = 0;
+    }
     me->head = advance_headtail_value(me->head, me->max);
-    me->full = FALSE;
+    if (me->head == me->tail)
+    {
+      me->tail = 0;
+      me->head = 0;
+    }
     r = 0;
   }
 
@@ -312,25 +308,83 @@ int circular_buf_peek_head(circular_buf_t *me, void **buf_slot_ptr_ptr)
 void *
 MallocZ(int nbytes)
 {
-	char *ptr;
+  char *ptr;
 
-	// ptr = malloc(nbytes);
-	ptr = calloc(1, nbytes);
-	if (ptr == NULL)
-	{
-		fprintf(fp_stderr, "Malloc failed, fatal: %s\n", strerror(errno));
-		fprintf(fp_stderr,
-				"when memory allocation fails, it's either because:\n"
-				"1) You're out of swap space, talk to your local "
-				"sysadmin about making more\n"
-				"(look for system commands 'swap' or 'swapon' for quick fixes)\n"
-				"2) The amount of memory that your OS gives each process "
-				"is too little\n"
-				"That's a system configuration issue that you'll need to discuss\n"
-				"with the system administrator\n");
-		exit(EXIT_FAILURE);
-	}
+  // ptr = malloc(nbytes);
+  ptr = calloc(1, nbytes);
+  if (ptr == NULL)
+  {
+    fprintf(fp_stderr, "Malloc failed, fatal: %s\n", strerror(errno));
+    fprintf(fp_stderr,
+            "when memory allocation fails, it's either because:\n"
+            "1) You're out of swap space, talk to your local "
+            "sysadmin about making more\n"
+            "(look for system commands 'swap' or 'swapon' for quick fixes)\n"
+            "2) The amount of memory that your OS gives each process "
+            "is too little\n"
+            "That's a system configuration issue that you'll need to discuss\n"
+            "with the system administrator\n");
+    exit(EXIT_FAILURE);
+  }
 
-	// memset(ptr, 0, nbytes); /* BZERO */
-	return (ptr);
+  // memset(ptr, 0, nbytes); /* BZERO */
+  return (ptr);
+}
+
+/* Garbage collector for Table Entry Array
+ *  Two pointer are used (top and last).
+ *  Alloc and release from last, while top is used to not loose the list ...
+ */
+
+static struct table_entry_list_elem *top_table_entry_flist = NULL;  /* Pointer to the top of      */
+                                                              /* the 'table_entry_list' free list.    */
+static struct table_entry_list_elem *last_table_entry_flist = NULL; /* Pointer to the last used   */
+                                                              /* element list.  */
+
+/* Alloc a new space for an element in table_entry_list */
+table_entry_t *table_entry_alloc()
+{
+  table_entry_t *new_table_entry_ptr;
+
+  if ((last_table_entry_flist == NULL) || (last_table_entry_flist->table_entry_ptr == NULL))
+  { /* The LinkList stack is empty.         */
+    new_table_entry_ptr = (table_entry_t *)MMmalloc(sizeof(table_entry_t), "table_entry_alloc");
+    return new_table_entry_ptr;
+  }
+  else
+  { /* The 'table_entry_list' stack is not empty.   */
+    new_table_entry_ptr = last_table_entry_flist->table_entry_ptr;
+    last_table_entry_flist->table_entry_ptr = NULL;
+    if (last_table_entry_flist->next != NULL)
+      last_table_entry_flist = last_table_entry_flist->next;
+    return new_table_entry_ptr;
+  }
+}
+
+void table_entry_release(table_entry_t *rel_table_entry_ptr)
+{
+  struct table_entry_list_elem *new_table_entry_list_elem;
+
+  memset(rel_table_entry_ptr, 0, sizeof(table_entry_t));
+
+  if ((last_table_entry_flist == NULL) || ((last_table_entry_flist->table_entry_ptr != NULL) && (last_table_entry_flist->prev == NULL)))
+  {
+    new_table_entry_list_elem = (struct table_entry_list_elem *)MMmalloc(sizeof(struct table_entry_list_elem), "table_entry_release");
+    new_table_entry_list_elem->table_entry_ptr = rel_table_entry_ptr;
+    new_table_entry_list_elem->prev = NULL;
+    new_table_entry_list_elem->next = top_table_entry_flist;
+    if (new_table_entry_list_elem->next != NULL)
+      new_table_entry_list_elem->next->prev = new_table_entry_list_elem;
+    top_table_entry_flist = new_table_entry_list_elem;
+    last_table_entry_flist = new_table_entry_list_elem;
+  }
+  else
+  {
+    if (last_table_entry_flist->table_entry_ptr == NULL)
+      new_table_entry_list_elem = last_table_entry_flist;
+    else
+      new_table_entry_list_elem = last_table_entry_flist->prev;
+    new_table_entry_list_elem->table_entry_ptr = rel_table_entry_ptr;
+    last_table_entry_flist = new_table_entry_list_elem;
+  }
 }

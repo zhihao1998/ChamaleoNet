@@ -37,7 +37,7 @@ Increase this number on high speed network will help ...*/
 /* Every LAZY_FREEING_PERIOD, scan LAZY_FREEING_RATIO entries. */
 /* After LAZY_FREEING_PERIOD / (HASH_TABLE_SIZE / LAZY_FREEING_RATIO), the whole hash table is completely scanned once */
 /* So the lazy free timeout should be 2*LAZY_FREEING_PERIOD / (HASH_TABLE_SIZE / LAZY_FREEING_RATIO) */
-#define LAZY_FREEING_RATIO 2000
+#define LAZY_FREEING_RATIO 10000
 #define LAZY_FREEING_PERIOD 50000
 #define LAZY_FREEING_TIMEOUT 1000000
 
@@ -49,7 +49,7 @@ Increase this number on high speed network will help ...*/
 #define ENTRY_BUF_SIZE 100000
 
 /* polling time for checking the idle entries in P4 tables */
-#define ENTRY_IDLE_TIMEOUT 5000000
+#define ENTRY_IDLE_TIMEOUT 2000000
 
 
 /* Max number of nets to check if ip is internal or external */
@@ -63,4 +63,6 @@ Increase this number on high speed network will help ...*/
 /* Logging Sampling granularity */
 #define PKT_LOG_SAMPLE_CNT 1000      // pkt_count
 #define TIMEOUT_SAMPLE_CNT 1000      // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 50000  //us
+#define STATS_LOG_SAMPLE_TIME 50000  // us
+
+#define SWITCH_ENABLED

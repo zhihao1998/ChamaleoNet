@@ -3,45 +3,70 @@
 static PyObject *pModule, *pClass, *pInstance;
 static table_entry_t **p4_entry_buf;
 static circular_buf_t *p4_entry_circ_buf;
-static table_entry_t *temp_table_entry_ptr;
 static pthread_mutex_t entry_install_mutex;
 static pthread_cond_t entry_install_cond;
+char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 
 u_long entry_circ_buf_size()
 {
+#ifdef SWITCH_ENABLED
 	return circular_buf_size(p4_entry_circ_buf);
+#else
+	return 0;
+#endif
 }
 
-int try_install_drop_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol)
+int try_install_p4_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol)
 {
-	static table_entry_t **temp_table_entry_pp;
-	temp_table_entry_ptr->src_ip = src_ip;
-	temp_table_entry_ptr->dst_ip = dst_ip;
-	temp_table_entry_ptr->src_port = src_port;
-	temp_table_entry_ptr->dst_port = dst_port;
-	temp_table_entry_ptr->protocol = protocol;
-	temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
+	table_entry_t *temp_table_entry_ptr, **temp_table_entry_pp;
+
+	if (internal_ip(src_ip))
+	{
+		temp_table_entry_ptr = table_entry_alloc();
+		temp_table_entry_ptr->internal_ip = src_ip;
+		temp_table_entry_ptr->internal_port = src_port;
+		temp_table_entry_ptr->protocol = protocol;
+	}
+	else if (internal_ip(dst_ip))
+	{
+		temp_table_entry_ptr = table_entry_alloc();
+		temp_table_entry_ptr->internal_ip = dst_ip;
+		temp_table_entry_ptr->internal_port = dst_port;
+		temp_table_entry_ptr->protocol = protocol;
+	}
+	else
+	{
+		fprintf(fp_log, "Error: Non of the src nor dst IP is internal!\n");
+		return -1;
+	}
+
+	if (temp_table_entry_ptr != NULL)
+	{
+		temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
+		// fprintf(fp_log, "Adding (ip: %s ,port: %d, protocol: %d) to the entry buffer, size: %ld, head: %ld, tail: %ld\n",
+		// 		inet_ntop(AF_INET, &temp_table_entry_ptr->internal_ip, ip_src_addr_str, INET_ADDRSTRLEN),
+		// 		temp_table_entry_ptr->internal_port, temp_table_entry_ptr->protocol, entry_circ_buf_size(), p4_entry_circ_buf->head, p4_entry_circ_buf->tail);
+	}
+
 	assert(temp_table_entry_pp != NULL);
 
 	pthread_cond_signal(&entry_install_cond);
 	return 0;
 }
 
-void *install_drop_entry(void *args)
+void *install_thead_main(void *args)
 {
-	void *buf_slot;
+#ifdef SWITCH_ENABLED
+	/* Initialize the P4 entry buffer */
 	p4_entry_buf = (table_entry_t **)MallocZ(ENTRY_BUF_SIZE * sizeof(table_entry_t *));
 	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, ENTRY_BUF_SIZE);
-	temp_table_entry_ptr = (table_entry_t *)MallocZ(sizeof(table_entry_t));
 
-	timeval start_time, end_time;
-
-	char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 	bfrt_grpc_init();
 	PyGILState_STATE ret = PyGILState_Ensure();
 	pthread_mutex_init(&entry_install_mutex, NULL);
 	pthread_cond_init(&entry_install_cond, NULL);
 
+	timeval start_time, end_time;
 	active_host_tbl_entry_count = 0;
 
 	while (circular_buf_empty(p4_entry_circ_buf))
@@ -52,35 +77,28 @@ void *install_drop_entry(void *args)
 
 	while (1)
 	{
+		void *buf_slot;
 		if (circular_buf_empty(p4_entry_circ_buf))
 		{
 			pthread_cond_wait(&entry_install_cond, &entry_install_mutex);
 		}
 
-		/* Check the next timeout */
 #ifdef DO_STATS
-		gettimeofday(&start_time, NULL);
+		// gettimeofday(&start_time, NULL);
 #endif
 
 		if (circular_buf_get(p4_entry_circ_buf, &buf_slot) != -1)
 		{
 			int res;
 			table_entry_t *table_entry_ptr = (table_entry_t *)buf_slot;
+			// fprintf(fp_log, "Installing (ip: %s ,port: %d, protocol: %d) to the entry buffer, size: %ld, head: %ld, tail: %ld\n",
+			// 		inet_ntop(AF_INET, &table_entry_ptr->internal_ip, ip_src_addr_str, INET_ADDRSTRLEN),
+			// 		table_entry_ptr->internal_port, table_entry_ptr->protocol, entry_circ_buf_size(), p4_entry_circ_buf->head, p4_entry_circ_buf->tail);
 			assert(table_entry_ptr != NULL);
 
-			if (internal_ip(table_entry_ptr->src_ip))
-			{
-				res = bfrt_active_host_tbl_add_with_drop(table_entry_ptr->src_ip, table_entry_ptr->src_port, table_entry_ptr->protocol);
-			}
-			else if (internal_ip(table_entry_ptr->dst_ip))
-			{
-				res = bfrt_active_host_tbl_add_with_drop(table_entry_ptr->dst_ip, table_entry_ptr->dst_port, table_entry_ptr->protocol);
-			}
-			else
-			{
-				fprintf(fp_log, "Error: Non of the src nor dst IP is internal!\n");
-				continue;
-			}
+			res = bfrt_active_host_tbl_add_with_drop(table_entry_ptr->internal_ip, table_entry_ptr->internal_port, table_entry_ptr->protocol);
+
+			table_entry_release(table_entry_ptr);
 
 #ifdef DO_STATS
 			installed_entry_count_tot += res;
@@ -125,8 +143,9 @@ void *install_drop_entry(void *args)
 		// printf("get_table_entry_num_time: %d\n", tv_sub_2(end_time, start_time));
 #endif
 	}
-
 	PyGILState_Release(ret);
+#endif /* SWITCH_ENABLED */
+	return NULL;
 }
 
 int clean_all_idle_entries()
