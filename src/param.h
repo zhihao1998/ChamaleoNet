@@ -50,7 +50,7 @@ Increase this number on high speed network will help ...*/
 #define ENTRY_BUF_SIZE 100000
 
 /* polling time for checking the idle entries in P4 tables */
-#define ENTRY_IDLE_TIMEOUT 20000000
+#define ENTRY_IDLE_TIMEOUT 5000000
 
 
 /* Max number of nets to check if ip is internal or external */

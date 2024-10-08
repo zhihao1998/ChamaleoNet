@@ -148,5 +148,7 @@ sudo chmod 777  callgrind.out*
 Once the response of one request packet is received, it will be identified as a flow originated or destined to an active service, which is very possible a legitimate flow. The controller installs an entry to the switch to drop all packets from this flow, alleviating the traffic load that it has to process. Here we monitor the traffic speed of the interface that receives traffic from switch, to evaluate how many legitimate flow can be filtered.
 
 ```bash
-vnstat --live -i enp8s0  --json > log/speed_log.json
+vnstat --live -i enp8s0  --json > log/recv_speed_log.json
+
+vnstat --live -i enp8s0  --json > log/send_speed_log.json
 ```

@@ -102,7 +102,6 @@ int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service
 		temp_table_entry_ptr->service_protocol = service_protocol;
 	}
 
-
 	if (temp_table_entry_ptr != NULL)
 	{
 		fprintf(fp_log, "active,%s,%d,%d\n",
@@ -198,8 +197,11 @@ void *install_thead_main(void *args)
 #endif
 		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_IDLE_TIMEOUT)
 		{
+			gettimeofday(&start_time, NULL);
 			clean_all_idle_entries();
 			last_idle_cleaned_time = current_time;
+			gettimeofday(&end_time, NULL);
+			printf("cleaning time: %d\n", tv_sub_2(end_time, start_time));
 		}
 #ifdef DO_STATS
 		// gettimeofday(&end_time, NULL);

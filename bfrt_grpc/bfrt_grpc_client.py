@@ -75,25 +75,27 @@ class Bfrt_GRPC_Client:
         table = self.bfrt.bfrt_info.table_get('active_host_tbl')
         # Update all hit state before deleting
         table.operations_execute(self.bfrt.target, 'UpdateHitState')
-        deleted_entries = 0
 
+        key_list = []
         for (data, key) in table.entry_get(self.bfrt.target):
             if data.to_dict()["$ENTRY_HIT_STATE"] == "ENTRY_IDLE":
-                deleted_entries += 1
                 # print("Deleting entry with key: {}".format(key))
-                table.entry_del(self.bfrt.target, [key])
-                
+                key_list.append(key)
+
                 ip = int_to_ip(key.to_dict()["meta.internal_ip"]['value'])
                 port = key.to_dict()["meta.internal_port"]['value']
                 protocol = key.to_dict()["meta.ip_protocol"]['value']
-
                 self.installed_flow_key.remove((ip, port, protocol))
+
+        if len(key_list) > 0:
+            table.entry_del(self.bfrt.target, key_list)
+                
                 # try:                
                 #     self.installed_flow_key.remove((ip, port, protocol))
                 # except Exception as e:
                 #     print(f"Error removing flow: {ip, port, protocol}, {e}")
 
-        print(f"Deleted {deleted_entries} idle entries!")
+        print(f"Deleted {len(key_list)} idle entries!")
         return 0
     
     
@@ -104,14 +106,10 @@ if __name__ == "__main__":
     # controller.clear_tables()
     import time
     start_time = time.time()
-    controller.internal_host_add_with_drop('130.192.9.161', 1000, 6)
+    controller.clean_all_idle_entries()
     print("--- %s seconds ---" % (time.time() - start_time))
-    # controller.dump_table('pipe.Ingress.active_host_tbl')
-    # controller.print_table_info('active_host_tbl')
 
-    # controller.udp_flow_add_with_drop('130.192.9.161', '8.8.8.8', 61434, 53)
-    # controller.icmp_flow_add_with_drop('10.0.0.5', '10.0.0.6')
-    # controller.dump_table('pipe.Ingress.tcp_flow')
-    # controller.dump_table('pipe.Ingress.udp_flow')
-    # controller.dump_table('pipe.Ingress.icmp_flow')
-    # controller.clear_tables()
+    # start_time = time.time()
+    # for i in range(100):
+    #     controller.internal_host_add_with_drop(f'130.192.9.{i}', 1000, 6)
+    # print("--- %s seconds ---" % (time.time() - start_time))
