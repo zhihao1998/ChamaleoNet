@@ -43,9 +43,9 @@ class Bfrt_GRPC_Client:
     def internal_host_add_with_drop(self, internal_ip, internal_port, ip_protocol):
         match_key = (internal_ip, internal_port, ip_protocol)
         try:
-            if match_key in self.installed_flow_key:
+            # if match_key in self.installed_flow_key:
                 # print(f"Flow: {match_key} already installed")
-                return 0
+                # return 0
             
             # print(f"Adding flow: {match_key}, already installed flow number: {len(self.installed_flow_key)}")
             self.installed_flow_key.add(match_key)
@@ -100,9 +100,12 @@ class Bfrt_GRPC_Client:
     
 if __name__ == "__main__":
     controller = Bfrt_GRPC_Client(grpc_addr=remote_grpc_addr)
-    controller.clean_all_idle_entries()
+    # controller.clean_all_idle_entries()
     # controller.clear_tables()
-    # controller.internal_host_add_with_drop('130.192.9.161', 1000, 6)
+    import time
+    start_time = time.time()
+    controller.internal_host_add_with_drop('130.192.9.161', 1000, 6)
+    print("--- %s seconds ---" % (time.time() - start_time))
     # controller.dump_table('pipe.Ingress.active_host_tbl')
     # controller.print_table_info('active_host_tbl')
 

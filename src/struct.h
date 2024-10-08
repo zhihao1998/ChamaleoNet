@@ -99,10 +99,21 @@ typedef struct flow_hash_t
   ip_packet *ppkt;
 } flow_hash_t;
 
+typedef struct service_hash_t
+{
+  in_addr service_ip;
+  u_short service_port;
+  u_short service_protocol;
+  hash hash;
+
+  struct service_hash_t*prev;
+  struct service_hash_t*next;
+} service_hash_t;
+
 
 typedef struct table_entry_t
 {
-  in_addr internal_ip;
-  u_short internal_port;
-  u_short protocol;
+  in_addr service_ip;
+  u_short service_port;
+  u_short service_protocol;
 }table_entry_t;

@@ -141,6 +141,11 @@ void pkt_release(ip_packet *relesased_ip_packet);
 flow_hash_t *flow_hash_alloc();
 void flow_hash_release(flow_hash_t *flow_hash_ptr);
 
+
+/* Service Hash Table (entry) */
+service_hash_t *service_hash_alloc();
+void service_hash_release(service_hash_t *rel_service_hash_ptr);
+
 /* Table Entry Buffer */
 struct table_entry_list_elem
 {
@@ -216,7 +221,7 @@ int bfrt_active_host_tbl_add_with_drop(in_addr internal_ip, u_short internal_por
 int bfrt_grpc_destroy();
 void bfrt_grpc_init();
 void *install_thead_main(void *args);
-int try_install_p4_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol);
+int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol);
 int bfrt_get_table_usage(char *table_name);
 int clean_all_idle_entries();
 u_long entry_circ_buf_size();
@@ -292,6 +297,8 @@ u_long pkt_list_count_tot;
 u_long pkt_list_count_use;
 u_long flow_hash_list_count_tot;
 u_long flow_hash_list_count_use;
+u_long service_hash_list_count_tot;
+u_long service_hash_list_count_use;
 
 // Functionality Counters
 u_long installed_entry_count_tot;

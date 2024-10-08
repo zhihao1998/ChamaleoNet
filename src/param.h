@@ -26,7 +26,8 @@ Increase this number on high speed network will help ...*/
 /* connection records are stored in a hash table.  Buckets are linked	*/
 /* lists sorted by most recent access.					*/
 /* oughta be prime  and larger than PKT_BUF_SIZE */
-#define HASH_TABLE_SIZE 20000
+#define HASH_TABLE_SIZE 50000
+#define ENTRY_HASH_TABLE_SIZE 200000
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
 #define TIMEOUT_LEVEL_NUM 3
@@ -49,7 +50,7 @@ Increase this number on high speed network will help ...*/
 #define ENTRY_BUF_SIZE 100000
 
 /* polling time for checking the idle entries in P4 tables */
-#define ENTRY_IDLE_TIMEOUT 2000000
+#define ENTRY_IDLE_TIMEOUT 20000000
 
 
 /* Max number of nets to check if ip is internal or external */

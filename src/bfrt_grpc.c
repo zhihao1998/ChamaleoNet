@@ -6,6 +6,7 @@ static circular_buf_t *p4_entry_circ_buf;
 static pthread_mutex_t entry_install_mutex;
 static pthread_cond_t entry_install_cond;
 char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
+static service_hash_t **service_hash_table;
 
 u_long entry_circ_buf_size()
 {
@@ -16,32 +17,98 @@ u_long entry_circ_buf_size()
 #endif
 }
 
-int try_install_p4_entry(in_addr src_ip, in_addr dst_ip, ushort src_port, u_short dst_port, ushort protocol)
+u_long hash_func_service(in_addr service_ip, ushort service_port, ushort service_protocol)
 {
-	table_entry_t *temp_table_entry_ptr, **temp_table_entry_pp;
+	u_long hval = 0;
+	hval = (service_ip.s_addr + service_port + service_protocol) % ENTRY_HASH_TABLE_SIZE;
+	return hval;
+}
 
-	if (internal_ip(src_ip))
+static service_hash_t *CreateServiceHash(in_addr service_ip, ushort service_port, ushort service_protocol)
+{
+	service_hash_t *new_service_hash_ptr, *service_hash_head_ptr;
+
+	new_service_hash_ptr = service_hash_alloc();
+	new_service_hash_ptr->service_ip = service_ip;
+	new_service_hash_ptr->service_port = service_port;
+	new_service_hash_ptr->service_protocol = service_protocol;
+	new_service_hash_ptr->hash = hash_func_service(service_ip, service_port, service_protocol);
+
+	service_hash_head_ptr = service_hash_table[new_service_hash_ptr->hash];
+	if (service_hash_head_ptr == NULL)
 	{
-		temp_table_entry_ptr = table_entry_alloc();
-		temp_table_entry_ptr->internal_ip = src_ip;
-		temp_table_entry_ptr->internal_port = src_port;
-		temp_table_entry_ptr->protocol = protocol;
-	}
-	else if (internal_ip(dst_ip))
-	{
-		temp_table_entry_ptr = table_entry_alloc();
-		temp_table_entry_ptr->internal_ip = dst_ip;
-		temp_table_entry_ptr->internal_port = dst_port;
-		temp_table_entry_ptr->protocol = protocol;
+		service_hash_table[new_service_hash_ptr->hash] = new_service_hash_ptr;
+		new_service_hash_ptr->prev = NULL;
+		new_service_hash_ptr->next = service_hash_head_ptr;
 	}
 	else
 	{
-		fprintf(fp_log, "Error: Non of the src nor dst IP is internal!\n");
-		return -1;
+		/* it is not the first entry in the slot, insert it to the head  */
+		new_service_hash_ptr->prev = NULL;
+		new_service_hash_ptr->next = service_hash_head_ptr;
+
+		service_hash_head_ptr->prev = new_service_hash_ptr;
+		service_hash_table[new_service_hash_ptr->hash] = new_service_hash_ptr;
 	}
+
+	return new_service_hash_ptr;
+}
+
+static service_hash_t *FindServiceHash(in_addr service_ip, ushort service_port, ushort service_protocol)
+{
+	hash hval;
+	service_hash_t *service_hash_head_ptr, *service_hash_ptr;
+
+	hval = hash_func_service(service_ip, service_port, service_protocol);
+	service_hash_head_ptr = service_hash_table[hval];
+
+	if (service_hash_head_ptr == NULL)
+	{
+		return NULL;
+	}
+
+	for (service_hash_ptr = service_hash_head_ptr; service_hash_ptr; service_hash_ptr = service_hash_ptr->next)
+	{
+		if (service_hash_ptr->service_ip.s_addr == service_ip.s_addr &&
+			service_hash_ptr->service_port == service_port &&
+			service_hash_ptr->service_protocol == service_protocol)
+		{
+			return service_hash_ptr;
+		}
+	}
+
+	return NULL;
+}
+
+int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol)
+{
+
+	service_hash_t *service_hash_ptr;
+	table_entry_t *temp_table_entry_ptr, **temp_table_entry_pp;
+
+	service_hash_ptr = FindServiceHash(service_ip, service_port, service_protocol);
+	// If there is already a service hash entry, then return
+	if (service_hash_ptr != NULL)
+	{
+		return 0;
+	}
+	// If there is no service hash entry, then create one
+	else
+	{
+		service_hash_ptr = CreateServiceHash(service_ip, service_port, service_protocol);
+		temp_table_entry_ptr = table_entry_alloc();
+		temp_table_entry_ptr->service_ip = service_ip;
+		temp_table_entry_ptr->service_port = service_port;
+		temp_table_entry_ptr->service_protocol = service_protocol;
+	}
+
 
 	if (temp_table_entry_ptr != NULL)
 	{
+		fprintf(fp_log, "active,%s,%d,%d\n",
+				inet_ntop(AF_INET, &temp_table_entry_ptr->service_ip, ip_src_addr_str, INET_ADDRSTRLEN),
+				temp_table_entry_ptr->service_port, temp_table_entry_ptr->service_protocol);
+
 		temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
 		// fprintf(fp_log, "Adding (ip: %s ,port: %d, protocol: %d) to the entry buffer, size: %ld, head: %ld, tail: %ld\n",
 		// 		inet_ntop(AF_INET, &temp_table_entry_ptr->internal_ip, ip_src_addr_str, INET_ADDRSTRLEN),
@@ -61,6 +128,9 @@ void *install_thead_main(void *args)
 	p4_entry_buf = (table_entry_t **)MallocZ(ENTRY_BUF_SIZE * sizeof(table_entry_t *));
 	p4_entry_circ_buf = circular_buf_init((void **)p4_entry_buf, ENTRY_BUF_SIZE);
 
+	/* Initialize hash table for service */
+	service_hash_table = (service_hash_t **)MallocZ(ENTRY_HASH_TABLE_SIZE * sizeof(service_hash_t *));
+
 	bfrt_grpc_init();
 	PyGILState_STATE ret = PyGILState_Ensure();
 	pthread_mutex_init(&entry_install_mutex, NULL);
@@ -71,7 +141,7 @@ void *install_thead_main(void *args)
 
 	while (circular_buf_empty(p4_entry_circ_buf))
 	{
-		fprintf(fp_log, "Waiting for drop entry\n");
+		printf("Waiting for drop entry\n");
 		pthread_cond_wait(&entry_install_cond, &entry_install_mutex);
 	}
 
@@ -96,13 +166,13 @@ void *install_thead_main(void *args)
 			// 		table_entry_ptr->internal_port, table_entry_ptr->protocol, entry_circ_buf_size(), p4_entry_circ_buf->head, p4_entry_circ_buf->tail);
 			assert(table_entry_ptr != NULL);
 
-			res = bfrt_active_host_tbl_add_with_drop(table_entry_ptr->internal_ip, table_entry_ptr->internal_port, table_entry_ptr->protocol);
+			res = bfrt_active_host_tbl_add_with_drop(table_entry_ptr->service_ip, table_entry_ptr->service_port, table_entry_ptr->service_protocol);
 
 			table_entry_release(table_entry_ptr);
 
 #ifdef DO_STATS
 			installed_entry_count_tot += res;
-			switch (table_entry_ptr->protocol)
+			switch (table_entry_ptr->service_protocol)
 			{
 			case IPPROTO_TCP:
 			{

@@ -166,6 +166,45 @@ void flow_hash_release(flow_hash_t *rel_flow_hash_ptr)
   top_flow_hash_flist = rel_flow_hash_ptr;
 }
 
+/* Garbage collector for Service Hash Table */
+static service_hash_t *top_service_hash_flist = NULL; /* Pointer to the top of      */
+                                                /* the 'flow_hash' free list.    */
+
+/* Alloc a new space for entry in flow hash table */
+service_hash_t *service_hash_alloc()
+{
+  struct service_hash_t *new_service_hash_ptr;
+
+#ifdef DO_STATS
+  service_hash_list_count_use++;
+#endif
+
+  if (top_service_hash_flist == NULL)
+  {
+    new_service_hash_ptr = (service_hash_t *)MMmalloc(sizeof(service_hash_t), "service_hash_alloc");
+#ifdef DO_STATS
+    service_hash_list_count_tot++;
+#endif
+  }
+  else
+  {
+    new_service_hash_ptr = top_service_hash_flist;
+    top_service_hash_flist = top_service_hash_flist->next;
+  }
+  new_service_hash_ptr->next = NULL;
+  return (new_service_hash_ptr);
+}
+
+void service_hash_release(service_hash_t *rel_service_hash_ptr)
+{
+#ifdef DO_STATS
+  service_hash_list_count_use--;
+#endif
+  memset(rel_service_hash_ptr, 0, sizeof(service_hash_t));
+  rel_service_hash_ptr->next = top_service_hash_flist;
+  top_service_hash_flist = rel_service_hash_ptr;
+}
+
 /* Circular Buffer Operations */
 /* Reference: https://github.com/embeddedartistry/embedded-resources/tree/master/examples/c/circular_buffer */
 static inline size_t advance_headtail_value(size_t value, size_t max)

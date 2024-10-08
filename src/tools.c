@@ -246,9 +246,9 @@ int ParseNetFile(FILE *fp, char *qualifier, int max_entries,
         if (is_ipv4 == 1)
         {
             mask2.s_addr = CLASS_net_mask[j];
-            fprintf(fp_log, "Adding: %s as %s ",
+            printf("Adding: %s as %s ",
                     inet_ntoa(CLASS_net_list[j]), qualifier);
-            fprintf(fp_log, "with mask %s (%u)\n",
+            printf("with mask %s (%u)\n",
                     inet_ntoa(mask2),
                     CLASS_net_mask[j]);
         }

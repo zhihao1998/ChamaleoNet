@@ -96,7 +96,7 @@ sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 -i enp8s0 --stats=2 --mtu-trun
 
 sudo tcpreplay-edit -i enp8s0 --stats=5 --mtu-trunc --mbps=1000 trace/polito_with_syn_flood.pcap
 
-sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 --enet-smac=52:54:00:16:f4:4c -i enp8s0 --stats=2 --mtu-trunc --mbps=2000 trace/rand_syn_flood.pcap
+sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 --enet-smac=52:54:00:16:f4:4c -i enp8s0 --stats=2 --mtu-trunc --mbps=2000 trace/polito_with_syn_flood.pcap
 
 trafgen --cpp --dev enp8s0 --conf trace/syn_flood.traf -n 10000000 --verbose -b 5Gbit
 ```

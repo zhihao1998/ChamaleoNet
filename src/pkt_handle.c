@@ -11,6 +11,9 @@ int entry_index = 0;
 /* Circular Buffer for lazy freeing */
 // static circular_buf_t *lazy_hash_buf;
 
+char ip_src_addr_print_buffer[INET_ADDRSTRLEN];
+char ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
+
 static ip_packet *
 NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 {
@@ -149,9 +152,16 @@ void check_timeout_periodic()
         {
             if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
             {
-                fprintf(fp_log, "Error: Cannot send the packet!\n");
+                printf("Error: Cannot send the packet!\n");
             }
             ip_p = ppkt->addr_pair.protocol;
+            fprintf(fp_log, "timeout,%s,%d,%s,%d,%d\n",
+                    inet_ntop(AF_INET, &ppkt->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+                    ntohs(ppkt->addr_pair.a_port),
+                    inet_ntop(AF_INET, &ppkt->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+                    ntohs(ppkt->addr_pair.b_port),
+                    ip_p);
+
             FreeFlowHash(ppkt->flow_hash_ptr);
             FreePkt(ppkt);
 #ifdef DO_STATS
@@ -345,15 +355,32 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             //         flow_hash_ptr->addr_pair.protocol)
 #ifdef SWITCH_ENABLED
             /* Install Flow Entry */
-            if (try_install_p4_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
-                                       flow_hash_ptr->addr_pair.b_address.un.ip4,
-                                       flow_hash_ptr->addr_pair.a_port,
-                                       flow_hash_ptr->addr_pair.b_port,
-                                       flow_hash_ptr->addr_pair.protocol))
+            if (internal_ip(flow_hash_ptr->addr_pair.a_address.un.ip4))
             {
-                fprintf(fp_log, "Error: Failed to install flow entry!");
+                if (try_install_p4_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
+                                         flow_hash_ptr->addr_pair.a_port,
+                                         flow_hash_ptr->addr_pair.protocol))
+                {
+                    printf("Error: Failed to install flow entry!");
+                    return -1;
+                }
+            }
+            else if (internal_ip(flow_hash_ptr->addr_pair.b_address.un.ip4))
+            {
+                if (try_install_p4_entry(flow_hash_ptr->addr_pair.b_address.un.ip4,
+                                         flow_hash_ptr->addr_pair.b_port,
+                                         flow_hash_ptr->addr_pair.protocol))
+                {
+                    printf("Error: Failed to install flow entry!");
+                    return -1;
+                }
+            }
+            else
+            {
+                printf("Error: Non of the src nor dst IP is internal!\n");
                 return -1;
             }
+
 #ifdef DO_STATS
             replied_flow_count_tot++;
             switch (timeout_level)
@@ -442,27 +469,27 @@ void trace_init(void)
 void trace_cleanup()
 {
     /* free the flow hash table */
-    printf("Freeing flow hash table\n");
-    for (int i = 0; i < HASH_TABLE_SIZE; i++)
-    {
-        flow_hash_t *flow_hash_ptr = flow_hash_table[i];
-        while (flow_hash_ptr != NULL)
-        {
-            flow_hash_t *temp = flow_hash_ptr;
-            flow_hash_ptr = flow_hash_ptr->next;
-            free(temp);
-        }
-    }
-    free(flow_hash_table);
+    // printf("Freeing flow hash table\n");
+    // for (int i = 0; i < HASH_TABLE_SIZE; i++)
+    // {
+    //     flow_hash_t *flow_hash_ptr = flow_hash_table[i];
+    //     while (flow_hash_ptr != NULL)
+    //     {
+    //         flow_hash_t *temp = flow_hash_ptr;
+    //         flow_hash_ptr = flow_hash_ptr->next;
+    //         free(temp);
+    //     }
+    // }
+    // free(flow_hash_table);
 
-    printf("Freeing packet buffer\n");
-    /* free the packet buffer */
-    for (int i = 0; i < PKT_BUF_SIZE; i++)
-    {
-        if (pkt_arr[i] != NULL)
-        {
-            free(pkt_arr[i]);
-        }
-    }
-    free(pkt_arr);
+    // printf("Freeing packet buffer\n");
+    // /* free the packet buffer */
+    // for (int i = 0; i < PKT_BUF_SIZE; i++)
+    // {
+    //     if (pkt_arr[i] != NULL)
+    //     {
+    //         free(pkt_arr[i]);
+    //     }
+    // }
+    // free(pkt_arr);
 }
