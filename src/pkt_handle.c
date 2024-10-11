@@ -152,7 +152,7 @@ void check_timeout_periodic()
         {
             if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
             {
-                printf("Error: Cannot send the packet!\n");
+                send_pkt_error_count++;
             }
             ip_p = ppkt->addr_pair.protocol;
             fprintf(fp_log, "timeout,%s,%d,%s,%d,%d\n",
@@ -347,12 +347,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         else if (dir == S2C)
         {
             LazyFreeFlowHash(flow_hash_ptr);
-            // fprintf(fp_log, "Lazy Free Flow Hash(%s:%d -> %s:%d, protocol: %d)\n",
-            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
-            //         ntohs(flow_hash_ptr->addr_pair.a_port),
-            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
-            //         ntohs(flow_hash_ptr->addr_pair.b_port),
-            //         flow_hash_ptr->addr_pair.protocol)
 #ifdef SWITCH_ENABLED
             /* Install Flow Entry */
             if (internal_ip(flow_hash_ptr->addr_pair.a_address.un.ip4))

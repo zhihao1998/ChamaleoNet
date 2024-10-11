@@ -207,7 +207,7 @@ class BfRtAPI:
         table = self.bfrt_info.table_get(table_name)
         _keys = table.make_key([gc.KeyTuple(*k) for k in keys])
         data = [gc.DataTuple(*d) for d in data]
-        data.append(gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE"))
+        # data.append(gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE"))
         _data = table.make_data(
             data, action_name)
 

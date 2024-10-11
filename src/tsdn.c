@@ -52,6 +52,7 @@ void stats_init()
 	// u_long local_icmp_pkt_count;
 
 	u_long unsupported_pkt_count = 0;
+	u_long send_pkt_error_count = 0;
 
 	// Data Structure Counters
 	u_long pkt_buf_count = 0;
@@ -305,14 +306,15 @@ void print_all_stats()
 		   "installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, "
 		   "replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, "
 		   "expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, "
-		   "active_host_tbl_entry_count: %ld\n",
-		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count, 
-		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit, 
-		   pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, 
-		   installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size, 
-		   replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp, 
-		   expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp, 
-		   active_host_tbl_entry_count);
+		   "active_host_tbl_entry_count: %ld, send_pkt_error_count: %ld\n",
+		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
+		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
+		   pkt_list_count_tot, pkt_list_count_use,
+		   flow_hash_list_count_tot, flow_hash_list_count_use,
+		   installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
+		   replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
+		   expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
+		   active_host_tbl_entry_count, send_pkt_error_count);
 
 	/* Print the statistics */
 	if (pcap_stats(pcap, &stats_pcap) >= 0)
@@ -380,7 +382,7 @@ int main(int argc, char *argv[])
 					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
 					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
 					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-					  "active_host_tbl_entry_count\n");
+					  "active_host_tbl_entry_count,send_pkt_error_count\n");
 
 	log_add_fp(fp_stats, LOG_STATS);
 	log_set_quiet(TRUE);
@@ -475,21 +477,21 @@ int main(int argc, char *argv[])
 					  "%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
-					  "%ld",
+					  "%ld,%ld",
 					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
 					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
 					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use,
 					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
 					  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
 					  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
-					  active_host_tbl_entry_count);
+					  active_host_tbl_entry_count,send_pkt_error_count);
 		}
 		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
 		{
 			gettimeofday(&end_time, NULL);
 			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(end_time, current_time));
 
-			if (pkt_count % 100000 == 0)
+			if (pkt_count % 500000 == 0)
 			{
 				print_all_stats();
 			}

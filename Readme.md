@@ -1,8 +1,10 @@
 # TODO
 
-- throughput
-    - cannot do it because of the performance
+- replay faster
+- how many traffic can be handled with no problem of installing entries
+- separate the traffic by incoming and outgoing (only care about the incoming)
 - the long-live flow (new packets after deleting the entry in switch)
+- install entries by batch rather than single
 
 # C-based Controller for Transparent SDN Honeypot
 
@@ -151,4 +153,13 @@ Once the response of one request packet is received, it will be identified as a 
 vnstat --live -i enp8s0  --json > log/recv_speed_log.json
 
 vnstat --live -i enp8s0  --json > log/send_speed_log.json
+```
+
+
+### Utils
+
+Split a large pcap file into several smaller ones.
+
+```bash
+tcpdump -r polito-1h-10-05-2024-snaplen-100-echelon3.pcap -w ~/Tstat/data/pcap_1s/polito-1s- -G 1
 ```

@@ -141,11 +141,6 @@ void pkt_release(ip_packet *relesased_ip_packet);
 flow_hash_t *flow_hash_alloc();
 void flow_hash_release(flow_hash_t *flow_hash_ptr);
 
-
-/* Service Hash Table (entry) */
-service_hash_t *service_hash_alloc();
-void service_hash_release(service_hash_t *rel_service_hash_ptr);
-
 /* Table Entry Buffer */
 struct table_entry_list_elem
 {
@@ -225,6 +220,7 @@ int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service
 int bfrt_get_table_usage(char *table_name);
 int clean_all_idle_entries();
 u_long entry_circ_buf_size();
+int bfrt_add_batch_entries(PyObject *py_arg_tuple);
 
 /* Logging */
 #define DO_STATS
@@ -284,7 +280,9 @@ u_long icmp_pkt_count_tot;
 // u_long out_icmp_pkt_count;
 // u_long local_icmp_pkt_count;
 
+/* Error Packets */
 u_long unsupported_pkt_count;
+u_long send_pkt_error_count;
 
 // Data Structure Counters
 u_long pkt_buf_count;
@@ -327,6 +325,8 @@ extern timeval last_log_time;
 extern timeval last_pkt_cleaned_time;
 extern timeval last_hash_cleaned_time;
 extern timeval last_idle_cleaned_time;
+
+
 
 
 
