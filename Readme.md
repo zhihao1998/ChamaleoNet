@@ -63,10 +63,8 @@ sudo tcpreplay -i veth4 trace/ip_complete.pcap
 ## Add virtual interface
 
 ```bash
-sudo brctl addbr virbr0
-sudo brctl addbr virbr1
-sudo ifconfig virbr0 up
-sudo ifconfig virbr1 up
+sudo brctl addbr brtest
+sudo ifconfig brtest up
 ```
 
 ```bash
@@ -83,6 +81,8 @@ sudo bridge fdb del 90:2d:77:3f:b5:a2 dev vnet14 master temp
  sudo brctl show br1
 sudo brctl showmacs br1
 sudo brctl showstp br1
+
+nmcli connection show --active
 ```
 
 ## Attack Simulation
@@ -94,13 +94,16 @@ sudo tcpreplay -i veth250 --mbps 1000 trace/syn_flood.pcap
 ```
 
 ```bash
-sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 -i enp8s0 --stats=2 --mtu-trunc --mbps=2000 trace/polito_with_syn_flood.pcap
+sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 -i ens5f1 --stats=2 --mtu-trunc --mbps=1000 polito_with_syn_flood.pcap
 
 sudo tcpreplay-edit -i enp8s0 --stats=5 --mtu-trunc --mbps=1000 trace/polito_with_syn_flood.pcap
 
 sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 --enet-smac=52:54:00:16:f4:4c -i enp8s0 --stats=2 --mtu-trunc --mbps=2000 trace/polito_with_syn_flood.pcap
 
 trafgen --cpp --dev enp8s0 --conf trace/syn_flood.traf -n 10000000 --verbose -b 5Gbit
+
+tcprewrite --enet-dmac=90:2d:77:3f:b5:a2 --enet-smac=52:54:00:16:f4:4c --fixlen=pad --infile=polito-1m_00000_20240510092043.pcap --outfile=out_polito_1m.pcap
+
 ```
 
 
@@ -162,4 +165,6 @@ Split a large pcap file into several smaller ones.
 
 ```bash
 tcpdump -r polito-1h-10-05-2024-snaplen-100-echelon3.pcap -w ~/Tstat/data/pcap_1s/polito-1s- -G 1
+
+scp net_stat.csv zhihaow@restsrv01-smartdata01:/home/zhihaow/codes/honeypot_c_controller/log
 ```

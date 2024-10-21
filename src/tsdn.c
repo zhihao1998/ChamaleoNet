@@ -10,7 +10,7 @@ Bool live_flag = TRUE;
 #define EH_SIZE sizeof(struct ether_header)
 
 static char *eth_buf;
-static char *ip_buf; /* [MAX_IP_PKT_LENGTH] */
+static char *ip_buf; 
 static void *callback_plast;
 
 /* Buffer some packets of tcpdump to avoid packet loss */
@@ -106,8 +106,6 @@ my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
 	static int offset = -1;
 
 	iplen = phdr->caplen;
-	if (iplen > MAX_IP_PKT_LENGTH)
-		iplen = MAX_IP_PKT_LENGTH;
 
 	type = pcap_datalink(pcap);
 
@@ -445,7 +443,7 @@ int main(int argc, char *argv[])
 		return (2);
 	}
 
-	ip_buf = MallocZ(MAX_IP_PKT_LENGTH);
+	ip_buf = MallocZ(ETHERNET_MTU);
 
 	/* install P4 table entry thread */
 

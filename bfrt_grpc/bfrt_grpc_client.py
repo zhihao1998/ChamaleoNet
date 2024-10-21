@@ -3,6 +3,8 @@ from bfrt_grpc_helper import BfRtAPI
 import binascii
 import socket
 import bfrt_grpc.client as gc
+import time
+
 
 remote_grpc_addr = '192.168.24.69:50052'
 local_grpc_addr = 'localhost:50052'
@@ -16,8 +18,12 @@ def int_to_ip(ip_int):
 def mask_to_int(mask):
     return int(binascii.hexlify(socket.inet_aton(mask)),16)
 
+def mac_to_bytes(mac_str):
+    return bytes.fromhex(mac_str.replace(':', ''))
+
 class Bfrt_GRPC_Client:
     def __init__(self, grpc_addr=remote_grpc_addr):
+        print(f"Connecting to the P4Runtime server {grpc_addr}")
         self.bfrt = BfRtAPI(client_id=1, grpc_addr=grpc_addr)
         self.installed_flow_key = set()   
         self.service_table = self.bfrt.bfrt_info.table_get('active_host_tbl')
@@ -41,7 +47,7 @@ class Bfrt_GRPC_Client:
     def clear_table(self, table_name):
         return self.bfrt.clear_table(table_name)
     
-    def get_table_usage(self, table_name) -> int:
+    def get_table_usage(self) -> int:
         # return int(self.bfrt.get_table_usage(table_name))
         return len(self.installed_flow_key)
 
@@ -84,11 +90,9 @@ class Bfrt_GRPC_Client:
     def clean_all_idle_entries(self):
         """
         Clean all idle entries in the table
-        
-        Args:
-            table_name (str) : Name of the table
         """
-        # Update all hit state before deleting
+        start_time = time.time()
+        # Update all hit state before deleting        
         self.service_table.operations_execute(self.bfrt.target, 'UpdateHitState')
 
         key_list = []
@@ -104,7 +108,7 @@ class Bfrt_GRPC_Client:
         if len(key_list) > 0:
             self.service_table.entry_del(self.bfrt.target, key_list)
 
-        print(f"Deleted {len(key_list)} idle entries!")
+        print(f"Deleted {len(key_list)} idle entries, cost {round(time.time() - start_time, 2)}s!")
         return 0
         
             
@@ -126,23 +130,24 @@ class Bfrt_GRPC_Client:
     
     
 if __name__ == "__main__":
+    import random
+
     controller = Bfrt_GRPC_Client(grpc_addr=remote_grpc_addr)
 
-    entry_size = 2000
-    start_time = time.time()
-    test_key_list = []
-    for i in range(entry_size):
-        test_key_list.append([783663000+i, 10486, 6])
-    controller.add_batch_entries(test_key_list)
-    print("batch --- %s seconds ---" % (time.time() - start_time))
+    controller.clear_tables()
 
-    # controller.clean_all_idle_entries()
-    import time
     start_time = time.time()
     controller.clean_all_idle_entries()
-    print("clean --- %s seconds ---" % (time.time() - start_time))
 
+    entry_size = 30000
+    start_time = time.time()
+    test_key_list = []
 
+    for i in range(entry_size):
+        test_key_list.append([783663000+i, 10129, 6])
+    controller.add_batch_entries(test_key_list)
+
+    controller.clean_all_idle_entries()
 
     # start_time = time.time()
     # controller.clear_tables()

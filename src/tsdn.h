@@ -188,7 +188,6 @@ int sockfd;
 struct ifreq if_idx;
 struct sockaddr_ll socket_address;
 char ifName[IFNAMSIZ];
-char sendbuf_padding[MAX_IP_PKT_LENGTH];
 
 
 /* connection records are stored in a hash table.  */
@@ -217,7 +216,7 @@ int bfrt_grpc_destroy();
 void bfrt_grpc_init();
 void *install_thead_main(void *args);
 int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol);
-int bfrt_get_table_usage(char *table_name);
+int bfrt_get_table_usage();
 int clean_all_idle_entries();
 u_long entry_circ_buf_size();
 int bfrt_add_batch_entries(PyObject *py_arg_tuple);
@@ -325,8 +324,3 @@ extern timeval last_log_time;
 extern timeval last_pkt_cleaned_time;
 extern timeval last_hash_cleaned_time;
 extern timeval last_idle_cleaned_time;
-
-
-
-
-

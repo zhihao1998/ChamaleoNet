@@ -122,17 +122,12 @@ void *install_thead_main(void *args)
 		}
 
 		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_IDLE_TIMEOUT)
-		{
-			gettimeofday(&start_time, NULL);
+		{			
 			clean_all_idle_entries();
-			last_idle_cleaned_time = current_time;
-			gettimeofday(&end_time, NULL);
-			printf("cleaning time: %d\n", tv_sub_2(end_time, start_time));
+			gettimeofday(&last_idle_cleaned_time, NULL);
 		}
 
-		active_host_tbl_entry_count = bfrt_get_table_usage("active_host_tbl");
-		// gettimeofday(&end_time, NULL);
-		// printf("get_table_entry_num_time: %d\n", tv_sub_2(end_time, start_time));
+		active_host_tbl_entry_count = bfrt_get_table_usage();
 	}
 
 	Py_DECREF(p_add_batch_Func);
@@ -216,14 +211,14 @@ int bfrt_grpc_destroy()
 }
 
 /* Get Entry Table Number */
-int bfrt_get_table_usage(char *table_name)
+int bfrt_get_table_usage()
 {
 	assert(pInstance != NULL);
 	PyObject *pArgs, *pRes, *pFunc;
 	int ret = -1;
 
 	pFunc = PyObject_GetAttrString(pInstance, "get_table_usage");
-	pArgs = Py_BuildValue("(s)", table_name);
+	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
 	Py_DECREF(pFunc);

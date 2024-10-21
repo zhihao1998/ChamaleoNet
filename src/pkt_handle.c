@@ -46,9 +46,10 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 
     /* Here we store raw packets starting from Ether header */
     ppkt->pkt_len = ntohs(pip->ip_len) + ETHER_HDR_LEN;
-    if (ppkt->pkt_len > MAX_PKT_MTU)
+    
+    if (ppkt->pkt_len > SNAP_LEN)
     {
-        ppkt->pkt_len = MAX_PKT_MTU;
+        ppkt->pkt_len = SNAP_LEN;
     }
 
     memcpy(ppkt->raw_pkt, peth, ppkt->pkt_len);
@@ -422,9 +423,6 @@ void trace_init(void)
 
     /* initialize the hash table */
     flow_hash_table = (flow_hash_t **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash_t *));
-
-    /* Initialize the params for sendpkt */
-    memset(&sendbuf_padding, 0, MAX_IP_PKT_LENGTH);
 
     /* Get interface name */
     strcpy(ifName, SEND_INTF);

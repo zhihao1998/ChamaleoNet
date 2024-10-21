@@ -8,7 +8,7 @@
  but the workload is done in GARBAGE_SPLIT_RATIO times
  IMPORTANT: it must be a divisor of GARBAGE_PERIOD,
  PKT_BUF_SIZE and MAX_UDP_PAIRS  */
-#define GARBAGE_SPLIT_RATIO 5000
+#define GARBAGE_SPLIT_RATIO 50000
 
 /* Define the interval for garbage collection routine to be fired */
 // #define GARBAGE_FIRE_TIME (GARBAGE_PERIOD/GARBAGE_SPLIT_RATIO)  
@@ -16,7 +16,7 @@
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
 
-#define PKT_BUF_SIZE 10000
+#define PKT_BUF_SIZE 100000
 /* Each time the garbage collection is fired, it scans PKT_BUF_SIZE_BURST tcp flows */
 // #define PKT_BUF_SIZE_BURST (PKT_BUF_SIZE / GARBAGE_SPLIT_RATIO)
 
@@ -64,6 +64,13 @@ Increase this number on high speed network will help ...*/
 /* Logging Sampling granularity */
 #define PKT_LOG_SAMPLE_CNT 1000      // pkt_count
 #define TIMEOUT_SAMPLE_CNT 1000      // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 50000  // us
+#define STATS_LOG_SAMPLE_TIME 100000  // us
 
 #define SWITCH_ENABLED
+
+#define COLLECTOR_DEST_MAC_0 0x52
+#define COLLECTOR_DEST_MAC_1 0x54
+#define COLLECTOR_DEST_MAC_2 0x00
+#define COLLECTOR_DEST_MAC_3 0x2e
+#define COLLECTOR_DEST_MAC_4 0xc4
+#define COLLECTOR_DEST_MAC_5 0x98
