@@ -217,6 +217,7 @@ void bfrt_grpc_init();
 void *install_thead_main(void *args);
 int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol);
 int bfrt_get_table_usage();
+int bfrt_get_local_entry_number();
 int clean_all_idle_entries();
 u_long entry_circ_buf_size();
 int bfrt_add_batch_entries(PyObject *py_arg_tuple);
@@ -317,6 +318,7 @@ u_long expired_pkt_count_icmp;
 
 // Flow Entry Counters
 u_long active_host_tbl_entry_count;
+u_long local_entry_count;
 
 
 extern timeval current_time;

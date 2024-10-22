@@ -64,7 +64,7 @@ Increase this number on high speed network will help ...*/
 /* Logging Sampling granularity */
 #define PKT_LOG_SAMPLE_CNT 1000      // pkt_count
 #define TIMEOUT_SAMPLE_CNT 1000      // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 100000  // us
+#define STATS_LOG_SAMPLE_TIME 50000  // us
 
 #define SWITCH_ENABLED
 

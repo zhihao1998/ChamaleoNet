@@ -4,7 +4,8 @@ import binascii
 import socket
 import bfrt_grpc.client as gc
 import time
-
+import traceback
+import bfrt_grpc.bfruntime_pb2 as bfruntime_pb2
 
 remote_grpc_addr = '192.168.24.69:50052'
 local_grpc_addr = 'localhost:50052'
@@ -25,9 +26,15 @@ class Bfrt_GRPC_Client:
     def __init__(self, grpc_addr=remote_grpc_addr):
         print(f"Connecting to the P4Runtime server {grpc_addr}")
         self.bfrt = BfRtAPI(client_id=1, grpc_addr=grpc_addr)
+        self.target = gc.Target()
         self.installed_flow_key = set()   
         self.service_table = self.bfrt.bfrt_info.table_get('active_host_tbl')
-        self.target = gc.Target()
+        self.service_table.attribute_idle_time_set(self.target, 
+                                                   True, 
+                                                   bfruntime_pb2.IdleTable.IDLE_TABLE_NOTIFY_MODE,
+                                                   5000)
+        self.entry_ttl = 10000 # ms
+        self.clean_batch_size = 10000
 
         print("Connected to the P4Runtime server")
      
@@ -47,9 +54,12 @@ class Bfrt_GRPC_Client:
     def clear_table(self, table_name):
         return self.bfrt.clear_table(table_name)
     
-    def get_table_usage(self) -> int:
+    def get_local_flow_entry_num(self) -> int:
         # return int(self.bfrt.get_table_usage(table_name))
         return len(self.installed_flow_key)
+    
+    def get_table_usage(self) -> int:
+        return int(self.bfrt.get_table_usage('pipe.Ingress.active_host_tbl'))
 
     def internal_host_add_with_drop(self, internal_ip, internal_port, ip_protocol):
         match_key = (internal_ip, internal_port, ip_protocol)
@@ -89,6 +99,36 @@ class Bfrt_GRPC_Client:
     
     def clean_all_idle_entries(self):
         """
+        Clean all idle entries in the table with notification mode
+        """
+        start_time = time.time()
+        key_list = []
+
+        try: 
+            while len(key_list) < self.clean_batch_size:
+                idle_notification = self.bfrt.interface.idletime_notification_get(timeout=0.2)
+                recv_key = self.bfrt.bfrt_info.key_from_idletime_notification(idle_notification)
+                key_list.append(recv_key)
+
+                key_dict = recv_key.to_dict()
+                ip = key_dict["meta.internal_ip"]['value']
+                port = key_dict["meta.internal_port"]['value']
+                protocol = key_dict["meta.ip_protocol"]['value']
+                self.installed_flow_key.remove((ip, port, protocol))
+
+        except Exception as e:
+            traceback.print_exc()
+            # print(f"Error: {e}")
+
+        finally:
+            if len(key_list) > 0:
+                print(f"Deleted {len(key_list)} idle entries, cost {round(time.time() - start_time, 2)}s!")
+                self.service_table.entry_del(self.bfrt.target, key_list)
+
+        return 0
+    
+    def clean_all_idle_entries_poll(self):
+        """
         Clean all idle entries in the table
         """
         start_time = time.time()
@@ -122,7 +162,11 @@ class Bfrt_GRPC_Client:
                                                         gc.KeyTuple("meta.internal_port", key[1]),
                                                         gc.KeyTuple("meta.ip_protocol", key[2])]))
             self.installed_flow_key.add((key[0], key[1], key[2]))
-            data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE")], 'Ingress.drop'))
+            # for poll mode
+            # data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE")], 'Ingress.drop'))
+
+            # for notification mode
+            data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_TTL', self.entry_ttl)], 'Ingress.drop'))
             
         self.service_table.entry_add(self.bfrt.target, key_list, data_list)
         return 1
@@ -134,18 +178,22 @@ if __name__ == "__main__":
 
     controller = Bfrt_GRPC_Client(grpc_addr=remote_grpc_addr)
 
-    controller.clear_tables()
 
     start_time = time.time()
     controller.clean_all_idle_entries()
 
-    entry_size = 30000
+    # controller.clear_tables()
+
+
+    entry_size = 300
     start_time = time.time()
     test_key_list = []
 
     for i in range(entry_size):
         test_key_list.append([783663000+i, 10129, 6])
     controller.add_batch_entries(test_key_list)
+
+    time.sleep(11)
 
     controller.clean_all_idle_entries()
 

@@ -71,6 +71,8 @@ class BfRtAPI:
                 "perform_bind must be equal to perform_subscribe")
 
         self.bfrt_info = None
+        if notifications is None:
+            notifications = gc.Notifications(enable_idletimeout=True, enable_entry_active=False, enable_port_status_change=False, enable_learn=False)
 
         self.interface = gc.ClientInterface(
             grpc_addr, client_id=client_id, device_id=0,

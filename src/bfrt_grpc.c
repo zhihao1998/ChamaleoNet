@@ -128,6 +128,7 @@ void *install_thead_main(void *args)
 		}
 
 		active_host_tbl_entry_count = bfrt_get_table_usage();
+		local_entry_count = bfrt_get_local_entry_number();
 	}
 
 	Py_DECREF(p_add_batch_Func);
@@ -218,6 +219,23 @@ int bfrt_get_table_usage()
 	int ret = -1;
 
 	pFunc = PyObject_GetAttrString(pInstance, "get_table_usage");
+	pArgs = Py_BuildValue("()");
+	pRes = PyEval_CallObject(pFunc, pArgs);
+	PyArg_Parse(pRes, "i", &ret);
+	Py_DECREF(pFunc);
+	Py_DECREF(pArgs);
+	Py_DECREF(pRes);
+	return ret;
+}
+
+/* Get Local Flow key number */
+int bfrt_get_local_entry_number()
+{
+	assert(pInstance != NULL);
+	PyObject *pArgs, *pRes, *pFunc;
+	int ret = -1;
+
+	pFunc = PyObject_GetAttrString(pInstance, "get_local_flow_entry_num");
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
