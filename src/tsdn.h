@@ -19,12 +19,16 @@
 #include <unistd.h>
 #include <net/if.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <linux/if_packet.h>
 #include <Python.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <time.h>
 #include <signal.h>
+#include <dirent.h>
+#include <getopt.h>
 
 #include "struct.h"
 #include "param.h"
@@ -297,6 +301,8 @@ u_long flow_hash_list_count_tot;
 u_long flow_hash_list_count_use;
 u_long service_hash_list_count_tot;
 u_long service_hash_list_count_use;
+
+u_long flow_hash_search_depth;
 
 // Functionality Counters
 u_long installed_entry_count_tot;

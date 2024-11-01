@@ -74,6 +74,9 @@ sudo bridge fdb add 90:2d:77:3f:b5:a2 dev ens5f1 master temp
 sudo bridge fdb del 52:54:00:50:f6:6f dev vnet2 master temp
 sudo bridge fdb del 90:2d:77:3f:b5:a2 dev ens5f1 master temp
 
+sudo bridge fdb del 52:54:00:50:f6:6f dev vnet84 master temp
+sudo bridge fdb del 90:2d:77:3f:b5:a2 dev ens5f1v3 master temp
+
 sudo bridge fdb del 90:2d:77:3f:b5:a2 dev vnet14 master temp
 ```
 

@@ -1,46 +1,39 @@
 
-/* Define how often garbage collection scans the whole flow table */
-/* Historically, this is set to half TCP_SINGLETON_TIME */
-#define GARBAGE_PERIOD 10000
+/* maximum number of concurrent TCP connection stored in the vector TTP 
+Increase this number on high speed network will help ...*/
+#define PKT_BUF_SIZE 20000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
- but the workload is done in GARBAGE_SPLIT_RATIO times
- IMPORTANT: it must be a divisor of GARBAGE_PERIOD,
+ but the workload is done in PKT_BUF_GC_SPLIT_SIZE times
+ IMPORTANT: it must be a divisor of PKT_BUF_GC_PERIOD,
  PKT_BUF_SIZE and MAX_UDP_PAIRS  */
-#define GARBAGE_SPLIT_RATIO 50000
 
-/* Define the interval for garbage collection routine to be fired */
-// #define GARBAGE_FIRE_TIME (GARBAGE_PERIOD/GARBAGE_SPLIT_RATIO)  
+/* Each time the garbage collection is fired, it scans PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE tcp flows */
+#define PKT_BUF_GC_SPLIT_SIZE 5000
 
-/* maximum number of concurrent TCP connection stored in the vector TTP 
-Increase this number on high speed network will help ...*/
+/* Define how often garbage collection scans the whole flow table,  
+ * i.e. very PKT_BUF_GC_PERIOD * (PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE) microseconds
+*/
+#define PKT_BUF_GC_PERIOD 5000
 
-#define PKT_BUF_SIZE 100000
-/* Each time the garbage collection is fired, it scans PKT_BUF_SIZE_BURST tcp flows */
-// #define PKT_BUF_SIZE_BURST (PKT_BUF_SIZE / GARBAGE_SPLIT_RATIO)
+/* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from internal hosts) */
+#define PKT_TIMEOUT 10000
 
 /* max depth of the linear search in the previous vector... */
-#define LIST_SEARCH_DEPT 200
+#define LIST_SEARCH_DEPT 20
 
 /* connection records are stored in a hash table.  Buckets are linked	*/
 /* lists sorted by most recent access.					*/
 /* oughta be prime  and larger than PKT_BUF_SIZE */
-#define HASH_TABLE_SIZE 50000
-#define ENTRY_HASH_TABLE_SIZE 200000
+#define FLOW_HASH_TABLE_SIZE 200000
 
-/* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from server) */
-#define TIMEOUT_LEVEL_NUM 3
-#define TIMEOUT_LEVEL_1 20000
-#define TIMEOUT_LEVEL_2 50000  
-#define TIMEOUT_LEVEL_3 20000   
-
-/* Every LAZY_FREEING_PERIOD, scan LAZY_FREEING_RATIO entries. */
-/* After LAZY_FREEING_PERIOD / (HASH_TABLE_SIZE / LAZY_FREEING_RATIO), the whole hash table is completely scanned once */
-/* So the lazy free timeout should be 2*LAZY_FREEING_PERIOD / (HASH_TABLE_SIZE / LAZY_FREEING_RATIO) */
-#define LAZY_FREEING_RATIO 10000
-#define LAZY_FREEING_PERIOD 50000
-#define LAZY_FREEING_TIMEOUT 1000000
+/* Every FLOW_HASH_TABLE_GC_PERIOD, scan FLOW_HASH_TABLE_GC_SIZE entries. */
+/* After FLOW_HASH_TABLE_GC_PERIOD / (FLOW_HASH_TABLE_SIZE / FLOW_HASH_TABLE_GC_SIZE), the whole hash table is completely scanned once */
+/* So the lazy free timeout should be 2*FLOW_HASH_TABLE_GC_PERIOD / (FLOW_HASH_TABLE_SIZE / FLOW_HASH_TABLE_GC_SIZE) */
+#define FLOW_HASH_TABLE_GC_SIZE 10000
+#define FLOW_HASH_TABLE_GC_PERIOD 50000
+#define FLOW_HASH_TABLE_GC_TIMEOUT 1000000
 
 /* 
 * Switch GRPC Client 
@@ -50,15 +43,17 @@ Increase this number on high speed network will help ...*/
 #define ENTRY_BUF_SIZE 100000
 
 /* polling time for checking the idle entries in P4 tables */
-#define ENTRY_IDLE_TIMEOUT 5000000
-
+#define ENTRY_INSTALL_BATCH_SIZE 1000
+#define ENTRY_IDLE_TIMEOUT 5000 //ms
+#define ENTRY_IDLE_CLEAN_BATCH_SIZE 1000
+#define ENTRY_GC_PERIOD 1000000 //us
 
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100
 
 
 /* Interfaces to capture and send packets */
-#define RECV_INTF "enp8s0"
+#define RECV_INTF "enp10s0"
 #define SEND_INTF "brtest"
 
 /* Logging Sampling granularity */

@@ -79,10 +79,9 @@ clean:
 	@rm -f callgrind.out.*
 
 
-.PHONY: p4clean
-p4clean:
-	@sudo rm -rf p4/log/*
-	@sudo rm -rf p4/model_*.log
+.PHONY: cleanlog
+cleanlog:
+	@sudo rm -rf log/*
 	
 
 .PHONY: distclean
@@ -93,3 +92,4 @@ distclean:
 .PHONY: echo
 echo:
 	@echo $(PYFLAGS)
+

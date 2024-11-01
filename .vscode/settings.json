@@ -20,6 +20,8 @@
         "string_view": "c",
         "string": "c",
         "system_error": "c",
-        "*.tcc": "c"
+        "*.tcc": "c",
+        "types.h": "c",
+        "signal.h": "c"
     }
 }

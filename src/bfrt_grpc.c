@@ -27,10 +27,10 @@ int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service
 	temp_table_entry_ptr->service_protocol = service_protocol;
 	assert(temp_table_entry_pp != NULL);
 
-	fprintf(fp_log, "active,%s,%d,%d\n",
-			inet_ntop(AF_INET, &temp_table_entry_ptr->service_ip, ip_src_addr_str, INET_ADDRSTRLEN),
-			ntohs(temp_table_entry_ptr->service_port), 
-			temp_table_entry_ptr->service_protocol);
+	// fprintf(fp_log, "active,%s,%d,%d\n",
+	// 		inet_ntop(AF_INET, &temp_table_entry_ptr->service_ip, ip_src_addr_str, INET_ADDRSTRLEN),
+	// 		ntohs(temp_table_entry_ptr->service_port), 
+	// 		temp_table_entry_ptr->service_protocol);
 
 	temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
 
@@ -75,14 +75,13 @@ void *install_thead_main(void *args)
 #endif
 
 		/* Install multiple entries at a time */
-		int batch_size = 100;
 		int batch_index = 0;
-		if (circular_buf_size(p4_entry_circ_buf) > batch_size)
+		if (circular_buf_size(p4_entry_circ_buf) > ENTRY_INSTALL_BATCH_SIZE)
 		{
 			PyObject *entry_list = PyList_New(0);
 			PyObject *ArgList = PyTuple_New(1);
 
-			while (batch_index < batch_size)
+			while (batch_index < ENTRY_INSTALL_BATCH_SIZE)
 			{
 				int ret = circular_buf_get(p4_entry_circ_buf, &buf_slot);
 				assert(ret == 0);
@@ -121,7 +120,7 @@ void *install_thead_main(void *args)
 #endif
 		}
 
-		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_IDLE_TIMEOUT)
+		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD)
 		{			
 			clean_all_idle_entries();
 			gettimeofday(&last_idle_cleaned_time, NULL);
@@ -185,7 +184,7 @@ void bfrt_grpc_init()
 	Py_INCREF(pClass);
 
 	/* Instantiate the class */
-	pArgs = Py_BuildValue("()"); /* create empty argument tuple */
+	pArgs = Py_BuildValue("(ii)", ENTRY_IDLE_TIMEOUT, ENTRY_IDLE_CLEAN_BATCH_SIZE); /* create empty argument tuple */
 	pInstance = PyEval_CallObject(pClass, pArgs);
 	assert(pInstance != NULL);
 	Py_INCREF(pInstance);
@@ -210,6 +209,7 @@ int bfrt_grpc_destroy()
 	Py_Finalize();
 	return 0;
 }
+
 
 /* Get Entry Table Number */
 int bfrt_get_table_usage()

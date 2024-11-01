@@ -23,20 +23,19 @@ def mac_to_bytes(mac_str):
     return bytes.fromhex(mac_str.replace(':', ''))
 
 class Bfrt_GRPC_Client:
-    def __init__(self, grpc_addr=remote_grpc_addr):
-        print(f"Connecting to the P4Runtime server {grpc_addr}")
-        self.bfrt = BfRtAPI(client_id=1, grpc_addr=grpc_addr)
+    def __init__(self, entry_ttl=5000, clean_batch_size=100):
+        print(f"Connecting to the P4Runtime server {remote_grpc_addr}, entry_ttl: {entry_ttl}, clean_batch_size: {clean_batch_size}")
+        self.bfrt = BfRtAPI(client_id=0, grpc_addr=remote_grpc_addr)
         self.target = gc.Target()
         self.installed_flow_key = set()   
         self.service_table = self.bfrt.bfrt_info.table_get('active_host_tbl')
         self.service_table.attribute_idle_time_set(self.target, 
                                                    True, 
                                                    bfruntime_pb2.IdleTable.IDLE_TABLE_NOTIFY_MODE,
-                                                   5000)
-        self.entry_ttl = 10000 # ms
-        self.clean_batch_size = 10000
-
+                                                   1000)
         print("Connected to the P4Runtime server")
+        self.entry_ttl = entry_ttl
+        self.clean_batch_size = clean_batch_size
      
     def init_key_annotation(self):
         table = self.bfrt.table_get('pipe.Ingress.active_host_tbl')
@@ -77,7 +76,7 @@ class Bfrt_GRPC_Client:
                                 data=[],
                                 action_name='Ingress.drop')
         except Exception as e:
-            print(e)                                                      
+            pass                                                      
         return 1
 
     def clear_tables(self):
@@ -114,41 +113,16 @@ class Bfrt_GRPC_Client:
                 ip = key_dict["meta.internal_ip"]['value']
                 port = key_dict["meta.internal_port"]['value']
                 protocol = key_dict["meta.ip_protocol"]['value']
-                self.installed_flow_key.remove((ip, port, protocol))
+                self.installed_flow_key.discard((ip, port, protocol))
 
         except Exception as e:
-            traceback.print_exc()
-            # print(f"Error: {e}")
+            # traceback.print_exc()
+            print(f"Error: {e}")
 
         finally:
             if len(key_list) > 0:
-                print(f"Deleted {len(key_list)} idle entries, cost {round(time.time() - start_time, 2)}s!")
                 self.service_table.entry_del(self.bfrt.target, key_list)
-
-        return 0
-    
-    def clean_all_idle_entries_poll(self):
-        """
-        Clean all idle entries in the table
-        """
-        start_time = time.time()
-        # Update all hit state before deleting        
-        self.service_table.operations_execute(self.bfrt.target, 'UpdateHitState')
-
-        key_list = []
-        for (data, key) in self.service_table.entry_get(self.bfrt.target):
-            if data.to_dict()["$ENTRY_HIT_STATE"] == "ENTRY_IDLE":
-                key_list.append(key)
-
-                ip = key.to_dict()["meta.internal_ip"]['value']
-                port = key.to_dict()["meta.internal_port"]['value']
-                protocol = key.to_dict()["meta.ip_protocol"]['value']
-                self.installed_flow_key.remove((ip, port, protocol))
-
-        if len(key_list) > 0:
-            self.service_table.entry_del(self.bfrt.target, key_list)
-
-        print(f"Deleted {len(key_list)} idle entries, cost {round(time.time() - start_time, 2)}s!")
+                print(f"Deleted {len(key_list)} idle entries, cost {round(time.time() - start_time, 2)}s!")
         return 0
         
             
@@ -176,7 +150,7 @@ class Bfrt_GRPC_Client:
 if __name__ == "__main__":
     import random
 
-    controller = Bfrt_GRPC_Client(grpc_addr=remote_grpc_addr)
+    controller = Bfrt_GRPC_Client()
 
 
     start_time = time.time()

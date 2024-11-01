@@ -34,55 +34,57 @@ struct timeval last_idle_cleaned_time;
 #ifdef DO_STATS
 void stats_init()
 {
-	u_long pkt_count = 0;
+	pkt_count = 0;
 
-	u_long tcp_pkt_count_tot = 0;
+	tcp_pkt_count_tot = 0;
 	// u_long in_tcp_pkt_count;
 	// u_long out_tcp_pkt_count;
 	// u_long local_tcp_pkt_count;
 
-	u_long udp_pkt_count_tot = 0;
+	udp_pkt_count_tot = 0;
 	// u_long in_udp_pkt_count;
 	// u_long out_udp_pkt_count;
 	// u_long local_udp_pkt_count;
 
-	u_long icmp_pkt_count_tot = 0;
+	icmp_pkt_count_tot = 0;
 	// u_long in_icmp_pkt_count;
 	// u_long out_icmp_pkt_count;
 	// u_long local_icmp_pkt_count;
 
-	u_long unsupported_pkt_count = 0;
-	u_long send_pkt_error_count = 0;
+	unsupported_pkt_count = 0;
+	send_pkt_error_count = 0;
 
 	// Data Structure Counters
-	u_long pkt_buf_count = 0;
-	u_long flow_hash_count = 0;
-	u_long lazy_flow_hash_count = 0;
-	u_long lazy_flow_hash_hit = 0;
+	pkt_buf_count = 0;
+	flow_hash_count = 0;
+	lazy_flow_hash_count = 0;
+	lazy_flow_hash_hit = 0;
 
 	// Freelist Counters
-	u_long pkt_list_count_tot = 0;
-	u_long pkt_list_count_use = 0;
-	u_long flow_hash_list_count_tot = 0;
-	u_long flow_hash_list_count_use = 0;
+	pkt_list_count_tot = 0;
+	pkt_list_count_use = 0;
+	flow_hash_list_count_tot = 0;
+	flow_hash_list_count_use = 0;
+
+	flow_hash_search_depth = 0;
 
 	// Functionality Counters
-	u_long installed_entry_count_tot = 0;
-	u_long installed_entry_count_tcp = 0;
-	u_long installed_entry_count_udp = 0;
-	u_long installed_entry_count_icmp = 0;
+	installed_entry_count_tot = 0;
+	installed_entry_count_tcp = 0;
+	installed_entry_count_udp = 0;
+	installed_entry_count_icmp = 0;
 
-	u_long install_buf_size = 0;
+	install_buf_size = 0;
 
-	u_long replied_flow_count_tot = 0;
-	u_long replied_flow_count_tcp = 0;
-	u_long replied_flow_count_udp = 0;
-	u_long replied_flow_count_icmp = 0;
+	replied_flow_count_tot = 0;
+	replied_flow_count_tcp = 0;
+	replied_flow_count_udp = 0;
+	replied_flow_count_icmp = 0;
 
-	u_long expired_pkt_count_tot = 0;
-	u_long expired_pkt_count_tcp = 0;
-	u_long expired_pkt_count_udp = 0;
-	u_long expired_pkt_count_icmp = 0;
+	expired_pkt_count_tot = 0;
+	expired_pkt_count_tcp = 0;
+	expired_pkt_count_udp = 0;
+	expired_pkt_count_icmp = 0;
 }
 #endif
 
@@ -300,7 +302,7 @@ void print_all_stats()
 	printf("\nDoing Statistics... \n");
 	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, unsupported_pkt_count: %ld, "
 		   "pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, "
-		   "pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, "
+		   "pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, flow_hash_search_depth: %ld, "
 		   "installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, "
 		   "replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, "
 		   "expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, "
@@ -308,7 +310,7 @@ void print_all_stats()
 		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
 		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
 		   pkt_list_count_tot, pkt_list_count_use,
-		   flow_hash_list_count_tot, flow_hash_list_count_use,
+		   flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
 		   installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
 		   replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
 		   expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
@@ -344,11 +346,105 @@ void sig_proc(int sig)
 	exit(0);
 }
 
+void init_log()
+{
+	time_t t;
+	struct tm *tm;
+	t = time(NULL);
+	tm = localtime(&t);
+
+	char log_dir[100];
+	sprintf(log_dir, "log/log_%d-%d", tm->tm_mon + 1, tm->tm_mday);
+	mkdir(log_dir, 0777);
+
+	char log_file_name[200], stat_file_name[200], param_file_name[200];
+	sprintf(log_file_name, "%s/log_%d:%d.txt", log_dir, tm->tm_hour, tm->tm_min);
+	sprintf(stat_file_name, "%s/stat_%d:%d.txt", log_dir, tm->tm_hour, tm->tm_min);
+	sprintf(param_file_name, "%s/param_%d:%d.txt", log_dir, tm->tm_hour, tm->tm_min);
+
+	fp_log = fopen(log_file_name, "w");
+	fp_stats = fopen(stat_file_name, "w");
+	FILE *fp_param = fopen(param_file_name, "w");
+
+	fprintf(fp_stats, "time,level,file,line,msg,"
+					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
+					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
+					  "pkt_list_count_tot,pkt_list_count_use,"
+					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
+					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
+					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
+					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
+					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
+
+	/* Record all parameters to param file */
+	fprintf(fp_param, "PKT_BUF_SIZE: %d\n", PKT_BUF_SIZE);
+	fprintf(fp_param, "PKT_BUF_GC_SPLIT_SIZE: %d\n", PKT_BUF_GC_SPLIT_SIZE);
+	fprintf(fp_param, "PKT_BUF_GC_PERIOD: %d\n", PKT_BUF_GC_PERIOD);
+	fprintf(fp_param, "PKT_TIMEOUT: %d\n", PKT_TIMEOUT);
+
+	fprintf(fp_param, "FLOW_HASH_TABLE_SIZE: %d\n", FLOW_HASH_TABLE_SIZE);
+	fprintf(fp_param, "FLOW_HASH_TABLE_GC_SIZE: %d\n", FLOW_HASH_TABLE_GC_SIZE);
+	fprintf(fp_param, "FLOW_HASH_TABLE_GC_PERIOD: %d\n", FLOW_HASH_TABLE_GC_PERIOD);
+	fprintf(fp_param, "FLOW_HASH_TABLE_GC_TIMEOUT: %d\n", FLOW_HASH_TABLE_GC_TIMEOUT);
+
+	fprintf(fp_param, "ENTRY_BUF_SIZE: %d\n", ENTRY_BUF_SIZE);
+	fprintf(fp_param, "ENTRY_INSTALL_BATCH_SIZE: %d\n", ENTRY_INSTALL_BATCH_SIZE);
+	fprintf(fp_param, "ENTRY_IDLE_TIMEOUT: %d\n", ENTRY_IDLE_TIMEOUT);
+	fprintf(fp_param, "ENTRY_IDLE_CLEAN_BATCH_SIZE: %d\n", ENTRY_IDLE_CLEAN_BATCH_SIZE);
+	fprintf(fp_param, "ENTRY_GC_PERIOD: %d\n", ENTRY_GC_PERIOD);
+
+	fprintf(fp_param, "PKT_LOG_SAMPLE_CNT: %d\n", PKT_LOG_SAMPLE_CNT);
+	fprintf(fp_param, "TIMEOUT_SAMPLE_CNT: %d\n", TIMEOUT_SAMPLE_CNT);
+	fprintf(fp_param, "STATS_LOG_SAMPLE_TIME: %d\n", STATS_LOG_SAMPLE_TIME);
+
+	log_add_fp(fp_stats, LOG_STATS);
+	log_set_quiet(TRUE);
+}
+
+static void ParseArgs(int *pargc, char *argv[])
+{
+	
+	LoadInternalNets("conf/net.internal");
+}
+
+static void CheckArguments(int *pargc, char *argv[])
+{
+	    char **tmpargv, *fname;
+    int i, tot_args;
+
+    if (*pargc == 1)
+    {
+        fname = "conf/tsdn.conf";
+        tmpargv = ArgsFromFile(fname, pargc);
+        tot_args = *pargc;
+        ParseArgs (pargc, tmpargv);
+        //debug messages
+        if (debug >= 2) {
+            fprintf(stdout, "config: reading options from %s\n", fname);
+            for (i = 0; i < tot_args; i++) {
+                fprintf(stdout, "config: added option/param: %s\n", tmpargv[i]);
+            }
+            fprintf(stdout, "config: reading options completed\n");
+        }
+    }
+    else
+    {
+        ParseArgs (pargc, argv);
+    }
+
+}
+
+
+
 int main(int argc, char *argv[])
 {
 	InitGlobalArrays();
-	/* initialize internals */
+	/* parse the flags */
+  	CheckArguments(&argc, argv);
+
+	/* initialize  */
 	trace_init();
+	init_log();
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
 	struct bpf_program fp;		   /* The compiled filter */
@@ -367,33 +463,13 @@ int main(int argc, char *argv[])
 	int tlen;
 	void *plast;
 	long int location = 0;
-	char log_file_name[60] = "log/log.log";
-	char stat_file_name[60] = "log/stat.csv";
-	// sprintf(stat_file_name, "log/stat-timeout%dms-GC%dms.log", (PKT_BUF_SIZE / GARBAGE_SPLIT_RATIO) * GARBAGE_PERIOD / 1000 * 2, GARBAGE_PERIOD / 1000);
-
-	fp_log = fopen(log_file_name, "w");
-	fp_stats = fopen(stat_file_name, "w");
-	fprintf(fp_stats, "time,level,file,line,msg,"
-					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
-					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
-					  "pkt_list_count_tot,pkt_list_count_use,"
-					  "flow_hash_list_count_tot,flow_hash_list_count_use,"
-					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
-					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
-					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
-
-	log_add_fp(fp_stats, LOG_STATS);
-	log_set_quiet(TRUE);
 
 	printf("Capturing on the device: %s\n", RECV_INTF);
 
 	/* Capture the Ctrl+C single */
 	signal(SIGINT, sig_proc);
 
-	/* The relative path here is valid only when the tsdn is executed at the project root directory. */
-	LoadInternalNets("conf/net.internal");
-
+	fprintf(stderr, "libpcap version: %s\n", pcap_lib_version());
 	/* open the device for sniffing. Here we use create+activate rather to avoid the packet buffer in libpcap. */
 	// pcap = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
 	pcap = pcap_create(RECV_INTF, errbuf);
@@ -472,14 +548,14 @@ int main(int argc, char *argv[])
 
 			log_stats("stats,%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld,%ld,"
+					  "%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld",
 					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
 					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
-					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use,
+					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use,flow_hash_search_depth,
 					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
 					  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
 					  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,

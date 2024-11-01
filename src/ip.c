@@ -193,7 +193,7 @@ void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr)
   }
 
   default:
-    fprintf(fp_stderr, "CopyAddr: Unsupported Layer 4 protocol!");
+    fprintf(fp_stderr, "CopyAddr: Unsupported Layer 4 protocol!\n");
     break;
   }
 

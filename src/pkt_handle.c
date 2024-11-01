@@ -1,8 +1,5 @@
 #include "tsdn.h"
 
-/* Log  */
-int search_count = 0;
-
 int num_ip_packets = -1;           /* how many packets we've allocated */
 static ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
 int pkt_index = 0;
@@ -68,10 +65,13 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
     CopyAddr(&pkt_in, pip, ptcp);
 
     /* grab the hash value (already computed by CopyAddr) */
-    hval = pkt_in.hash % HASH_TABLE_SIZE;
+    hval = pkt_in.hash % FLOW_HASH_TABLE_SIZE;
+    flow_hash_search_depth = 0;
+
     /* Search in the linked lists with the same hash value */
     for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
     {
+        flow_hash_search_depth++;
         if (SameConn(&pkt_in, &flow_hash_ptr->addr_pair, pdir))
         {
             /* Found */
@@ -80,7 +80,7 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
     }
 
     /* Garbage Collection */
-    if (elapsed(last_pkt_cleaned_time, current_time) > GARBAGE_PERIOD)
+    if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD)
     {
         /* Do the expired packet checking */
         last_pkt_cleaned_time = current_time;
@@ -88,7 +88,7 @@ FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
     }
 
     /* Lazy Free */
-    if (elapsed(last_hash_cleaned_time, current_time) > LAZY_FREEING_PERIOD)
+    if (elapsed(last_hash_cleaned_time, current_time) > FLOW_HASH_TABLE_GC_PERIOD)
     {
         /* Do the lazy freeing */
         last_hash_cleaned_time = current_time;
@@ -104,7 +104,7 @@ void check_timeout_lazy()
 
     flow_hash_t *flow_hash_head_ptr, *flow_hash_ptr;
 
-    for (ix = entry_index; ix < entry_index + LAZY_FREEING_RATIO; ix++)
+    for (ix = entry_index; ix < entry_index + FLOW_HASH_TABLE_GC_SIZE; ix++)
     {
         flow_hash_head_ptr = flow_hash_table[ix];
         if (flow_hash_head_ptr == NULL)
@@ -116,7 +116,7 @@ void check_timeout_lazy()
         {
             if (flow_hash_ptr->lazy_pending == TRUE)
             {
-                if (tv_sub_2(current_time, flow_hash_ptr->last_pkt_time) >= LAZY_FREEING_TIMEOUT)
+                if (tv_sub_2(current_time, flow_hash_ptr->last_pkt_time) >= FLOW_HASH_TABLE_GC_TIMEOUT)
                 {
                     FreeFlowHash(flow_hash_ptr);
 #ifdef DO_STATS
@@ -128,7 +128,7 @@ void check_timeout_lazy()
             }
         }
     }
-    entry_index = (entry_index + LAZY_FREEING_RATIO) % HASH_TABLE_SIZE;
+    entry_index = (entry_index + FLOW_HASH_TABLE_GC_SIZE) % FLOW_HASH_TABLE_SIZE;
 }
 
 void check_timeout_periodic()
@@ -138,7 +138,7 @@ void check_timeout_periodic()
     int ip_p;
 
     ip_packet *ppkt;
-    for (ix = pkt_index; ix < pkt_index + GARBAGE_SPLIT_RATIO; ix++)
+    for (ix = pkt_index; ix < pkt_index + PKT_BUF_GC_SPLIT_SIZE; ix++)
     {
         idx = ix % PKT_BUF_SIZE;
         ppkt = pkt_arr[idx];
@@ -149,19 +149,19 @@ void check_timeout_periodic()
 
         elapsed_time = tv_sub_2(current_time, ppkt->flow_hash_ptr->recv_time);
 
-        if (elapsed_time >= TIMEOUT_LEVEL_1)
+        if (elapsed_time >= PKT_TIMEOUT)
         {
             if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
             {
                 send_pkt_error_count++;
             }
             ip_p = ppkt->addr_pair.protocol;
-            fprintf(fp_log, "timeout,%s,%d,%s,%d,%d\n",
-                    inet_ntop(AF_INET, &ppkt->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
-                    ntohs(ppkt->addr_pair.a_port),
-                    inet_ntop(AF_INET, &ppkt->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
-                    ntohs(ppkt->addr_pair.b_port),
-                    ip_p);
+            // fprintf(fp_log, "timeout,%s,%d,%s,%d,%d\n",
+            //         inet_ntop(AF_INET, &ppkt->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+            //         ntohs(ppkt->addr_pair.a_port),
+            //         inet_ntop(AF_INET, &ppkt->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+            //         ntohs(ppkt->addr_pair.b_port),
+            //         ip_p);
 
             FreeFlowHash(ppkt->flow_hash_ptr);
             FreePkt(ppkt);
@@ -195,7 +195,7 @@ void check_timeout_periodic()
     }
 
     /* Increasing starting index for the next function call */
-    pkt_index = (pkt_index + GARBAGE_SPLIT_RATIO) % PKT_BUF_SIZE;
+    pkt_index = (pkt_index + PKT_BUF_GC_SPLIT_SIZE) % PKT_BUF_SIZE;
 }
 
 static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
@@ -210,7 +210,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     assert(temp_ppkt != NULL);
 
     /* Create entry for hash table */
-    hval = temp_ppkt->addr_pair.hash % HASH_TABLE_SIZE;
+    hval = temp_ppkt->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
     flow_hash_head_ptr = flow_hash_table[hval];
 
     temp_flow_hash_ptr = flow_hash_alloc();
@@ -250,7 +250,7 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
     hash hval;
     flow_hash_t *flow_hash_head_ptr;
 
-    hval = flow_hash_ptr->addr_pair.hash % HASH_TABLE_SIZE;
+    hval = flow_hash_ptr->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
 
     assert(flow_hash_table[hval] != NULL);
 
@@ -422,7 +422,7 @@ void trace_init(void)
     pkt_arr = (ip_packet **)MallocZ(PKT_BUF_SIZE * sizeof(ip_packet *));
 
     /* initialize the hash table */
-    flow_hash_table = (flow_hash_t **)MallocZ(HASH_TABLE_SIZE * sizeof(flow_hash_t *));
+    flow_hash_table = (flow_hash_t **)MallocZ(FLOW_HASH_TABLE_SIZE * sizeof(flow_hash_t *));
 
     /* Get interface name */
     strcpy(ifName, SEND_INTF);
@@ -462,7 +462,7 @@ void trace_cleanup()
 {
     /* free the flow hash table */
     // printf("Freeing flow hash table\n");
-    // for (int i = 0; i < HASH_TABLE_SIZE; i++)
+    // for (int i = 0; i < FLOW_HASH_TABLE_SIZE; i++)
     // {
     //     flow_hash_t *flow_hash_ptr = flow_hash_table[i];
     //     while (flow_hash_ptr != NULL)
