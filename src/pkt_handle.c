@@ -184,11 +184,12 @@ void check_timeout_periodic()
             default:
                 break;
             }
-
+#ifdef LOG_TO_FILE
             if (expired_pkt_count_tot % PKT_LOG_SAMPLE_CNT == 0)
             {
                 log_stats("timeout,%d", elapsed_time);
             }
+#endif  
 #endif
             pkt_arr[idx] = NULL;
         }

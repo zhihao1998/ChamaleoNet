@@ -10,7 +10,7 @@ Bool live_flag = TRUE;
 #define EH_SIZE sizeof(struct ether_header)
 
 static char *eth_buf;
-static char *ip_buf; 
+static char *ip_buf;
 static void *callback_plast;
 
 /* Buffer some packets of tcpdump to avoid packet loss */
@@ -323,7 +323,6 @@ void print_all_stats()
 		printf("\nPcap Statistics\n");
 		printf("Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
 	}
-	
 }
 
 void clean_all()
@@ -335,8 +334,10 @@ void clean_all()
 	/* close bfrt_grpc */
 	bfrt_grpc_destroy();
 	/* close log */
+#ifdef LOG_TO_FILE
 	fclose(fp_log);
 	fclose(fp_stats);
+#endif
 }
 
 void sig_proc(int sig)
@@ -358,24 +359,8 @@ void init_log()
 	mkdir(log_dir, 0777);
 
 	char log_file_name[200], stat_file_name[200], param_file_name[200];
-	sprintf(log_file_name, "%s/log_%d:%d.txt", log_dir, tm->tm_hour, tm->tm_min);
-	sprintf(stat_file_name, "%s/stat_%d:%d.txt", log_dir, tm->tm_hour, tm->tm_min);
-	sprintf(param_file_name, "%s/param_%d:%d.txt", log_dir, tm->tm_hour, tm->tm_min);
-
-	fp_log = fopen(log_file_name, "w");
-	fp_stats = fopen(stat_file_name, "w");
+	sprintf(param_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_param.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
 	FILE *fp_param = fopen(param_file_name, "w");
-
-	fprintf(fp_stats, "time,level,file,line,msg,"
-					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
-					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
-					  "pkt_list_count_tot,pkt_list_count_use,"
-					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
-					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
-					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
-					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
-
 	/* Record all parameters to param file */
 	fprintf(fp_param, "PKT_BUF_SIZE: %d\n", PKT_BUF_SIZE);
 	fprintf(fp_param, "PKT_BUF_GC_SPLIT_SIZE: %d\n", PKT_BUF_GC_SPLIT_SIZE);
@@ -397,54 +382,73 @@ void init_log()
 	fprintf(fp_param, "TIMEOUT_SAMPLE_CNT: %d\n", TIMEOUT_SAMPLE_CNT);
 	fprintf(fp_param, "STATS_LOG_SAMPLE_TIME: %d\n", STATS_LOG_SAMPLE_TIME);
 
+	fclose(fp_param);
+
+#ifdef LOG_TO_FILE
+	sprintf(log_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_log.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
+	sprintf(stat_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_stat.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
+
+	fp_log = fopen(log_file_name, "w");
+	fp_stats = fopen(stat_file_name, "w");
+	fprintf(fp_stats, "time,level,file,line,msg,"
+					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
+					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
+					  "pkt_list_count_tot,pkt_list_count_use,"
+					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
+					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
+					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
+					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
+					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
 	log_add_fp(fp_stats, LOG_STATS);
+#endif
 	log_set_quiet(TRUE);
 }
 
-static void ParseArgs(int *pargc, char *argv[])
-{
-	
-	LoadInternalNets("conf/net.internal");
-}
+// static void ParseArgs(int *pargc, char *argv[])
+// {
+// }
 
-static void CheckArguments(int *pargc, char *argv[])
-{
-	    char **tmpargv, *fname;
-    int i, tot_args;
+// static void CheckArguments(int *pargc, char *argv[])
+// {
+// 	char **tmpargv, *fname;
+// 	int i, tot_args;
 
-    if (*pargc == 1)
-    {
-        fname = "conf/tsdn.conf";
-        tmpargv = ArgsFromFile(fname, pargc);
-        tot_args = *pargc;
-        ParseArgs (pargc, tmpargv);
-        //debug messages
-        if (debug >= 2) {
-            fprintf(stdout, "config: reading options from %s\n", fname);
-            for (i = 0; i < tot_args; i++) {
-                fprintf(stdout, "config: added option/param: %s\n", tmpargv[i]);
-            }
-            fprintf(stdout, "config: reading options completed\n");
-        }
-    }
-    else
-    {
-        ParseArgs (pargc, argv);
-    }
-
-}
-
-
+// 	if (*pargc == 1)
+// 	{
+// 		fname = "conf/tsdn.conf";
+// 		tmpargv = ArgsFromFile(fname, pargc);
+// 		tot_args = *pargc;
+// 		ParseArgs(pargc, tmpargv);
+// 		// debug messages
+// 		if (debug >= 2)
+// 		{
+// 			fprintf(stdout, "config: reading options from %s\n", fname);
+// 			for (i = 0; i < tot_args; i++)
+// 			{
+// 				fprintf(stdout, "config: added option/param: %s\n", tmpargv[i]);
+// 			}
+// 			fprintf(stdout, "config: reading options completed\n");
+// 		}
+// 	}
+// 	else
+// 	{
+// 		ParseArgs(pargc, argv);
+// 	}
+// }
 
 int main(int argc, char *argv[])
 {
+
 	InitGlobalArrays();
 	/* parse the flags */
-  	CheckArguments(&argc, argv);
+	// CheckArguments(&argc, argv);
 
 	/* initialize  */
 	trace_init();
 	init_log();
+
+	LoadInternalNets("conf/net.internal");
+	// LoadGlobals("conf/globals.conf");
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
 	struct bpf_program fp;		   /* The compiled filter */
@@ -469,7 +473,6 @@ int main(int argc, char *argv[])
 	/* Capture the Ctrl+C single */
 	signal(SIGINT, sig_proc);
 
-	fprintf(stderr, "libpcap version: %s\n", pcap_lib_version());
 	/* open the device for sniffing. Here we use create+activate rather to avoid the packet buffer in libpcap. */
 	// pcap = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
 	pcap = pcap_create(RECV_INTF, errbuf);
@@ -484,6 +487,13 @@ int main(int argc, char *argv[])
 	if (pcap_set_buffer_size(pcap, 2000000000) == -1)
 	{
 		fprintf(stderr, "Error setting buffer size\n");
+		return (2);
+	}
+
+	/* set the snap length of pcap */
+	if (pcap_set_snaplen(pcap, SNAP_LEN) == -1)
+	{
+		fprintf(stderr, "Error setting snap length\n");
 		return (2);
 	}
 
@@ -520,6 +530,10 @@ int main(int argc, char *argv[])
 		return (2);
 	}
 
+	fprintf(stderr, "libpcap version: %s, snap length %d\n",
+			pcap_lib_version(),
+			pcap_snapshot(pcap));
+
 	ip_buf = MallocZ(ETHERNET_MTU);
 
 	/* install P4 table entry thread */
@@ -534,10 +548,19 @@ int main(int argc, char *argv[])
 						&plast);
 	last_idle_cleaned_time = last_hash_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
 
-	struct timeval end_time;
+	struct timeval pkt_process_start_time, pkt_process_end_time;
+	struct timeval pkt_process_end_time_tmp = current_time;
 
 	do
 	{
+
+#ifdef LOG_TO_FILE
+		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
+		{
+			gettimeofday(&pkt_process_start_time, NULL);
+		}
+#endif
+
 		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
 
 #ifdef DO_STATS
@@ -546,6 +569,7 @@ int main(int argc, char *argv[])
 			last_log_time = current_time;
 			install_buf_size = entry_circ_buf_size();
 
+#ifdef LOG_TO_FILE
 			log_stats("stats,%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,%ld,"
@@ -555,17 +579,22 @@ int main(int argc, char *argv[])
 					  "%ld,%ld,%ld",
 					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
 					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
-					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use,flow_hash_search_depth,
+					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
 					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
 					  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
 					  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
-					  active_host_tbl_entry_count,local_entry_count,send_pkt_error_count);
+					  active_host_tbl_entry_count, local_entry_count, send_pkt_error_count);
+#endif
 		}
 		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
 		{
-			gettimeofday(&end_time, NULL);
-			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(end_time, current_time));
+#ifdef LOG_TO_FILE
+			gettimeofday(&pkt_process_end_time, NULL);
 
+			log_stats("batch_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, pkt_process_end_time_tmp));			
+			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, pkt_process_start_time));	
+			gettimeofday(&pkt_process_end_time_tmp, NULL);
+#endif
 			if (pkt_count % 500000 == 0)
 			{
 				print_all_stats();
@@ -578,7 +607,9 @@ int main(int argc, char *argv[])
 	pthread_cancel(entry_install_thread);
 	bfrt_grpc_destroy();
 	trace_cleanup();
+#ifdef LOG_TO_FILE
 	fclose(fp_log);
 	fclose(fp_stats);
+#endif
 	return 0;
 }

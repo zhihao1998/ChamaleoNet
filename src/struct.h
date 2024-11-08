@@ -12,7 +12,7 @@ typedef u_char Bool;
 #define BOOL2STR(b) (b) ? "TRUE" : "FALSE"
 
 #define ETHERNET_MTU 1500
-#define SNAP_LEN 127
+#define SNAP_LEN 128
 
 /* type for an IP address */
 /* IP address can be either IPv4 or IPv6 */
@@ -52,7 +52,7 @@ typedef struct ip_packet
 
   /* raw packet (from Ether) information */
   int pkt_len;
-  u_char raw_pkt[ETHERNET_MTU]; /* start of the IP header */
+  u_char raw_pkt[SNAP_LEN]; /* start of the IP header */
 
   /* location in the pkt_arr array */
   int loc_pkt_arr;

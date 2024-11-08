@@ -227,8 +227,6 @@ u_long entry_circ_buf_size();
 int bfrt_add_batch_entries(PyObject *py_arg_tuple);
 
 /* Logging */
-#define DO_STATS
-
 FILE *fp_log;
 FILE *fp_stats;
 

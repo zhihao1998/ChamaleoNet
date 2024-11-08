@@ -1,7 +1,7 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-#define PKT_BUF_SIZE 20000
+#define PKT_BUF_SIZE 10000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
@@ -10,15 +10,15 @@ Increase this number on high speed network will help ...*/
  PKT_BUF_SIZE and MAX_UDP_PAIRS  */
 
 /* Each time the garbage collection is fired, it scans PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE tcp flows */
-#define PKT_BUF_GC_SPLIT_SIZE 5000
+#define PKT_BUF_GC_SPLIT_SIZE 500
 
 /* Define how often garbage collection scans the whole flow table,  
  * i.e. very PKT_BUF_GC_PERIOD * (PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE) microseconds
 */
-#define PKT_BUF_GC_PERIOD 5000
+#define PKT_BUF_GC_PERIOD 500
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from internal hosts) */
-#define PKT_TIMEOUT 10000
+#define PKT_TIMEOUT 20000
 
 /* max depth of the linear search in the previous vector... */
 #define LIST_SEARCH_DEPT 20
@@ -31,7 +31,7 @@ Increase this number on high speed network will help ...*/
 /* Every FLOW_HASH_TABLE_GC_PERIOD, scan FLOW_HASH_TABLE_GC_SIZE entries. */
 /* After FLOW_HASH_TABLE_GC_PERIOD / (FLOW_HASH_TABLE_SIZE / FLOW_HASH_TABLE_GC_SIZE), the whole hash table is completely scanned once */
 /* So the lazy free timeout should be 2*FLOW_HASH_TABLE_GC_PERIOD / (FLOW_HASH_TABLE_SIZE / FLOW_HASH_TABLE_GC_SIZE) */
-#define FLOW_HASH_TABLE_GC_SIZE 10000
+#define FLOW_HASH_TABLE_GC_SIZE 1000
 #define FLOW_HASH_TABLE_GC_PERIOD 50000
 #define FLOW_HASH_TABLE_GC_TIMEOUT 1000000
 
@@ -45,7 +45,7 @@ Increase this number on high speed network will help ...*/
 /* polling time for checking the idle entries in P4 tables */
 #define ENTRY_INSTALL_BATCH_SIZE 1000
 #define ENTRY_IDLE_TIMEOUT 5000 //ms
-#define ENTRY_IDLE_CLEAN_BATCH_SIZE 1000
+#define ENTRY_IDLE_CLEAN_BATCH_SIZE 2000
 #define ENTRY_GC_PERIOD 1000000 //us
 
 /* Max number of nets to check if ip is internal or external */
@@ -57,8 +57,10 @@ Increase this number on high speed network will help ...*/
 #define SEND_INTF "brtest"
 
 /* Logging Sampling granularity */
-#define PKT_LOG_SAMPLE_CNT 1000      // pkt_count
-#define TIMEOUT_SAMPLE_CNT 1000      // tot_expired_pkt_count
+#define DO_STATS
+#define LOG_TO_FILE
+#define PKT_LOG_SAMPLE_CNT 10000      // pkt_count
+#define TIMEOUT_SAMPLE_CNT 10000     // tot_expired_pkt_count
 #define STATS_LOG_SAMPLE_TIME 50000  // us
 
 #define SWITCH_ENABLED

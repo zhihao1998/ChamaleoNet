@@ -9,6 +9,7 @@ import bfrt_grpc.bfruntime_pb2 as bfruntime_pb2
 
 remote_grpc_addr = '192.168.24.69:50052'
 local_grpc_addr = 'localhost:50052'
+log_file = open("bfrt_grpc_client.log", "w+")
 
 def ip_to_int(ip):
     return int(binascii.hexlify(socket.inet_aton(ip)),16)
@@ -24,7 +25,7 @@ def mac_to_bytes(mac_str):
 
 class Bfrt_GRPC_Client:
     def __init__(self, entry_ttl=5000, clean_batch_size=100):
-        print(f"Connecting to the P4Runtime server {remote_grpc_addr}, entry_ttl: {entry_ttl}, clean_batch_size: {clean_batch_size}")
+        print(f"Connecting to the P4Runtime server {remote_grpc_addr}")
         self.bfrt = BfRtAPI(client_id=0, grpc_addr=remote_grpc_addr)
         self.target = gc.Target()
         self.installed_flow_key = set()   
@@ -107,22 +108,30 @@ class Bfrt_GRPC_Client:
             while len(key_list) < self.clean_batch_size:
                 idle_notification = self.bfrt.interface.idletime_notification_get(timeout=0.2)
                 recv_key = self.bfrt.bfrt_info.key_from_idletime_notification(idle_notification)
-                key_list.append(recv_key)
 
                 key_dict = recv_key.to_dict()
                 ip = key_dict["meta.internal_ip"]['value']
                 port = key_dict["meta.internal_port"]['value']
                 protocol = key_dict["meta.ip_protocol"]['value']
-                self.installed_flow_key.discard((ip, port, protocol))
+                log_file.write(f"Delete entry: {ip}, {port}, {protocol}\n")
+                self.installed_flow_key.remove((ip, port, protocol))
+
+                self.service_table.entry_del(self.target, 
+                                             self.service_table.make_key([gc.KeyTuple("meta.internal_ip", ip),
+                                                                          gc.KeyTuple("meta.internal_port", port),
+                                                                          gc.KeyTuple("meta.ip_protocol", protocol)]))
+                
+
+                
 
         except Exception as e:
-            # traceback.print_exc()
-            print(f"Error: {e}")
+            traceback.print_exc()
+            # print(f"Error: {e}")
 
-        finally:
-            if len(key_list) > 0:
-                self.service_table.entry_del(self.bfrt.target, key_list)
-                print(f"Deleted {len(key_list)} idle entries, cost {round(time.time() - start_time, 2)}s!")
+        # finally:
+            # if len(key_list) > 0:
+            #     self.service_table.entry_del(self.bfrt.target, key_list)
+            #     print(f"Deleted {len(key_list)} idle entries, cost {round(time.time() - start_time, 2)}s!")
         return 0
         
             
@@ -136,6 +145,7 @@ class Bfrt_GRPC_Client:
                                                         gc.KeyTuple("meta.internal_port", key[1]),
                                                         gc.KeyTuple("meta.ip_protocol", key[2])]))
             self.installed_flow_key.add((key[0], key[1], key[2]))
+            log_file.write(f"Add entry: {key}\n")
             # for poll mode
             # data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE")], 'Ingress.drop'))
 
@@ -167,7 +177,7 @@ if __name__ == "__main__":
         test_key_list.append([783663000+i, 10129, 6])
     controller.add_batch_entries(test_key_list)
 
-    time.sleep(11)
+    time.sleep(5)
 
     controller.clean_all_idle_entries()
 

@@ -41,7 +41,7 @@ default: makedir all
 $(TARGET): $(OBJ)
 	$(CC) -o $@ $(OBJ) $(CFLAGS)
 
-$(OBJ_PATH)/%.o: $(SRC_PATH)/%.c*
+$(OBJ_PATH)/%.o: $(SRC_PATH)/%.c* $(SRC_PATH)/param.h
 	$(CC) $(COBJFLAGS) -o $@ $<
 
 $(DBG_PATH)/%.o: $(SRC_PATH)/%.c*
@@ -79,8 +79,8 @@ clean:
 	@rm -f callgrind.out.*
 
 
-.PHONY: cleanlog
-cleanlog:
+.PHONY: logclean
+logclean:
 	@sudo rm -rf log/*
 	
 

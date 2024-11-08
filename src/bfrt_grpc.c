@@ -50,7 +50,6 @@ void *install_thead_main(void *args)
 	pthread_mutex_init(&entry_install_mutex, NULL);
 	pthread_cond_init(&entry_install_cond, NULL);
 
-	timeval start_time, end_time;
 	active_host_tbl_entry_count = 0;
 	table_entry_t *table_entry_ptr;
 
@@ -69,10 +68,6 @@ void *install_thead_main(void *args)
 		{
 			pthread_cond_wait(&entry_install_cond, &entry_install_mutex);
 		}
-
-#ifdef DO_STATS
-		gettimeofday(&start_time, NULL);
-#endif
 
 		/* Install multiple entries at a time */
 		int batch_index = 0;
@@ -112,8 +107,6 @@ void *install_thead_main(void *args)
 			Py_DECREF(entry_list);
 			Py_DECREF(ArgList);
 
-			// gettimeofday(&end_time, NULL);
-			// printf("Installing time: %d\n", tv_sub_2(end_time, start_time));
 
 #ifdef DO_STATS
 			installed_entry_count_tot += batch_index;
