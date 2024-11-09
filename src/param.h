@@ -54,7 +54,7 @@ Increase this number on high speed network will help ...*/
 
 /* Interfaces to capture and send packets */
 #define RECV_INTF "enp10s0"
-#define SEND_INTF "brtest"
+#define SEND_INTF "enp9s0"
 
 /* Logging Sampling granularity */
 #define DO_STATS
@@ -68,6 +68,6 @@ Increase this number on high speed network will help ...*/
 #define COLLECTOR_DEST_MAC_0 0x52
 #define COLLECTOR_DEST_MAC_1 0x54
 #define COLLECTOR_DEST_MAC_2 0x00
-#define COLLECTOR_DEST_MAC_3 0x2e
-#define COLLECTOR_DEST_MAC_4 0xc4
-#define COLLECTOR_DEST_MAC_5 0x98
+#define COLLECTOR_DEST_MAC_3 0x6a
+#define COLLECTOR_DEST_MAC_4 0x19
+#define COLLECTOR_DEST_MAC_5 0x9a

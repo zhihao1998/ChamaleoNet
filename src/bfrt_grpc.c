@@ -20,20 +20,12 @@ int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service
 {
 
 	table_entry_t *temp_table_entry_ptr, **temp_table_entry_pp;
-
 	temp_table_entry_ptr = table_entry_alloc();
 	temp_table_entry_ptr->service_ip = service_ip;
 	temp_table_entry_ptr->service_port = service_port;
 	temp_table_entry_ptr->service_protocol = service_protocol;
 	assert(temp_table_entry_pp != NULL);
-
-	// fprintf(fp_log, "active,%s,%d,%d\n",
-	// 		inet_ntop(AF_INET, &temp_table_entry_ptr->service_ip, ip_src_addr_str, INET_ADDRSTRLEN),
-	// 		ntohs(temp_table_entry_ptr->service_port), 
-	// 		temp_table_entry_ptr->service_protocol);
-
 	temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
-
 	pthread_cond_signal(&entry_install_cond);
 	return 0;
 }
@@ -53,11 +45,10 @@ void *install_thead_main(void *args)
 	active_host_tbl_entry_count = 0;
 	table_entry_t *table_entry_ptr;
 
-	PyObject *p_add_batch_Func = PyObject_GetAttrString(pInstance, "add_batch_entries");
+	PyObject *p_add_batch_Func = PyObject_GetAttrString(pInstance, "entry_batch_add");
 
 	while (circular_buf_empty(p4_entry_circ_buf))
 	{
-		printf("Waiting for drop entry\n");
 		pthread_cond_wait(&entry_install_cond, &entry_install_mutex);
 	}
 
@@ -84,11 +75,10 @@ void *install_thead_main(void *args)
 				PyObject *entry_key = PyList_New(3);
 				table_entry_t *table_entry_ptr = (table_entry_t *)buf_slot;
 				assert(table_entry_ptr != NULL);
-				// printf("Installing (ip: %u ,port: %d, protocol: %d) to the entry buffer, size: %ld, head: %ld, tail: %ld\n",
-				// 	   table_entry_ptr->service_ip.s_addr,
-				// 	   ntohs(table_entry_ptr->service_port),
-				// 	   table_entry_ptr->service_protocol,
-				// 	   entry_circ_buf_size(), p4_entry_circ_buf->head, p4_entry_circ_buf->tail);
+				// fprintf(fp_log, "Installing (ip: %ld ,port: %d, protocol: %d) to the entry buffer\n",
+				// 		ntohl(table_entry_ptr->service_ip.s_addr),
+				// 		ntohs(table_entry_ptr->service_port),
+				// 		table_entry_ptr->service_protocol);
 
 				PyList_SetItem(entry_key, 0, Py_BuildValue("I", ntohl(table_entry_ptr->service_ip.s_addr)));
 				PyList_SetItem(entry_key, 1, Py_BuildValue("i", ntohs(table_entry_ptr->service_port)));
@@ -107,14 +97,13 @@ void *install_thead_main(void *args)
 			Py_DECREF(entry_list);
 			Py_DECREF(ArgList);
 
-
 #ifdef DO_STATS
 			installed_entry_count_tot += batch_index;
 #endif
 		}
 
 		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD)
-		{			
+		{
 			clean_all_idle_entries();
 			gettimeofday(&last_idle_cleaned_time, NULL);
 		}
@@ -135,7 +124,7 @@ int clean_all_idle_entries()
 	PyObject *pArgs, *pRes, *pFunc;
 	int ret = -1;
 
-	pFunc = PyObject_GetAttrString(pInstance, "clean_all_idle_entries");
+	pFunc = PyObject_GetAttrString(pInstance, "idle_entry_batch_clean");
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
@@ -148,7 +137,7 @@ int clean_all_idle_entries()
 void bfrt_clear_tables()
 {
 	PyObject *pArgs, *pRes, *pFunc;
-	pFunc = PyObject_GetAttrString(pInstance, "clear_tables");
+	pFunc = PyObject_GetAttrString(pInstance, "clear_service_table");
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	Py_DECREF(pFunc);
@@ -203,7 +192,6 @@ int bfrt_grpc_destroy()
 	return 0;
 }
 
-
 /* Get Entry Table Number */
 int bfrt_get_table_usage()
 {
@@ -212,6 +200,7 @@ int bfrt_get_table_usage()
 	int ret = -1;
 
 	pFunc = PyObject_GetAttrString(pInstance, "get_table_usage");
+	assert(pFunc != NULL);
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);

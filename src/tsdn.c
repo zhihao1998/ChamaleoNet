@@ -404,38 +404,6 @@ void init_log()
 	log_set_quiet(TRUE);
 }
 
-// static void ParseArgs(int *pargc, char *argv[])
-// {
-// }
-
-// static void CheckArguments(int *pargc, char *argv[])
-// {
-// 	char **tmpargv, *fname;
-// 	int i, tot_args;
-
-// 	if (*pargc == 1)
-// 	{
-// 		fname = "conf/tsdn.conf";
-// 		tmpargv = ArgsFromFile(fname, pargc);
-// 		tot_args = *pargc;
-// 		ParseArgs(pargc, tmpargv);
-// 		// debug messages
-// 		if (debug >= 2)
-// 		{
-// 			fprintf(stdout, "config: reading options from %s\n", fname);
-// 			for (i = 0; i < tot_args; i++)
-// 			{
-// 				fprintf(stdout, "config: added option/param: %s\n", tmpargv[i]);
-// 			}
-// 			fprintf(stdout, "config: reading options completed\n");
-// 		}
-// 	}
-// 	else
-// 	{
-// 		ParseArgs(pargc, argv);
-// 	}
-// }
-
 int main(int argc, char *argv[])
 {
 

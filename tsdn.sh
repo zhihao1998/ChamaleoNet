@@ -1,0 +1,1 @@
+ make && sudo ./bin/tsdn & python3 send_recv/net_stat.py
