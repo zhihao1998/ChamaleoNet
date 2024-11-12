@@ -320,7 +320,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     // int timeout_level = which_circular_buf(pip);
 
     // use two string buffer for print the IP address transformed from inet_ntop
-    char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
+    // char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
 
     /* do not rely on the header, instead check if it's already in the hash table */
     flow_hash_ptr = FindFlowHash(pip, ptcp, plast, &dir);

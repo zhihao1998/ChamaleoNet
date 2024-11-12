@@ -10,12 +10,12 @@ Increase this number on high speed network will help ...*/
  PKT_BUF_SIZE and MAX_UDP_PAIRS  */
 
 /* Each time the garbage collection is fired, it scans PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE tcp flows */
-#define PKT_BUF_GC_SPLIT_SIZE 5000
+#define PKT_BUF_GC_SPLIT_SIZE 100
 
 /* Define how often garbage collection scans the whole flow table,  
  * i.e. very PKT_BUF_GC_PERIOD * (PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE) microseconds
 */
-#define PKT_BUF_GC_PERIOD 10000
+#define PKT_BUF_GC_PERIOD 200
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from internal hosts) */
 #define PKT_TIMEOUT 20000
@@ -54,13 +54,13 @@ Increase this number on high speed network will help ...*/
 
 /* Interfaces to capture and send packets */
 #define RECV_INTF "enp10s0"
-#define SEND_INTF "enp9s0"
+#define SEND_INTF "brtest"
 
 /* Logging Sampling granularity */
 #define DO_STATS
 #define LOG_TO_FILE
-#define PKT_LOG_SAMPLE_CNT 5000      // pkt_count
-#define TIMEOUT_SAMPLE_CNT 1000     // tot_expired_pkt_count
+#define PKT_LOG_SAMPLE_CNT 500      // pkt_count
+#define TIMEOUT_SAMPLE_CNT 500     // tot_expired_pkt_count
 #define STATS_LOG_SAMPLE_TIME 10000  // us
 
 #define SWITCH_ENABLED

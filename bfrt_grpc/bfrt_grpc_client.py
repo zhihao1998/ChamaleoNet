@@ -29,7 +29,8 @@ import bfrt_grpc.bfruntime_pb2 as bfruntime_pb2
 remote_grpc_addr = '192.168.24.69:50052'
 local_grpc_addr = 'localhost:50052'
 
-# log_file = open("bfrt_grpc_client.log", "w+")
+log_file = open("./log/bfrt_grpc_client.log", "w+")
+log_file.write("time,op,num,cost\n")
 
 def ip_to_int(ip):
     return int(binascii.hexlify(socket.inet_aton(ip)),16)
@@ -187,7 +188,6 @@ class Bfrt_GRPC_Client:
         except:
             print("Problem clearing active service table")
     
-    
 
     def idle_entry_single_clean(self):
         """
@@ -219,7 +219,7 @@ class Bfrt_GRPC_Client:
         """
         Clean all idle entries in the table with notification mode
         """
-        # start_time = time.time()
+        start_time = time.time()
         key_list = []
         count = 0
         while len(key_list) < self.clean_batch_size:
@@ -246,14 +246,15 @@ class Bfrt_GRPC_Client:
             
         if len(key_list) > 0:
             self.service_table.entry_del(self.target, key_list)
-            # print(f"Batch removed {count} idle entries, cost {round(time.time() - start_time, 2)}s!")
+            log_file.write(f"{start_time},remove,{count},{round(time.time() - start_time, 5)}\n")
+            log_file.flush()
         return 0
         
             
     def entry_batch_add(self, entry_key_list):
         key_list = []
         data_list = []
-        # start_time = time.time()
+        start_time = time.time()
         for index, key in enumerate(entry_key_list):
             if (key[0], key[1], key[2]) in self.installed_flow_key:
                 continue
@@ -270,6 +271,8 @@ class Bfrt_GRPC_Client:
                                                           'Ingress.drop'))
         self.service_table.entry_add(self.target, key_list, data_list)
         # print(f"Added {len(key_list)} entries, cost {round(time.time() - start_time, 2)}s!")
+        log_file.write(f"{time.time()},add,{len(key_list)},{round(time.time() - start_time, 5)}\n")
+        log_file.flush()
         return 1
     
     

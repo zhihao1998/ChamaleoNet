@@ -228,7 +228,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 	}
 
 	/* If it's IP-over-IP, skip the external IP header */
-	if (PIP_ISV4(pip) && (pip->ip_p == IPPROTO_IPIP || pip->ip_p == IPPROTO_IPV6))
+	if (PIP_ISV4(pip) && (pip->ip_p == IPPROTO_IPIP))
 	{
 		pip = (struct ip *)((char *)pip + 4 * pip->ip_hl);
 		if (!PIP_ISV4(pip))
@@ -355,8 +355,9 @@ void init_log()
 	tm = localtime(&t);
 
 	char log_dir[100];
-	sprintf(log_dir, "log/log_%d-%d", tm->tm_mon + 1, tm->tm_mday);
-	mkdir(log_dir, 0777);
+	sprintf(log_dir, "log");
+	// sprintf(log_dir, "log/log_%d-%d", tm->tm_mon + 1, tm->tm_mday);
+	// mkdir(log_dir, 0777);
 
 	char log_file_name[200], stat_file_name[200], param_file_name[200];
 	sprintf(param_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_param.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
@@ -522,13 +523,6 @@ int main(int argc, char *argv[])
 	do
 	{
 
-#ifdef LOG_TO_FILE
-		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
-		{
-			gettimeofday(&pkt_process_start_time, NULL);
-		}
-#endif
-
 		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
 
 #ifdef DO_STATS
@@ -559,8 +553,8 @@ int main(int argc, char *argv[])
 #ifdef LOG_TO_FILE
 			gettimeofday(&pkt_process_end_time, NULL);
 
-			log_stats("batch_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, pkt_process_end_time_tmp));			
-			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, pkt_process_start_time));	
+			log_stats("batch_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, pkt_process_end_time_tmp));
+			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, current_time));
 			gettimeofday(&pkt_process_end_time_tmp, NULL);
 #endif
 			if (pkt_count % 500000 == 0)

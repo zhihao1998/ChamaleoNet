@@ -16,9 +16,6 @@ The logical structure is described as:
 
 ![host-flow-diagram.jpg](/.images/host-flow-diagram.jpg)
 
-## Features
-
-- Three levels of TIMEOUT (100ms, 50ms, 20ms)
 
 ## Dependencies
 This project is developed with the following dependencies:
