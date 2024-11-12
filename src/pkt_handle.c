@@ -4,7 +4,7 @@ int num_ip_packets = -1;           /* how many packets we've allocated */
 static ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
 int pkt_index = 0;
 int entry_index = 0;
-static timeval current_pkt_time;
+// static timeval current_pkt_time;
 
 /* Circular Buffer for lazy freeing */
 // static circular_buf_t *lazy_hash_buf;
@@ -58,22 +58,6 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 static flow_hash_t *
 FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
 {
-    /* Garbage Collection */
-    if (elapsed(last_pkt_cleaned_time, current_pkt_time) > PKT_BUF_GC_PERIOD)
-    {
-        /* Do the expired packet checking */
-        last_pkt_cleaned_time = current_pkt_time;
-        check_timeout_periodic();
-    }
-
-    /* Lazy Free */
-    if (elapsed(last_hash_cleaned_time, current_pkt_time) > FLOW_HASH_TABLE_GC_PERIOD)
-    {
-        /* Do the lazy freeing */
-        last_hash_cleaned_time = current_pkt_time;
-        check_timeout_lazy();
-    }
-
     /* Start to check */
     flow_addrblock pkt_in;
     hash hval;
@@ -118,7 +102,7 @@ void check_timeout_lazy()
         {
             if (flow_hash_ptr->lazy_pending == TRUE)
             {
-                if (tv_sub_2(current_pkt_time, flow_hash_ptr->last_pkt_time) >= FLOW_HASH_TABLE_GC_TIMEOUT)
+                if (tv_sub_2(current_time, flow_hash_ptr->last_pkt_time) >= FLOW_HASH_TABLE_GC_TIMEOUT)
                 {
                     FreeFlowHash(flow_hash_ptr);
 #ifdef DO_STATS
@@ -149,7 +133,7 @@ void check_timeout_periodic()
             continue;
         }
 
-        elapsed_time = tv_sub_2(current_pkt_time, ppkt->flow_hash_ptr->recv_time);
+        elapsed_time = tv_sub_2(current_time, ppkt->flow_hash_ptr->recv_time);
 
         if (elapsed_time >= PKT_TIMEOUT)
         {
@@ -219,7 +203,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     temp_flow_hash_ptr = flow_hash_alloc();
     temp_flow_hash_ptr->addr_pair = temp_ppkt->addr_pair;
     temp_flow_hash_ptr->lazy_pending = FALSE;
-    temp_flow_hash_ptr->recv_time = current_pkt_time;
+    temp_flow_hash_ptr->recv_time = current_time;
     temp_flow_hash_ptr->ppkt = temp_ppkt;
 
     if (flow_hash_head_ptr == NULL)
@@ -282,7 +266,7 @@ int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
     /* Mark the lazy pending flag */
     flow_hash_ptr->lazy_pending = TRUE;
     /* The time when we receive response packet */
-    flow_hash_ptr->last_pkt_time = current_pkt_time;
+    flow_hash_ptr->last_pkt_time = current_time;
     FreePkt(flow_hash_ptr->ppkt);
 #ifdef DO_STATS
     lazy_flow_hash_count++;
@@ -313,8 +297,24 @@ int which_circular_buf(struct ip *pip)
 
 /* Main entry of packet handler */
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
-{
-    gettimeofday(&current_pkt_time, NULL);
+{   
+    /* Garbage Collection */
+    if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD)
+    {
+        /* Do the expired packet checking */
+        last_pkt_cleaned_time = current_time;
+        check_timeout_periodic();
+    }
+
+    /* Lazy Free */
+    if (elapsed(last_hash_cleaned_time, current_time) > FLOW_HASH_TABLE_GC_PERIOD)
+    {
+        /* Do the lazy freeing */
+        last_hash_cleaned_time = current_time;
+        check_timeout_lazy();
+    }
+
+    // gettimeofday(&current_pkt_time, NULL);
     flow_hash_t *flow_hash_ptr;
     int dir = 0;
     // int timeout_level = which_circular_buf(pip);
@@ -339,7 +339,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
 #ifdef DO_STATS
             lazy_flow_hash_hit++;
 #endif
-            flow_hash_ptr->last_pkt_time = current_pkt_time;
+            flow_hash_ptr->last_pkt_time = current_time;
             return 0;
         }
 

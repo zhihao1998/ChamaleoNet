@@ -386,7 +386,7 @@ void init_log()
 
 #ifdef LOG_TO_FILE
 	sprintf(log_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_log.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-	sprintf(stat_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_stat.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
+	sprintf(stat_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_stat.csv", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
 
 	fp_log = fopen(log_file_name, "w");
 	fp_stats = fopen(stat_file_name, "w");
