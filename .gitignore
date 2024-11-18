@@ -14,4 +14,9 @@
 /.venv
 bf_drivers.log*
 zlog-cfg-cur*
+*.log
+/analysis/results
+/analysis/figs
+*.csv
+*.pdf
 

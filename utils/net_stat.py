@@ -51,7 +51,10 @@ def mon_net_speed():
     while True:
         net_io = psutil.net_io_counters(pernic=True)[intf_name]
         stats = [net_io.bytes_sent, net_io.bytes_recv, net_io.packets_sent, net_io.packets_recv]
-        diff = [(stats[i]-stats_old[i])*8/sample_interval for i in range(len(stats))]
+        diff = [(stats[i]-stats_old[i])/sample_interval for i in range(len(stats))]
+        diff[0] = diff[0] * 8 # byte -> bit
+        diff[1] = diff[1] * 8
+        
         mem_usage, cpu_usage, cpu_num = get_mem_size('tsdn')
         net_stat_log_fp.write(f"{time.time()},{diff[0]},{diff[1]},{diff[2]},{diff[3]},{mem_usage},{cpu_usage},{cpu_num}\n")
         net_stat_log_fp.flush()

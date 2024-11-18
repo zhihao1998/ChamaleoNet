@@ -52,6 +52,7 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 
     memcpy(ppkt->raw_pkt, peth, ppkt->pkt_len);
     ppkt->loc_pkt_arr = num_ip_packets;
+    ppkt->recv_time = current_time;
     return pkt_arr[num_ip_packets];
 }
 
@@ -133,7 +134,7 @@ void check_timeout_periodic()
             continue;
         }
 
-        elapsed_time = tv_sub_2(current_time, ppkt->flow_hash_ptr->recv_time);
+        elapsed_time = tv_sub_2(current_time, ppkt->recv_time);
 
         if (elapsed_time >= PKT_TIMEOUT)
         {
@@ -298,6 +299,10 @@ int which_circular_buf(struct ip *pip)
 /* Main entry of packet handler */
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 {   
+    /* TODO: 
+     * filter only incoming requests
+    */
+
     /* Garbage Collection */
     if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD)
     {

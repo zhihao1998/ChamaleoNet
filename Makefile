@@ -79,7 +79,7 @@ clean:
 	@rm -f callgrind.out.*
 
 
-.PHONY: logclean
+.PHONY: cleanlog
 logclean:
 	@sudo rm -rf log/*
 	

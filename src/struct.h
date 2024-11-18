@@ -57,6 +57,9 @@ typedef struct ip_packet
   /* location in the pkt_arr array */
   int loc_pkt_arr;
 
+  /* Time when the packet is captured */
+  timeval recv_time;
+
   /* Pointer to the hash table entry */
   struct flow_hash_t *flow_hash_ptr;
 } ip_packet;
