@@ -216,7 +216,6 @@ void check_timeout_lazy();
 /* Tofino Interaction */
 
 int bfrt_active_host_tbl_add_with_drop(in_addr internal_ip, u_short internal_port, u_short ip_protocol);
-int bfrt_grpc_destroy();
 void bfrt_grpc_init();
 void *install_thead_main(void *args);
 int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol);

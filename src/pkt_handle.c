@@ -341,9 +341,9 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
             //         ntohs(flow_hash_ptr->addr_pair.b_port),
             //         flow_hash_ptr->addr_pair.protocol);
-#ifdef DO_STATS
-            lazy_flow_hash_hit++;
-#endif
+// #ifdef DO_STATS
+//             lazy_flow_hash_hit++;
+// #endif
             flow_hash_ptr->last_pkt_time = current_time;
             return 0;
         }
@@ -386,7 +386,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             }
 
 #ifdef DO_STATS
-            replied_flow_count_tot++;
+            // replied_flow_count_tot++;
             // switch (timeout_level)
             // {
             // case 0:
@@ -436,7 +436,7 @@ void trace_init(void)
     /* Get interface name */
     strcpy(ifName, SEND_INTF);
     /* Open RAW socket to send on */
-    if ((sockfd = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW)) == -1)
+    if ((sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == -1)
     {
         perror("socket");
     }
@@ -459,6 +459,7 @@ void trace_init(void)
     // tx_len += sizeof(struct ether_header);
     // /* Fill packet data */
     // sendbuf[tx_len++] = 0xde;
+    socket_address.sll_family = AF_PACKET;
     /* Index of the network device */
     socket_address.sll_ifindex = if_idx.ifr_ifindex;
     /* Address length*/
@@ -470,27 +471,27 @@ void trace_init(void)
 void trace_cleanup()
 {
     /* free the flow hash table */
-    // printf("Freeing flow hash table\n");
-    // for (int i = 0; i < FLOW_HASH_TABLE_SIZE; i++)
-    // {
-    //     flow_hash_t *flow_hash_ptr = flow_hash_table[i];
-    //     while (flow_hash_ptr != NULL)
-    //     {
-    //         flow_hash_t *temp = flow_hash_ptr;
-    //         flow_hash_ptr = flow_hash_ptr->next;
-    //         free(temp);
-    //     }
-    // }
-    // free(flow_hash_table);
+    printf("Freeing flow hash table\n");
+    for (int i = 0; i < FLOW_HASH_TABLE_SIZE; i++)
+    {
+        flow_hash_t *flow_hash_ptr = flow_hash_table[i];
+        while (flow_hash_ptr != NULL)
+        {
+            flow_hash_t *temp = flow_hash_ptr;
+            flow_hash_ptr = flow_hash_ptr->next;
+            free(temp);
+        }
+    }
+    free(flow_hash_table);
 
-    // printf("Freeing packet buffer\n");
-    // /* free the packet buffer */
-    // for (int i = 0; i < PKT_BUF_SIZE; i++)
-    // {
-    //     if (pkt_arr[i] != NULL)
-    //     {
-    //         free(pkt_arr[i]);
-    //     }
-    // }
-    // free(pkt_arr);
+    printf("Freeing packet buffer\n");
+    /* free the packet buffer */
+    for (int i = 0; i < PKT_BUF_SIZE; i++)
+    {
+        if (pkt_arr[i] != NULL)
+        {
+            free(pkt_arr[i]);
+        }
+    }
+    free(pkt_arr);
 }

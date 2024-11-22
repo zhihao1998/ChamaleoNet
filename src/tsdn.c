@@ -321,7 +321,10 @@ void print_all_stats()
 	if (pcap_stats(pcap, &stats_pcap) >= 0)
 	{
 		printf("\nPcap Statistics\n");
-		printf("Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
+		printf("Received: %d, Processed: %ld, Still in queue: %ld, Dropped: %d, Dropped by interface: %d\n", 
+				stats_pcap.ps_recv, pkt_count, (stats_pcap.ps_recv-pkt_count), stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
+
+		fprintf(fp_log, "Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
 	}
 }
 
@@ -332,7 +335,7 @@ void clean_all()
 	/* close pcap */
 	pcap_close(pcap);
 	/* close bfrt_grpc */
-	bfrt_grpc_destroy();
+	pthread_cancel(entry_install_thread);
 	/* close log */
 #ifdef LOG_TO_FILE
 	fclose(fp_log);
@@ -342,6 +345,20 @@ void clean_all()
 
 void sig_proc(int sig)
 {
+	log_stats("stats,%ld,%ld,%ld,%ld,%ld,"
+			  "%ld,%ld,%ld,%ld,"
+			  "%ld,%ld,%ld,%ld,%ld,"
+			  "%ld,%ld,%ld,%ld,%ld,"
+			  "%ld,%ld,%ld,%ld,"
+			  "%ld,%ld,%ld,%ld,"
+			  "%ld,%ld,%ld",
+			  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
+			  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
+			  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
+			  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
+			  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
+			  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
+			  active_host_tbl_entry_count, local_entry_count, send_pkt_error_count);
 	print_all_stats();
 	clean_all();
 	exit(0);
@@ -390,6 +407,7 @@ void init_log()
 	sprintf(stat_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_stat.csv", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
 
 	fp_log = fopen(log_file_name, "w");
+	fprintf(fp_log, "Start logging\n");
 	fp_stats = fopen(stat_file_name, "w");
 	fprintf(fp_stats, "time,level,file,line,msg,"
 					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
@@ -567,7 +585,6 @@ int main(int argc, char *argv[])
 
 	/* Release the mutex */
 	pthread_cancel(entry_install_thread);
-	bfrt_grpc_destroy();
 	trace_cleanup();
 #ifdef LOG_TO_FILE
 	fclose(fp_log);

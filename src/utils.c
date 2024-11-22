@@ -385,7 +385,13 @@ int SendPkt(char *sendbuf, int tx_len)
 
     // replace the source MAC address and the destination MAC address
     // with the source MAC address and the destination MAC address of the interface
-    // memcpy(eh->ether_shost, if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
+    // memcpy(eh->ether_shost, if_idx.ifr_hwaddr.sa_data, ETH_ALEN);
+    eh->ether_shost[0] = SENDER_SRC_MAC_0;
+    eh->ether_shost[1] = SENDER_SRC_MAC_1;
+    eh->ether_shost[2] = SENDER_SRC_MAC_2;
+    eh->ether_shost[3] = SENDER_SRC_MAC_3;
+    eh->ether_shost[4] = SENDER_SRC_MAC_4;
+    eh->ether_shost[5] = SENDER_SRC_MAC_5;
 
     eh->ether_dhost[0] = COLLECTOR_DEST_MAC_0;
     eh->ether_dhost[1] = COLLECTOR_DEST_MAC_1;

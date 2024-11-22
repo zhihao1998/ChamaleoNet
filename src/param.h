@@ -1,7 +1,7 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-#define PKT_BUF_SIZE 10000
+#define PKT_BUF_SIZE 20000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
@@ -9,13 +9,13 @@ Increase this number on high speed network will help ...*/
  IMPORTANT: it must be a divisor of PKT_BUF_GC_PERIOD,
  PKT_BUF_SIZE and MAX_UDP_PAIRS  */
 
-/* Each time the garbage collection is fired, it scans PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE tcp flows */
-#define PKT_BUF_GC_SPLIT_SIZE 10000
+/* Each time the garbage collection is fired, it scans PKT_BUF_GC_SPLIT_SIZE tcp flows */
+#define PKT_BUF_GC_SPLIT_SIZE 1000
 
 /* Define how often garbage collection scans the whole flow table,  
  * i.e. very PKT_BUF_GC_PERIOD * (PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE) microseconds
 */
-#define PKT_BUF_GC_PERIOD 20000
+#define PKT_BUF_GC_PERIOD 2000
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from internal hosts) */
 #define PKT_TIMEOUT 20000
@@ -43,9 +43,9 @@ Increase this number on high speed network will help ...*/
 #define ENTRY_BUF_SIZE 100000
 
 /* polling time for checking the idle entries in P4 tables */
-#define ENTRY_INSTALL_BATCH_SIZE 4000
+#define ENTRY_INSTALL_BATCH_SIZE 2000
 #define ENTRY_IDLE_TIMEOUT 5000 //ms
-#define ENTRY_IDLE_CLEAN_BATCH_SIZE 4000
+#define ENTRY_IDLE_CLEAN_BATCH_SIZE 2000
 #define ENTRY_GC_PERIOD 1000000 //us
 
 /* Max number of nets to check if ip is internal or external */
@@ -54,14 +54,14 @@ Increase this number on high speed network will help ...*/
 
 /* Interfaces to capture and send packets */
 #define RECV_INTF "enp10s0"
-#define SEND_INTF "brtest"
+#define SEND_INTF "enp9s0"
 
 /* Logging Sampling granularity */
 #define DO_STATS
 #define LOG_TO_FILE
-#define PKT_LOG_SAMPLE_CNT 5000      // pkt_count
-#define TIMEOUT_SAMPLE_CNT 5000     // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 50000  // us
+#define PKT_LOG_SAMPLE_CNT 50000      // pkt_count
+#define TIMEOUT_SAMPLE_CNT 50000     // tot_expired_pkt_count
+#define STATS_LOG_SAMPLE_TIME 1000000  // us
 
 #define SWITCH_ENABLED
 
@@ -71,3 +71,11 @@ Increase this number on high speed network will help ...*/
 #define COLLECTOR_DEST_MAC_3 0x6a
 #define COLLECTOR_DEST_MAC_4 0x19
 #define COLLECTOR_DEST_MAC_5 0x9a
+
+#define SENDER_SRC_MAC_0 0x52
+#define SENDER_SRC_MAC_1 0x54
+#define SENDER_SRC_MAC_2 0x00
+#define SENDER_SRC_MAC_3 0xd3
+#define SENDER_SRC_MAC_4 0xe0
+#define SENDER_SRC_MAC_5 0x0d
+

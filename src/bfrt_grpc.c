@@ -174,23 +174,6 @@ void bfrt_grpc_init()
 	bfrt_clear_tables();
 }
 
-int bfrt_grpc_destroy()
-{
-	/* Clean up */
-	if (pInstance == NULL || pClass == NULL || pModule == NULL)
-	{
-		return -1;
-	}
-	// assert(pInstance != NULL);
-	// assert(pClass != NULL);
-	// assert(pModule != NULL);
-
-	Py_DECREF(pInstance);
-	Py_DECREF(pClass);
-	Py_DECREF(pModule);
-	Py_Finalize();
-	return 0;
-}
 
 /* Get Entry Table Number */
 int bfrt_get_table_usage()
