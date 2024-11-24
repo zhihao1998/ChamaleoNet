@@ -30,7 +30,6 @@ typedef struct tcphdr tcphdr;
 typedef struct udphdr udphdr;
 typedef struct in_addr in_addr;
 
-
 typedef struct
 {
   ipaddr a_address;
@@ -43,6 +42,16 @@ typedef struct
 
 typedef struct ip_packet
 {
+  u_char raw_pkt[SNAP_LEN]; /* start of the IP header */  
+  /* location in the pkt_arr array */
+  int loc_pkt_arr;
+} ip_packet;
+
+typedef struct pkt_desc_t
+{
+  Bool is_replied;
+  ip_packet *ppkt;
+
   /* endpoint identification */
   flow_addrblock addr_pair;
 
@@ -52,17 +61,15 @@ typedef struct ip_packet
 
   /* raw packet (from Ether) information */
   int pkt_len;
-  u_char raw_pkt[SNAP_LEN]; /* start of the IP header */
 
-  /* location in the pkt_arr array */
-  int loc_pkt_arr;
+
 
   /* Time when the packet is captured */
   timeval recv_time;
 
   /* Pointer to the hash table entry */
   struct flow_hash_t *flow_hash_ptr;
-} ip_packet;
+}pkt_desc_t;
 
 /* incoming/outgoing based on Ethernet MAC addresses */
 typedef struct eth_filter
@@ -72,34 +79,36 @@ typedef struct eth_filter
   uint8_t **addr;
 } eth_filter;
 
-enum ip_direction {
- DEFAULT_NET     = 0,
- SRC_IN_DST_IN   = 1,
- SRC_IN_DST_OUT  = 2,
- SRC_OUT_DST_IN  = 3,
- SRC_OUT_DST_OUT = 4
+enum ip_direction
+{
+  DEFAULT_NET = 0,
+  SRC_IN_DST_IN = 1,
+  SRC_IN_DST_OUT = 2,
+  SRC_OUT_DST_IN = 3,
+  SRC_OUT_DST_OUT = 4
 };
 
 /* Circular Buffer Related */
 
 typedef struct flow_hash_t flow_hash_t;
 
-typedef struct circular_buf_t {
-  void ** buf_space;
-	size_t head;
-	size_t tail;
-	size_t max; //of the buffer
-}circular_buf_t;
+typedef struct circular_buf_t
+{
+  void **buf_space;
+  size_t head;
+  size_t tail;
+  size_t max; // of the buffer
+} circular_buf_t;
 
 typedef struct flow_hash_t
 {
   flow_addrblock addr_pair;
-  struct flow_hash_t*prev;
-  struct flow_hash_t*next;
+  struct flow_hash_t *prev;
+  struct flow_hash_t *next;
   Bool lazy_pending;
   timeval recv_time;
   timeval last_pkt_time;
-  ip_packet *ppkt;
+  pkt_desc_t *pkt_desc_ptr;
 } flow_hash_t;
 
 typedef struct table_entry_t
@@ -107,4 +116,4 @@ typedef struct table_entry_t
   in_addr service_ip;
   u_short service_port;
   u_short service_protocol;
-}table_entry_t;
+} table_entry_t;

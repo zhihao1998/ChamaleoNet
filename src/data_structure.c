@@ -32,14 +32,20 @@ MMmalloc(size_t size, const char *f_name)
  * Two pointer are used (top and last).
  * Alloc and release from last, while top is used to not loose the list ...
  */
+struct pkt_list_elem
+{
+  struct pkt_list_elem *next;
+  struct pkt_list_elem *prev;
+  ip_packet *ppkt;
+};
+
 
 static struct pkt_list_elem *top_pkt_flist = NULL;  /* Pointer to the top of      */
                                                     /* the 'pktlist' free list.    */
 static struct pkt_list_elem *last_pkt_flist = NULL; /* Pointer to the last used   */
                                                     /* element list.              */
 
-ip_packet *
-pkt_alloc(void)
+ip_packet * pkt_alloc(void)
 {
   ip_packet *ppkt_temp;
 #ifdef DO_STATS
@@ -126,6 +132,81 @@ void pkt_list_print()
   }
   fprintf(fp_stdout, "\n");
 }
+
+
+/* Garbage collector for Packet Descriptor Array
+ *  Two pointer are used (top and last).
+ *  Alloc and release from last, while top is used to not loose the list ...
+ */
+struct pkt_desc_list_elem
+{
+  struct pkt_desc_list_elem *next;
+  struct pkt_desc_list_elem *prev;
+  pkt_desc_t *pkt_desc_ptr;
+};
+
+static struct pkt_desc_list_elem *top_pkt_desc_flist = NULL;  /* Pointer to the top of      */
+                                                              /* the 'pkt_desc_list' free list.    */
+static struct pkt_desc_list_elem *last_pkt_desc_flist = NULL; /* Pointer to the last used   */
+                                                              /* element list.  */
+
+/* Alloc a new space for an element in pkt_desc_list */
+pkt_desc_t *pkt_desc_alloc()
+{
+  pkt_desc_t *new_pkt_desc_ptr;
+#ifdef DO_STATS
+  pkt_desc_list_count_use++;
+#endif
+
+  if ((last_pkt_desc_flist == NULL) || (last_pkt_desc_flist->pkt_desc_ptr == NULL))
+  { /* The LinkList stack is empty.         */
+    new_pkt_desc_ptr = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
+#ifdef DO_STATS
+    pkt_desc_list_count_tot++;
+#endif
+    return new_pkt_desc_ptr;
+  }
+  else
+  { /* The 'pkt_desc_list' stack is not empty.   */
+    new_pkt_desc_ptr = last_pkt_desc_flist->pkt_desc_ptr;
+    last_pkt_desc_flist->pkt_desc_ptr = NULL;
+    if (last_pkt_desc_flist->next != NULL)
+      last_pkt_desc_flist = last_pkt_desc_flist->next;
+    return new_pkt_desc_ptr;
+  }
+}
+
+void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
+{
+  struct pkt_desc_list_elem *new_pkt_desc_list_elem;
+#ifdef DO_STATS
+  pkt_desc_list_count_use--;
+#endif
+
+  memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
+
+  if ((last_pkt_desc_flist == NULL) || ((last_pkt_desc_flist->pkt_desc_ptr != NULL) && (last_pkt_desc_flist->prev == NULL)))
+  {
+    new_pkt_desc_list_elem = (struct pkt_desc_list_elem *)MMmalloc(sizeof(struct pkt_desc_list_elem), "pkt_desc_release");
+    new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
+    new_pkt_desc_list_elem->prev = NULL;
+    new_pkt_desc_list_elem->next = top_pkt_desc_flist;
+    if (new_pkt_desc_list_elem->next != NULL)
+      new_pkt_desc_list_elem->next->prev = new_pkt_desc_list_elem;
+    top_pkt_desc_flist = new_pkt_desc_list_elem;
+    last_pkt_desc_flist = new_pkt_desc_list_elem;
+  }
+  else
+  {
+    if (last_pkt_desc_flist->pkt_desc_ptr == NULL)
+      new_pkt_desc_list_elem = last_pkt_desc_flist;
+    else
+      new_pkt_desc_list_elem = last_pkt_desc_flist->prev;
+    new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
+    last_pkt_desc_flist = new_pkt_desc_list_elem;
+  }
+}
+
 
 /* Garbage collector for Flow Hash Table */
 static flow_hash_t *top_flow_hash_flist = NULL; /* Pointer to the top of      */
@@ -335,6 +416,13 @@ MallocZ(int nbytes)
  *  Two pointer are used (top and last).
  *  Alloc and release from last, while top is used to not loose the list ...
  */
+struct table_entry_list_elem
+{
+  struct table_entry_list_elem *next;
+  struct table_entry_list_elem *prev;
+  table_entry_t *table_entry_ptr;
+};
+
 
 static struct table_entry_list_elem *top_table_entry_flist = NULL;  /* Pointer to the top of      */
                                                               /* the 'table_entry_list' free list.    */

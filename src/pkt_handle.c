@@ -2,20 +2,33 @@
 
 int num_ip_packets = -1;           /* how many packets we've allocated */
 static ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
+static pkt_desc_t **pkt_desc_arr = NULL;
 int pkt_index = 0;
 int entry_index = 0;
 // static timeval current_pkt_time;
 
-/* Circular Buffer for lazy freeing */
-// static circular_buf_t *lazy_hash_buf;
+/* Circular Buffer for pkt buffer */
+static circular_buf_t *pkt_circ_buf;
 
 char ip_src_addr_print_buffer[INET_ADDRSTRLEN];
 char ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
 
-static ip_packet *
-NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
+void print_pkt_arr()
+{
+    for (int i = 0; i < PKT_BUF_SIZE; i++)
+    {
+        if (pkt_arr[i] != NULL)
+        {
+            printf("pkt_arr[%d] is not NULL at memory %p, ", i, &pkt_arr[i]);
+            printf("loc_pkt_arr = %d, ", pkt_arr[i]->loc_pkt_arr);
+        }
+    }
+}
+
+static pkt_desc_t *NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 {
     ip_packet *ppkt;
+    pkt_desc_t *ppkt_desc;
     int old_new_ip_packets = num_ip_packets;
     int steps = 0;
 
@@ -27,37 +40,43 @@ NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
     {
         steps++;
         /* look for the next one */
-        //         fprintf (fp_log, "%d %d\n", num_tcp_pairs, old_new_tcp_pairs);
         num_ip_packets++;
         num_ip_packets = num_ip_packets % PKT_BUF_SIZE;
     }
     assert(pkt_arr[num_ip_packets] == NULL);
 
-    /* create a new TCP pair record and remember where you put it */
+    /* create a new packet buffer */
     ppkt = pkt_arr[num_ip_packets] = pkt_alloc();
-
-    /* grab the address from this packet */
-    CopyAddr(&ppkt->addr_pair, pip, ptcp);
-
-    ppkt->internal_src = internal_src;
-    ppkt->internal_dst = internal_dst;
-
-    /* Here we store raw packets starting from Ether header */
-    ppkt->pkt_len = ntohs(pip->ip_len) + ETHER_HDR_LEN;
-
-    if (ppkt->pkt_len > SNAP_LEN)
-    {
-        ppkt->pkt_len = SNAP_LEN;
-    }
-
-    memcpy(ppkt->raw_pkt, peth, ppkt->pkt_len);
     ppkt->loc_pkt_arr = num_ip_packets;
-    ppkt->recv_time = current_time;
-    return pkt_arr[num_ip_packets];
+
+    /* create a new packet descriptor */
+    ppkt_desc = pkt_desc_alloc();
+    /* grab the address from this packet */
+    CopyAddr(&ppkt_desc->addr_pair, pip, ptcp);
+    ppkt_desc->ppkt = ppkt;
+    ppkt_desc->is_replied = FALSE;
+    /* Not used for now */
+    ppkt_desc->internal_src = internal_src;
+    ppkt_desc->internal_dst = internal_dst;
+
+    ppkt_desc->pkt_len = ntohs(pip->ip_len) + ETHER_HDR_LEN;
+    if (ppkt_desc->pkt_len > SNAP_LEN)
+    {
+        ppkt_desc->pkt_len = SNAP_LEN;
+    }
+    /* Copy raw bytes */
+    memcpy(ppkt->raw_pkt, peth, ppkt_desc->pkt_len);
+
+    ppkt_desc->recv_time = current_time;
+
+    /* push pkt_desc to circular buf */
+    pkt_desc_t **tmp_pkt_desc_pp = (pkt_desc_t **)circular_buf_try_put(pkt_circ_buf, (void *)ppkt_desc);
+    assert(tmp_pkt_desc_pp != NULL);
+
+    return ppkt_desc;
 }
 
-static flow_hash_t *
-FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
+static flow_hash_t *FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
 {
     /* Start to check */
     flow_addrblock pkt_in;
@@ -109,7 +128,6 @@ void check_timeout_lazy()
 #ifdef DO_STATS
                     lazy_flow_hash_count--;
                     lazy_flow_hash_hit++;
-                    flow_hash_count--;
 #endif
                 }
             }
@@ -120,92 +138,101 @@ void check_timeout_lazy()
 
 void check_timeout_periodic()
 {
-    int ix, idx;
-    int elapsed_time = 0;
-    int ip_p;
+    int ix, ret;
+    pkt_desc_t *tmp_ppkt_desc;
+    int elapsed_time, ip_p;
 
-    ip_packet *ppkt;
-    for (ix = pkt_index; ix < pkt_index + PKT_BUF_GC_SPLIT_SIZE; ix++)
+    for (ix = 0; ix < CIRC_GC_SPLIT_SIZE; ix++)
     {
-        idx = ix % PKT_BUF_SIZE;
-        ppkt = pkt_arr[idx];
-        if (ppkt == NULL)
+        ret = circular_buf_peek_head(pkt_circ_buf, (void **)&tmp_ppkt_desc);
+        if (ret == -1)
         {
-            continue;
+            // buffer is empty
+            break;
         }
+        // printf("Check pkt (%s:%d -> %s:%d, protocol: %d, replied %d)\n",
+        //        inet_ntop(AF_INET, &tmp_ppkt->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+        //        ntohs(tmp_ppkt->addr_pair.a_port),
+        //        inet_ntop(AF_INET, &tmp_ppkt->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+        //        ntohs(tmp_ppkt->addr_pair.b_port),
+        //        tmp_ppkt->addr_pair.protocol,
+        //        tmp_ppkt->is_replied);
 
-        elapsed_time = tv_sub_2(current_time, ppkt->recv_time);
-
-        if (elapsed_time >= PKT_TIMEOUT)
+        // Check if the packet is replied
+        if (tmp_ppkt_desc->is_replied)
         {
-            if (SendPkt(ppkt->raw_pkt, ppkt->pkt_len) == -1)
+            ret = circular_buf_get(pkt_circ_buf, (void **)&tmp_ppkt_desc);
+            assert(ret == 0);
+        }
+        else
+        {
+            elapsed_time = tv_sub_2(current_time, tmp_ppkt_desc->recv_time);
+            if (elapsed_time >= PKT_TIMEOUT)
             {
-                send_pkt_error_count++;
-            }
-            ip_p = ppkt->addr_pair.protocol;
-            // fprintf(fp_log, "timeout,%s,%d,%s,%d,%d\n",
-            //         inet_ntop(AF_INET, &ppkt->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
-            //         ntohs(ppkt->addr_pair.a_port),
-            //         inet_ntop(AF_INET, &ppkt->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
-            //         ntohs(ppkt->addr_pair.b_port),
-            //         ip_p);
+                ret = circular_buf_get(pkt_circ_buf, (void **)&tmp_ppkt_desc);
+                assert(ret == 0);
 
-            FreeFlowHash(ppkt->flow_hash_ptr);
-            FreePkt(ppkt);
+                if (SendPkt(tmp_ppkt_desc->ppkt->raw_pkt, tmp_ppkt_desc->pkt_len) == -1)
+                {
+                    send_pkt_error_count++;
+                }
+
+                ip_p = tmp_ppkt_desc->addr_pair.protocol;
+                FreeFlowHash(tmp_ppkt_desc->flow_hash_ptr);
+                FreePkt(tmp_ppkt_desc->ppkt);
 #ifdef DO_STATS
-            expired_pkt_count_tot++;
-            pkt_buf_count--;
-            flow_hash_count--;
-            switch (ip_p)
-            {
-            case IPPROTO_TCP:
-                expired_pkt_count_tcp++;
-                break;
-            case IPPROTO_UDP:
-                expired_pkt_count_udp++;
-                break;
-            case IPPROTO_ICMP:
-                expired_pkt_count_icmp++;
-                break;
+                expired_pkt_count_tot++;
+                switch (ip_p)
+                {
+                case IPPROTO_TCP:
+                    expired_pkt_count_tcp++;
+                    break;
+                case IPPROTO_UDP:
+                    expired_pkt_count_udp++;
+                    break;
+                case IPPROTO_ICMP:
+                    expired_pkt_count_icmp++;
+                    break;
 
-            default:
+                default:
+                    break;
+                }
+#ifdef LOG_TO_FILE
+                if (expired_pkt_count_tot % PKT_LOG_SAMPLE_CNT == 0)
+                {
+                    log_stats("timeout,%d", elapsed_time);
+                }
+#endif
+#endif
+            }
+            else
+            {
                 break;
             }
-#ifdef LOG_TO_FILE
-            if (expired_pkt_count_tot % PKT_LOG_SAMPLE_CNT == 0)
-            {
-                log_stats("timeout,%d", elapsed_time);
-            }
-#endif
-#endif
-            pkt_arr[idx] = NULL;
         }
     }
-
-    /* Increasing starting index for the next function call */
-    pkt_index = (pkt_index + PKT_BUF_GC_SPLIT_SIZE) % PKT_BUF_SIZE;
 }
 
 static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
 {
-    static ip_packet *temp_ppkt;
+    static pkt_desc_t *ppkt_desc;
     flow_hash_t *temp_flow_hash_ptr;
     flow_hash_t *flow_hash_head_ptr;
     hash hval;
 
     /* Buffer packet */
-    temp_ppkt = NewPkt(peth, pip, ptcp, plast);
-    assert(temp_ppkt != NULL);
+    ppkt_desc = NewPkt(peth, pip, ptcp, plast);
+    assert(ppkt_desc != NULL);
 
     /* Create entry for hash table */
-    hval = temp_ppkt->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
+    hval = ppkt_desc->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
     flow_hash_head_ptr = flow_hash_table[hval];
 
     temp_flow_hash_ptr = flow_hash_alloc();
-    temp_flow_hash_ptr->addr_pair = temp_ppkt->addr_pair;
+    temp_flow_hash_ptr->addr_pair = ppkt_desc->addr_pair;
     temp_flow_hash_ptr->lazy_pending = FALSE;
     temp_flow_hash_ptr->recv_time = current_time;
-    temp_flow_hash_ptr->ppkt = temp_ppkt;
+    temp_flow_hash_ptr->pkt_desc_ptr = ppkt_desc;
 
     if (flow_hash_head_ptr == NULL)
     {
@@ -222,7 +249,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
         temp_flow_hash_ptr->next = flow_hash_head_ptr;
         flow_hash_table[hval] = temp_flow_hash_ptr;
     }
-    temp_ppkt->flow_hash_ptr = temp_flow_hash_ptr;
+    ppkt_desc->flow_hash_ptr = temp_flow_hash_ptr;
 
     return temp_flow_hash_ptr;
 }
@@ -231,6 +258,14 @@ void FreePkt(ip_packet *ppkt_temp)
 {
     pkt_arr[ppkt_temp->loc_pkt_arr] = NULL;
     pkt_release(ppkt_temp);
+#ifdef DO_STATS
+    pkt_buf_count--;
+#endif
+}
+
+void FreePktDesc(pkt_desc_t *ppkt_desc)
+{
+    pkt_desc_release(ppkt_desc);
 }
 
 void FreeFlowHash(flow_hash_t *flow_hash_ptr)
@@ -259,6 +294,9 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
         }
         flow_hash_release(flow_hash_ptr);
     }
+#ifdef DO_STATS
+    flow_hash_count--;
+#endif
 }
 
 int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
@@ -268,40 +306,16 @@ int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
     flow_hash_ptr->lazy_pending = TRUE;
     /* The time when we receive response packet */
     flow_hash_ptr->last_pkt_time = current_time;
-    FreePkt(flow_hash_ptr->ppkt);
+
 #ifdef DO_STATS
     lazy_flow_hash_count++;
-    pkt_buf_count--;
 #endif
     return 0;
 }
 
-int which_circular_buf(struct ip *pip)
-{
-    switch (pip->ip_p)
-    {
-    case IPPROTO_TCP:
-    {
-        return 0;
-    }
-    case IPPROTO_UDP:
-    {
-        return 1;
-    }
-    case IPPROTO_ICMP:
-    {
-        return 2;
-    }
-    }
-    return -1;
-}
-
 /* Main entry of packet handler */
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plast)
-{   
-    /* TODO: 
-     * filter only incoming requests
-    */
+{
 
     /* Garbage Collection */
     if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD)
@@ -322,10 +336,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     // gettimeofday(&current_pkt_time, NULL);
     flow_hash_t *flow_hash_ptr;
     int dir = 0;
-    // int timeout_level = which_circular_buf(pip);
-
-    // use two string buffer for print the IP address transformed from inet_ntop
-    // char ip_src_addr_print_buffer[INET_ADDRSTRLEN], ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
 
     /* do not rely on the header, instead check if it's already in the hash table */
     flow_hash_ptr = FindFlowHash(pip, ptcp, plast, &dir);
@@ -335,19 +345,12 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     {
         if (flow_hash_ptr->lazy_pending == TRUE)
         {
-            // fprintf(fp_log, "Lazy Free Flow Hash Hit! (%s:%d -> %s:%d, protocol: %d)\n",
-            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
-            //         ntohs(flow_hash_ptr->addr_pair.a_port),
-            //         inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
-            //         ntohs(flow_hash_ptr->addr_pair.b_port),
-            //         flow_hash_ptr->addr_pair.protocol);
-// #ifdef DO_STATS
-//             lazy_flow_hash_hit++;
-// #endif
+#ifdef DO_STATS
+            lazy_flow_hash_hit++;
+#endif
             flow_hash_ptr->last_pkt_time = current_time;
             return 0;
         }
-
         /* Same direction of this packet, probably another request */
         if (dir == C2S)
         {
@@ -357,6 +360,9 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
         else if (dir == S2C)
         {
             LazyFreeFlowHash(flow_hash_ptr);
+            FreePkt(flow_hash_ptr->pkt_desc_ptr->ppkt);
+            flow_hash_ptr->pkt_desc_ptr->is_replied = TRUE;
+            flow_hash_ptr->pkt_desc_ptr->ppkt = NULL;
 #ifdef SWITCH_ENABLED
             /* Install Flow Entry */
             if (internal_ip(flow_hash_ptr->addr_pair.a_address.un.ip4))
@@ -429,6 +435,9 @@ void trace_init(void)
 
     /* create an array to hold any pairs that we might create */
     pkt_arr = (ip_packet **)MallocZ(PKT_BUF_SIZE * sizeof(ip_packet *));
+    pkt_desc_arr = (pkt_desc_t **)MallocZ(PKT_BUF_SIZE * sizeof(pkt_desc_t *));
+
+    pkt_circ_buf = circular_buf_init((void **)pkt_desc_arr, PKT_BUF_SIZE);
 
     /* initialize the hash table */
     flow_hash_table = (flow_hash_t **)MallocZ(FLOW_HASH_TABLE_SIZE * sizeof(flow_hash_t *));
@@ -471,7 +480,6 @@ void trace_init(void)
 void trace_cleanup()
 {
     /* free the flow hash table */
-    printf("Freeing flow hash table\n");
     for (int i = 0; i < FLOW_HASH_TABLE_SIZE; i++)
     {
         flow_hash_t *flow_hash_ptr = flow_hash_table[i];
@@ -484,7 +492,16 @@ void trace_cleanup()
     }
     free(flow_hash_table);
 
-    printf("Freeing packet buffer\n");
+    /* free the pkt descriptor buffer */
+    for (int i = 0; i < PKT_BUF_SIZE; i++)
+    {
+        if (pkt_desc_arr[i] != NULL)
+        {
+            free(pkt_desc_arr[i]);
+        }
+    }
+    free(pkt_desc_arr);
+
     /* free the packet buffer */
     for (int i = 0; i < PKT_BUF_SIZE; i++)
     {

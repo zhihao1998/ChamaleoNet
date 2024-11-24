@@ -130,29 +130,19 @@ Bool tv_same(struct timeval lhs, struct timeval rhs);
 
 
 /* memory management and garbage collection routines (freelist) */
-
-struct pkt_list_elem
-{
-  struct pkt_list_elem *next;
-  struct pkt_list_elem *prev;
-  ip_packet *ppkt;
-};
-
 ip_packet *pkt_alloc(void);
 void pkt_release(ip_packet *relesased_ip_packet);
+
+/* Packet Descriptor */
+typedef struct pkt_desc_t pkt_desc_t;
+pkt_desc_t *pkt_desc_alloc();
+void pkt_desc_release(pkt_desc_t *released_pkt_desc);
 
 /* Flow hash table */
 flow_hash_t *flow_hash_alloc();
 void flow_hash_release(flow_hash_t *flow_hash_ptr);
 
 /* Table Entry Buffer */
-struct table_entry_list_elem
-{
-  struct table_entry_list_elem *next;
-  struct table_entry_list_elem *prev;
-  table_entry_t *table_entry_ptr;
-};
-
 table_entry_t *table_entry_alloc();
 void table_entry_release(table_entry_t *rel_table_entry_ptr);
 
@@ -294,10 +284,10 @@ u_long lazy_flow_hash_hit;
 // Freelist Counters
 u_long pkt_list_count_tot;
 u_long pkt_list_count_use;
+u_long pkt_desc_list_count_tot;
+u_long pkt_desc_list_count_use;
 u_long flow_hash_list_count_tot;
 u_long flow_hash_list_count_use;
-u_long service_hash_list_count_tot;
-u_long service_hash_list_count_use;
 
 u_long flow_hash_search_depth;
 
