@@ -365,6 +365,14 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             flow_hash_ptr->pkt_desc_ptr->ppkt = NULL;
 #ifdef SWITCH_ENABLED
             /* Install Flow Entry */
+            // printf("installing flow entry, src: %s:%d -> ",
+            //        inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+            //        ntohs(flow_hash_ptr->addr_pair.a_port));
+            // printf("dst: %s:%d, protocol: %d\n",
+            //          inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+            //          ntohs(flow_hash_ptr->addr_pair.b_port),
+            //          flow_hash_ptr->addr_pair.protocol);
+            
             if (internal_ip(flow_hash_ptr->addr_pair.a_address.un.ip4))
             {
                 if (try_install_p4_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
@@ -392,7 +400,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             }
 
 #ifdef DO_STATS
-            // replied_flow_count_tot++;
+            replied_flow_count_tot++;
             // switch (timeout_level)
             // {
             // case 0:
@@ -475,6 +483,15 @@ void trace_init(void)
     socket_address.sll_halen = ETH_ALEN;
     /* Destination MAC */
     // socket_address.sll_addr[0] = MY_DEST_MAC0;
+}
+
+void trace_check(void)
+{
+    assert(pkt_arr != NULL);
+    assert(pkt_desc_arr != NULL);
+    assert(flow_hash_table != NULL);
+    assert(pkt_circ_buf != NULL);
+    assert(circular_buf_size(pkt_circ_buf) == 0);
 }
 
 void trace_cleanup()

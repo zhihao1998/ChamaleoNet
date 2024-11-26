@@ -100,6 +100,7 @@ struct udphdr *getudp(struct ip *pip, void **pplast);
 struct icmphdr *geticmp(struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
 void trace_init(void);
+void trace_check(void);
 void trace_cleanup(void);
 
 
@@ -174,7 +175,9 @@ int circular_buf_peek_head(circular_buf_t *me, void **buf_slot_ptr_ptr);
 
 /* Internal Network / Host */
 int LoadInternalNets(char *file);
+int LoadResponderNets(char *file);
 Bool internal_ip(struct in_addr adx);
+Bool responder_ip(struct in_addr adx);
 
 /* Packet Sending */
 int SendPkt(char *sendbuf, int tx_len);

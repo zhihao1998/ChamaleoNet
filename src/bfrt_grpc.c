@@ -9,11 +9,18 @@ char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 
 u_long entry_circ_buf_size()
 {
+	if (p4_entry_circ_buf == NULL)
+	{
+		return 0;
+	}
+	else
+	{
 #ifdef SWITCH_ENABLED
-	return circular_buf_size(p4_entry_circ_buf);
+		return circular_buf_size(p4_entry_circ_buf);
 #else
-	return 0;
+		return 0;
 #endif
+	}
 }
 
 int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol)
@@ -173,7 +180,6 @@ void bfrt_grpc_init()
 
 	bfrt_clear_tables();
 }
-
 
 /* Get Entry Table Number */
 int bfrt_get_table_usage()

@@ -65,7 +65,9 @@ sudo ifconfig brtest up
 ```
 
 ```bash
-sudo bridge fdb add 52:54:00:50:f6:6f dev vnet2 master temp
+sudo bridge fdb add 52:54:00:80:26:bc dev vnet114 master temp
+
+
 sudo bridge fdb add 90:2d:77:3f:b5:a2 dev ens5f1 master temp
 
 sudo bridge fdb del 52:54:00:50:f6:6f dev vnet2 master temp

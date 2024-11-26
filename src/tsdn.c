@@ -96,6 +96,10 @@ struct in_addr *internal_net_list;
 int *internal_net_mask;
 int tot_internal_nets;
 
+struct in_addr *responder_net_list;
+int *responder_net_mask;
+int tot_responder_nets;
+
 /* Multi Thread Declaration */
 pthread_t entry_install_thread;
 
@@ -246,6 +250,27 @@ static int ProcessPacket(struct timeval *pckt_time,
 #ifdef DO_STATS
 	pkt_count++;
 #endif
+
+	/* Check if the packet is from/to a responder network, directly send out */
+	if (responder_ip(pip->ip_dst))
+	{
+		// printf("packets to responder %s ->", inet_ntoa(pip->ip_src));
+		// printf(" %s, proto %d \n", inet_ntoa(pip->ip_dst), pip->ip_p);
+
+		/* directly send out */
+		if (SendPkt((char *)peth, tlen) == -1)
+		{
+			send_pkt_error_count++;
+		}
+		return 0;
+	}
+	else if (responder_ip(pip->ip_src))
+	{
+		// printf("packets from responder %s ->", inet_ntoa(pip->ip_src));
+		// printf(" %s, proto %d dropping\n", inet_ntoa(pip->ip_dst), pip->ip_p);
+		return 0;
+	}
+
 	/* Check the IP protocol ICMP/TCP/UDP */
 	switch (pip->ip_p)
 	{
@@ -435,6 +460,7 @@ int main(int argc, char *argv[])
 	init_log();
 
 	LoadInternalNets("conf/net.internal");
+	LoadResponderNets("conf/net.responder");
 	// LoadGlobals("conf/globals.conf");
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
@@ -530,6 +556,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Error creating entry_install_thread thread\n");
 		return 1;
 	}
+
+	/* make sure every data structure is in place */
+	trace_check();
 
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);

@@ -11,8 +11,8 @@ typedef u_char Bool;
 #define FALSE 0
 #define BOOL2STR(b) (b) ? "TRUE" : "FALSE"
 
-#define ETHERNET_MTU 1500
-#define SNAP_LEN 128
+#define ETHERNET_MTU 1518
+#define SNAP_LEN 1518
 
 /* type for an IP address */
 /* IP address can be either IPv4 or IPv6 */
@@ -61,8 +61,6 @@ typedef struct pkt_desc_t
 
   /* raw packet (from Ether) information */
   int pkt_len;
-
-
 
   /* Time when the packet is captured */
   timeval recv_time;

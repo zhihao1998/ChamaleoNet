@@ -1,3 +1,5 @@
 # Example mask to consider as internal all the subnets in the 
 # 198.168. private addresses range
 130.192.0.0/16
+90.147.183.0/24
+90.147.204.0/24

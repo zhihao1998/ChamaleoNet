@@ -1,7 +1,7 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-#define PKT_BUF_SIZE 50000
+#define PKT_BUF_SIZE 10000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
@@ -55,7 +55,7 @@ Increase this number on high speed network will help ...*/
 
 /* Interfaces to capture and send packets */
 #define RECV_INTF "enp10s0"
-#define SEND_INTF "enp9s0"
+
 
 /* Logging Sampling granularity */
 #define DO_STATS
@@ -66,6 +66,14 @@ Increase this number on high speed network will help ...*/
 
 #define SWITCH_ENABLED
 
+/* Send to the SR-IOV VF interface */
+#define SEND_INTF "enp9s0"
+// #define COLLECTOR_DEST_MAC_0 0x52
+// #define COLLECTOR_DEST_MAC_1 0x54
+// #define COLLECTOR_DEST_MAC_2 0x00
+// #define COLLECTOR_DEST_MAC_3 0x80
+// #define COLLECTOR_DEST_MAC_4 0x26
+// #define COLLECTOR_DEST_MAC_5 0xbc
 #define COLLECTOR_DEST_MAC_0 0x52
 #define COLLECTOR_DEST_MAC_1 0x54
 #define COLLECTOR_DEST_MAC_2 0x00
@@ -79,4 +87,13 @@ Increase this number on high speed network will help ...*/
 #define SENDER_SRC_MAC_3 0xd3
 #define SENDER_SRC_MAC_4 0xe0
 #define SENDER_SRC_MAC_5 0x0d
+
+/* Send to the bridge interface */
+// #define SEND_INTF "enp8s0"
+// #define COLLECTOR_DEST_MAC_0 0x52
+// #define COLLECTOR_DEST_MAC_1 0x54
+// #define COLLECTOR_DEST_MAC_2 0x00
+// #define COLLECTOR_DEST_MAC_3 0x80
+// #define COLLECTOR_DEST_MAC_4 0x26
+// #define COLLECTOR_DEST_MAC_5 0xbc
 

@@ -351,7 +351,7 @@ class Bfrt_GRPC_Client:
                 count += 1
             except RuntimeError as e:
                 # traceback.print_exc()
-                print(e)
+                # print(e)
                 break
             except KeyError as e:
                 # log_file.write(f"{start_time}, Error: {e}\n")

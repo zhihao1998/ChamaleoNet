@@ -5,6 +5,10 @@ extern struct in_addr *internal_net_list;
 extern int *internal_net_mask;
 extern int tot_internal_nets;
 
+extern struct in_addr *responder_net_list;
+extern int *responder_net_mask;
+extern int tot_responder_nets;
+
 /*
  * Time Calculation
  */
@@ -111,6 +115,23 @@ Bool internal_ip(struct in_addr adx)
         }
     }
     // fprintf(fp_stdout, "External: %s\n", inet_ntoa(adx));
+    return 0;
+}
+
+/*
+ * Check if the IP adx is included in the responder nets
+ */
+Bool responder_ip(struct in_addr adx)
+{
+    int i;
+
+    for (i = 0; i < tot_responder_nets; i++)
+    {
+        if ((adx.s_addr & responder_net_mask[i]) == responder_net_list[i].s_addr)
+        {
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -242,15 +263,15 @@ int ParseNetFile(FILE *fp, char *qualifier, int max_entries,
             CLASS_net_list[j].s_addr &= CLASS_net_mask[j];
             is_ipv4 = 1;
         }
-        
+
         if (is_ipv4 == 1)
         {
             mask2.s_addr = CLASS_net_mask[j];
             printf("Adding: %s as %s ",
-                    inet_ntoa(CLASS_net_list[j]), qualifier);
+                   inet_ntoa(CLASS_net_list[j]), qualifier);
             printf("with mask %s (%u)\n",
-                    inet_ntoa(mask2),
-                    CLASS_net_mask[j]);
+                   inet_ntoa(mask2),
+                   CLASS_net_mask[j]);
         }
 
         if (is_ipv4 == 1)
@@ -285,6 +306,29 @@ int LoadInternalNets(char *file)
     return retval;
 }
 
+/* Exclude the ips of responders */
+int LoadResponderNets(char *file)
+{
+    FILE *fp;
+    int retval;
+
+    fp = fopen(file, "r");
+    if (!fp)
+    {
+        fprintf(fp_stderr, "Unable to open file '%s'\n", file);
+        return 0;
+    }
+
+    retval = ParseNetFile(fp, "responder",
+                          MAX_INTERNAL_HOSTS,
+                          responder_net_list,
+                          responder_net_mask,
+                          &tot_responder_nets);
+    fclose(fp);
+
+    return retval;
+}
+
 /*
  * Initialization
  */
@@ -300,6 +344,9 @@ void InitGlobalArrays(void)
 
     internal_net_list = (struct in_addr *)MallocZ(MAX_INTERNAL_HOSTS * sizeof(struct in_addr));
     internal_net_mask = (int *)MallocZ(MAX_INTERNAL_HOSTS * sizeof(int));
+
+    responder_net_list = (struct in_addr *)MallocZ(MAX_INTERNAL_HOSTS * sizeof(struct in_addr));
+    responder_net_mask = (int *)MallocZ(MAX_INTERNAL_HOSTS * sizeof(int));
 }
 
 /*
@@ -399,7 +446,7 @@ int SendPkt(char *sendbuf, int tx_len)
     eh->ether_dhost[3] = COLLECTOR_DEST_MAC_3;
     eh->ether_dhost[4] = COLLECTOR_DEST_MAC_4;
     eh->ether_dhost[5] = COLLECTOR_DEST_MAC_5;
- 
+
     if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr *)&socket_address, sizeof(struct sockaddr_ll)) != -1)
     {
         return 0;
