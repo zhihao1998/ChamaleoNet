@@ -19,7 +19,7 @@ Increase this number on high speed network will help ...*/
 #define PKT_BUF_GC_PERIOD 200
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from internal hosts) */
-#define PKT_TIMEOUT 20000
+#define PKT_TIMEOUT 70000
 
 /* max depth of the linear search in the previous vector... */
 #define LIST_SEARCH_DEPT 5

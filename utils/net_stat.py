@@ -5,7 +5,7 @@ import copy
 
 cwd = os.path.dirname(os.path.abspath(__file__))
 intf_name = 'enp10s0'
-sample_interval = 2
+sample_interval = 10
 
 def unit_conversion(bit):
     bit = int(bit)
