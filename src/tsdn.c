@@ -433,16 +433,16 @@ void init_log()
 
 	fp_log = fopen(log_file_name, "w");
 	fprintf(fp_log, "Start logging\n");
-	fp_stats = fopen(stat_file_name, "a");
-	// fprintf(fp_stats, "time,level,file,line,msg,"
-	// 				  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
-	// 				  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
-	// 				  "pkt_list_count_tot,pkt_list_count_use,"
-	// 				  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
-	// 				  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
-	// 				  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
-	// 				  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-	// 				  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
+	fp_stats = fopen(stat_file_name, "w");
+	fprintf(fp_stats, "time,level,file,line,msg,"
+					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
+					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
+					  "pkt_list_count_tot,pkt_list_count_use,"
+					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
+					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
+					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
+					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
+					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
 	log_add_fp(fp_stats, LOG_STATS);
 #endif
 	log_set_quiet(TRUE);

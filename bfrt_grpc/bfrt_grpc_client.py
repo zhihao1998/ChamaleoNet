@@ -99,7 +99,7 @@ class Bfrt_GRPC_Client:
         self.clean_batch_size = clean_batch_size
         # self.small_batch_size = 500
         self.enable_log = enable_log
-        self.set_log("/home/zhihaow/codes/honeypot_c_controller/log/bfrt_grpc_client.log")
+        self.set_log(f"/home/zhihaow/codes/honeypot_c_controller/log/bfrt_grpc_client_{clean_batch_size}.log")
 
     def set_log(self, log_file):
         self.enable_log = True
