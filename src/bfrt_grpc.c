@@ -25,14 +25,17 @@ u_long entry_circ_buf_size()
 
 int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol)
 {
-
+	if (p4_entry_circ_buf == NULL)
+	{
+		return -1;
+	}
 	table_entry_t *temp_table_entry_ptr, **temp_table_entry_pp;
 	temp_table_entry_ptr = table_entry_alloc();
 	temp_table_entry_ptr->service_ip = service_ip;
 	temp_table_entry_ptr->service_port = service_port;
 	temp_table_entry_ptr->service_protocol = service_protocol;
-	assert(temp_table_entry_pp != NULL);
 	temp_table_entry_pp = (table_entry_t **)circular_buf_try_put(p4_entry_circ_buf, (void *)temp_table_entry_ptr);
+	assert(temp_table_entry_pp != NULL);
 	pthread_cond_signal(&entry_install_cond);
 	return 0;
 }
@@ -109,14 +112,26 @@ void *install_thead_main(void *args)
 #endif
 		}
 
-		if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD)
-		{
-			clean_all_idle_entries();
-			gettimeofday(&last_idle_cleaned_time, NULL);
-		}
-
 		active_host_tbl_entry_count = bfrt_get_table_usage();
 		local_entry_count = bfrt_get_local_entry_number();
+
+		/* Clean faster when it nearly full!! */
+		if (active_host_tbl_entry_count > 750000)
+		{
+			if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD / 5)
+			{
+				clean_all_idle_entries();
+				gettimeofday(&last_idle_cleaned_time, NULL);
+			}
+		}
+		else
+		{
+			if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD)
+			{
+				clean_all_idle_entries();
+				gettimeofday(&last_idle_cleaned_time, NULL);
+			}
+		}
 	}
 
 	Py_DECREF(p_add_batch_Func);
@@ -157,12 +172,21 @@ void bfrt_grpc_init()
 {
 	PyObject *pArgs;
 	Py_Initialize();
-	PyEval_InitThreads();
+	// PyEval_InitThreads();
+
+	PyRun_SimpleString("import os");
+	PyRun_SimpleString("os.environ['PYTHONPATH'] = '/home/zhihaow/codes/honeypot_c_controller/bfrt_grpc'");
 
 	PyRun_SimpleString("import sys");
-	PyRun_SimpleString("sys.path.append('./bfrt_grpc')");
+	PyRun_SimpleString("sys.path.append('/home/zhihaow/codes/honeypot_c_controller/bfrt_grpc')");
 
 	pModule = PyImport_ImportModule("bfrt_grpc_client");
+	if (pModule == NULL)
+	{
+		PyErr_Print();
+		fprintf(stderr, "Failed to load \"bfrt_grpc_client\"\n");
+		exit(1);
+	}
 	assert(pModule != NULL);
 	/* Call Py_INCREF() for objects that you want to keep around for a while.
 	 * A pointer to an object that has been INCREFed is said to be protected. */
@@ -179,6 +203,14 @@ void bfrt_grpc_init()
 	Py_INCREF(pInstance);
 
 	bfrt_clear_tables();
+}
+
+void bfrf_grpc_destroy()
+{
+	Py_DECREF(pInstance);
+	Py_DECREF(pClass);
+	Py_DECREF(pModule);
+	Py_Finalize();
 }
 
 /* Get Entry Table Number */

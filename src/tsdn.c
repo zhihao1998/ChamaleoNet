@@ -252,24 +252,24 @@ static int ProcessPacket(struct timeval *pckt_time,
 #endif
 
 	/* Check if the packet is from/to a responder network, directly send out */
-	if (responder_ip(pip->ip_dst))
-	{
-		// printf("packets to responder %s ->", inet_ntoa(pip->ip_src));
-		// printf(" %s, proto %d \n", inet_ntoa(pip->ip_dst), pip->ip_p);
+	// if (responder_ip(pip->ip_dst) || responder_ip(pip->ip_src))
+	// {
+	// 	// printf("packets to responder %s ->", inet_ntoa(pip->ip_src));
+	// 	// printf(" %s, proto %d \n", inet_ntoa(pip->ip_dst), pip->ip_p);
 
-		/* directly send out */
-		if (SendPkt((char *)peth, tlen) == -1)
-		{
-			send_pkt_error_count++;
-		}
-		return 0;
-	}
-	else if (responder_ip(pip->ip_src))
-	{
-		// printf("packets from responder %s ->", inet_ntoa(pip->ip_src));
-		// printf(" %s, proto %d dropping\n", inet_ntoa(pip->ip_dst), pip->ip_p);
-		return 0;
-	}
+	// 	/* directly send out */
+	// 	if (SendPkt((char *)peth, tlen) == -1)
+	// 	{
+	// 		send_pkt_error_count++;
+	// 	}
+	// 	return 0;
+	// }
+	// else if ()
+	// {
+	// 	// printf("packets from responder %s ->", inet_ntoa(pip->ip_src));
+	// 	// printf(" %s, proto %d dropping\n", inet_ntoa(pip->ip_dst), pip->ip_p);
+	// 	return 0;
+	// }
 
 	/* Check the IP protocol ICMP/TCP/UDP */
 	switch (pip->ip_p)
@@ -397,7 +397,7 @@ void init_log()
 	tm = localtime(&t);
 
 	char log_dir[100];
-	sprintf(log_dir, "log");
+	sprintf(log_dir, "/home/zhihaow/codes/honeypot_c_controller/log");
 	// sprintf(log_dir, "log/log_%d-%d", tm->tm_mon + 1, tm->tm_mday);
 	// mkdir(log_dir, 0777);
 
@@ -433,16 +433,16 @@ void init_log()
 
 	fp_log = fopen(log_file_name, "w");
 	fprintf(fp_log, "Start logging\n");
-	fp_stats = fopen(stat_file_name, "w");
-	fprintf(fp_stats, "time,level,file,line,msg,"
-					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
-					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
-					  "pkt_list_count_tot,pkt_list_count_use,"
-					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
-					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
-					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
-					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
+	fp_stats = fopen(stat_file_name, "a");
+	// fprintf(fp_stats, "time,level,file,line,msg,"
+	// 				  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
+	// 				  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
+	// 				  "pkt_list_count_tot,pkt_list_count_use,"
+	// 				  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
+	// 				  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
+	// 				  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
+	// 				  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
+	// 				  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
 	log_add_fp(fp_stats, LOG_STATS);
 #endif
 	log_set_quiet(TRUE);
@@ -459,8 +459,8 @@ int main(int argc, char *argv[])
 	trace_init();
 	init_log();
 
-	LoadInternalNets("conf/net.internal");
-	LoadResponderNets("conf/net.responder");
+	LoadInternalNets("/home/zhihaow/codes/honeypot_c_controller/conf/net.internal");
+	// LoadResponderNets("/home/zhihaow/codes/honeypot_c_controller/conf/net.responder");
 	// LoadGlobals("conf/globals.conf");
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
@@ -599,14 +599,12 @@ int main(int argc, char *argv[])
 		{
 #ifdef LOG_TO_FILE
 			gettimeofday(&pkt_process_end_time, NULL);
-
-			log_stats("batch_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, pkt_process_end_time_tmp));
 			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, current_time));
-			gettimeofday(&pkt_process_end_time_tmp, NULL);
 #endif
-			if (pkt_count % 500000 == 0)
+			if (pkt_count % 5000000 == 0)
 			{
 				print_all_stats();
+				
 			}
 		}
 #endif

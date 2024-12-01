@@ -12,7 +12,7 @@ typedef u_char Bool;
 #define BOOL2STR(b) (b) ? "TRUE" : "FALSE"
 
 #define ETHERNET_MTU 1518
-#define SNAP_LEN 1518
+#define SNAP_LEN 64
 
 /* type for an IP address */
 /* IP address can be either IPv4 or IPv6 */

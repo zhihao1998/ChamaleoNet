@@ -127,7 +127,6 @@ void check_timeout_lazy()
                     FreeFlowHash(flow_hash_ptr);
 #ifdef DO_STATS
                     lazy_flow_hash_count--;
-                    lazy_flow_hash_hit++;
 #endif
                 }
             }
@@ -142,7 +141,7 @@ void check_timeout_periodic()
     pkt_desc_t *tmp_ppkt_desc;
     int elapsed_time, ip_p;
 
-    for (ix = 0; ix < CIRC_GC_SPLIT_SIZE; ix++)
+    for (ix = 0; ix < PKT_BUF_GC_SPLIT_SIZE; ix++)
     {
         ret = circular_buf_peek_head(pkt_circ_buf, (void **)&tmp_ppkt_desc);
         if (ret == -1)
@@ -231,7 +230,6 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     temp_flow_hash_ptr = flow_hash_alloc();
     temp_flow_hash_ptr->addr_pair = ppkt_desc->addr_pair;
     temp_flow_hash_ptr->lazy_pending = FALSE;
-    temp_flow_hash_ptr->recv_time = current_time;
     temp_flow_hash_ptr->pkt_desc_ptr = ppkt_desc;
 
     if (flow_hash_head_ptr == NULL)
@@ -345,9 +343,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
     {
         if (flow_hash_ptr->lazy_pending == TRUE)
         {
-#ifdef DO_STATS
-            lazy_flow_hash_hit++;
-#endif
             flow_hash_ptr->last_pkt_time = current_time;
             return 0;
         }
