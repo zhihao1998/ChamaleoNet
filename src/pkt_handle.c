@@ -374,7 +374,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                                          flow_hash_ptr->addr_pair.a_port,
                                          flow_hash_ptr->addr_pair.protocol))
                 {
-                    printf("Error: Failed to install flow entry!");
+                    printf("Error: Failed to install flow entry!\n");
                     return -1;
                 }
             }
@@ -384,7 +384,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
                                          flow_hash_ptr->addr_pair.b_port,
                                          flow_hash_ptr->addr_pair.protocol))
                 {
-                    printf("Error: Failed to install flow entry!");
+                    printf("Error: Failed to install flow entry!\n");
                     return -1;
                 }
             }

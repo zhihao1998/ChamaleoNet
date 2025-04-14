@@ -118,7 +118,7 @@ void *install_thead_main(void *args)
 		/* Clean faster when it nearly full!! */
 		if (active_host_tbl_entry_count > 750000)
 		{
-			if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD / 5)
+			if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD / 2)
 			{
 				clean_all_idle_entries();
 				gettimeofday(&last_idle_cleaned_time, NULL);

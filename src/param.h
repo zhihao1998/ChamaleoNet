@@ -16,7 +16,7 @@ Increase this number on high speed network will help ...*/
 /* Define how often garbage collection scans the whole flow table,  
  * i.e. very PKT_BUF_GC_PERIOD * (PKT_BUF_SIZE / PKT_BUF_GC_SPLIT_SIZE) microseconds
 */
-#define PKT_BUF_GC_PERIOD 200
+#define PKT_BUF_GC_PERIOD 100
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from internal hosts) */
 #define PKT_TIMEOUT 70000
@@ -46,8 +46,8 @@ Increase this number on high speed network will help ...*/
 /* polling time for checking the idle entries in P4 tables */
 #define ENTRY_INSTALL_BATCH_SIZE 900
 #define ENTRY_IDLE_TIMEOUT 10000 //ms
-#define ENTRY_IDLE_CLEAN_BATCH_SIZE 900
-#define ENTRY_GC_PERIOD 500000 //us
+#define ENTRY_IDLE_CLEAN_BATCH_SIZE 2000
+#define ENTRY_GC_PERIOD 5000000 //us
 
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100
@@ -60,9 +60,9 @@ Increase this number on high speed network will help ...*/
 /* Logging Sampling granularity */
 #define DO_STATS
 #define LOG_TO_FILE
-#define PKT_LOG_SAMPLE_CNT 5000      // pkt_count
-#define TIMEOUT_SAMPLE_CNT 5000     // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 20000  // us
+#define PKT_LOG_SAMPLE_CNT 500000      // pkt_count
+#define TIMEOUT_SAMPLE_CNT 500000     // tot_expired_pkt_count
+#define STATS_LOG_SAMPLE_TIME 60000000  // us
 
 #define SWITCH_ENABLED
 
