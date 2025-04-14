@@ -251,25 +251,25 @@ static int ProcessPacket(struct timeval *pckt_time,
 	pkt_count++;
 #endif
 
-	/* Check if the packet is from/to a responder network, directly send out */
-	// if (responder_ip(pip->ip_dst) || responder_ip(pip->ip_src))
-	// {
-	// 	// printf("packets to responder %s ->", inet_ntoa(pip->ip_src));
-	// 	// printf(" %s, proto %d \n", inet_ntoa(pip->ip_dst), pip->ip_p);
+	/* Check if the packet is from/to a darknet network, directly send out */
+	if (responder_ip(pip->ip_dst) || responder_ip(pip->ip_src))
+	{
+		// printf("packets to responder %s ->", inet_ntoa(pip->ip_src));
+		// printf(" %s, proto %d \n", inet_ntoa(pip->ip_dst), pip->ip_p);
 
-	// 	/* directly send out */
-	// 	if (SendPkt((char *)peth, tlen) == -1)
-	// 	{
-	// 		send_pkt_error_count++;
-	// 	}
-	// 	return 0;
+		/* directly send out */
+		if (SendPkt((char *)peth, tlen) == -1)
+		{
+			send_pkt_error_count++;
+		}
+		return 0;
 	// }
 	// else if ()
 	// {
 	// 	// printf("packets from responder %s ->", inet_ntoa(pip->ip_src));
 	// 	// printf(" %s, proto %d dropping\n", inet_ntoa(pip->ip_dst), pip->ip_p);
 	// 	return 0;
-	// }
+	}
 
 	/* Check the IP protocol ICMP/TCP/UDP */
 	switch (pip->ip_p)
@@ -345,11 +345,11 @@ void print_all_stats()
 	/* Print the statistics */
 	if (pcap_stats(pcap, &stats_pcap) >= 0)
 	{
-		printf("\nPcap Statistics\n");
+		printf("\n%ld.%ld Pcap Statistics\n", current_time.tv_sec, current_time.tv_usec);
+		// fprintf(fp_log, "\n%ld, %ld Pcap Statistics\n", current_time.tv_sec, current_time.tv_usec);
 		printf("Received: %d, Processed: %ld, Still in queue: %ld, Dropped: %d, Dropped by interface: %d\n", 
 				stats_pcap.ps_recv, pkt_count, (stats_pcap.ps_recv-pkt_count), stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
-
-		fprintf(fp_log, "Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
+		// fprintf(fp_log, "Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
 	}
 }
 
@@ -363,7 +363,7 @@ void clean_all()
 	pthread_cancel(entry_install_thread);
 	/* close log */
 #ifdef LOG_TO_FILE
-	fclose(fp_log);
+	// fclose(fp_log);
 	fclose(fp_stats);
 #endif
 }
@@ -398,51 +398,52 @@ void init_log()
 
 	char log_dir[100];
 	sprintf(log_dir, "/home/zhihaow/codes/honeypot_c_controller/log");
-	// sprintf(log_dir, "log/log_%d-%d", tm->tm_mon + 1, tm->tm_mday);
-	// mkdir(log_dir, 0777);
+	char log_date[100];
+	sprintf(log_date, "%d%02d%02d_%02d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
 
-	char log_file_name[200], stat_file_name[200], param_file_name[200];
-	sprintf(param_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_param.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-	FILE *fp_param = fopen(param_file_name, "w");
+	char log_file_name[300], stat_file_name[300], param_file_name[300];
+	// sprintf(param_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_param.txt", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
+	// FILE *fp_param = fopen(param_file_name, "w+");
 	/* Record all parameters to param file */
-	fprintf(fp_param, "PKT_BUF_SIZE: %d\n", PKT_BUF_SIZE);
-	fprintf(fp_param, "PKT_BUF_GC_SPLIT_SIZE: %d\n", PKT_BUF_GC_SPLIT_SIZE);
-	fprintf(fp_param, "PKT_BUF_GC_PERIOD: %d\n", PKT_BUF_GC_PERIOD);
-	fprintf(fp_param, "PKT_TIMEOUT: %d\n", PKT_TIMEOUT);
+	// fprintf(fp_param, "PKT_BUF_SIZE: %d\n", PKT_BUF_SIZE);
+	// fprintf(fp_param, "PKT_BUF_GC_SPLIT_SIZE: %d\n", PKT_BUF_GC_SPLIT_SIZE);
+	// fprintf(fp_param, "PKT_BUF_GC_PERIOD: %d\n", PKT_BUF_GC_PERIOD);
+	// fprintf(fp_param, "PKT_TIMEOUT: %d\n", PKT_TIMEOUT);
 
-	fprintf(fp_param, "FLOW_HASH_TABLE_SIZE: %d\n", FLOW_HASH_TABLE_SIZE);
-	fprintf(fp_param, "FLOW_HASH_TABLE_GC_SIZE: %d\n", FLOW_HASH_TABLE_GC_SIZE);
-	fprintf(fp_param, "FLOW_HASH_TABLE_GC_PERIOD: %d\n", FLOW_HASH_TABLE_GC_PERIOD);
-	fprintf(fp_param, "FLOW_HASH_TABLE_GC_TIMEOUT: %d\n", FLOW_HASH_TABLE_GC_TIMEOUT);
+	// fprintf(fp_param, "FLOW_HASH_TABLE_SIZE: %d\n", FLOW_HASH_TABLE_SIZE);
+	// fprintf(fp_param, "FLOW_HASH_TABLE_GC_SIZE: %d\n", FLOW_HASH_TABLE_GC_SIZE);
+	// fprintf(fp_param, "FLOW_HASH_TABLE_GC_PERIOD: %d\n", FLOW_HASH_TABLE_GC_PERIOD);
+	// fprintf(fp_param, "FLOW_HASH_TABLE_GC_TIMEOUT: %d\n", FLOW_HASH_TABLE_GC_TIMEOUT);
 
-	fprintf(fp_param, "ENTRY_BUF_SIZE: %d\n", ENTRY_BUF_SIZE);
-	fprintf(fp_param, "ENTRY_INSTALL_BATCH_SIZE: %d\n", ENTRY_INSTALL_BATCH_SIZE);
-	fprintf(fp_param, "ENTRY_IDLE_TIMEOUT: %d\n", ENTRY_IDLE_TIMEOUT);
-	fprintf(fp_param, "ENTRY_IDLE_CLEAN_BATCH_SIZE: %d\n", ENTRY_IDLE_CLEAN_BATCH_SIZE);
-	fprintf(fp_param, "ENTRY_GC_PERIOD: %d\n", ENTRY_GC_PERIOD);
+	// fprintf(fp_param, "ENTRY_BUF_SIZE: %d\n", ENTRY_BUF_SIZE);
+	// fprintf(fp_param, "ENTRY_INSTALL_BATCH_SIZE: %d\n", ENTRY_INSTALL_BATCH_SIZE);
+	// fprintf(fp_param, "ENTRY_IDLE_TIMEOUT: %d\n", ENTRY_IDLE_TIMEOUT);
+	// fprintf(fp_param, "ENTRY_IDLE_CLEAN_BATCH_SIZE: %d\n", ENTRY_IDLE_CLEAN_BATCH_SIZE);
+	// fprintf(fp_param, "ENTRY_GC_PERIOD: %d\n", ENTRY_GC_PERIOD);
 
-	fprintf(fp_param, "PKT_LOG_SAMPLE_CNT: %d\n", PKT_LOG_SAMPLE_CNT);
-	fprintf(fp_param, "TIMEOUT_SAMPLE_CNT: %d\n", TIMEOUT_SAMPLE_CNT);
-	fprintf(fp_param, "STATS_LOG_SAMPLE_TIME: %d\n", STATS_LOG_SAMPLE_TIME);
+	// fprintf(fp_param, "PKT_LOG_SAMPLE_CNT: %d\n", PKT_LOG_SAMPLE_CNT);
+	// fprintf(fp_param, "TIMEOUT_SAMPLE_CNT: %d\n", TIMEOUT_SAMPLE_CNT);
+	// fprintf(fp_param, "STATS_LOG_SAMPLE_TIME: %d\n", STATS_LOG_SAMPLE_TIME);
 
-	fclose(fp_param);
+	// fclose(fp_param);
 
 #ifdef LOG_TO_FILE
-	sprintf(log_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_log.txt", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-	sprintf(stat_file_name, "%s/buf%d_GCsize%d_GCperiod%d_T%d_stat.csv", log_dir, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
+	// sprintf(log_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_log.txt", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
+	sprintf(stat_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_stat.csv", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
 
-	fp_log = fopen(log_file_name, "w");
-	fprintf(fp_log, "Start logging\n");
-	fp_stats = fopen(stat_file_name, "a");
-	// fprintf(fp_stats, "time,level,file,line,msg,"
-	// 				  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
-	// 				  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
-	// 				  "pkt_list_count_tot,pkt_list_count_use,"
-	// 				  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
-	// 				  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
-	// 				  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
-	// 				  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-	// 				  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
+	// fp_log = fopen(log_file_name, "w+");
+	// fprintf(fp_log, "Start logging\n");
+
+	fp_stats = fopen(stat_file_name, "w+");
+	fprintf(fp_stats, "time,level,file,line,msg,"
+					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
+					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
+					  "pkt_list_count_tot,pkt_list_count_use,"
+					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
+					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
+					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
+					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
+					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
 	log_add_fp(fp_stats, LOG_STATS);
 #endif
 	log_set_quiet(TRUE);
@@ -460,7 +461,7 @@ int main(int argc, char *argv[])
 	init_log();
 
 	LoadInternalNets("/home/zhihaow/codes/honeypot_c_controller/conf/net.internal");
-	// LoadResponderNets("/home/zhihaow/codes/honeypot_c_controller/conf/net.responder");
+	LoadResponderNets("/home/zhihaow/codes/honeypot_c_controller/conf/net.responder");
 	// LoadGlobals("conf/globals.conf");
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
@@ -601,7 +602,7 @@ int main(int argc, char *argv[])
 			gettimeofday(&pkt_process_end_time, NULL);
 			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, current_time));
 #endif
-			if (pkt_count % 5000000 == 0)
+			if (pkt_count % 1000000 == 0)
 			{
 				print_all_stats();
 				
@@ -610,12 +611,6 @@ int main(int argc, char *argv[])
 #endif
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
 
-	/* Release the mutex */
-	pthread_cancel(entry_install_thread);
-	trace_cleanup();
-#ifdef LOG_TO_FILE
-	fclose(fp_log);
-	fclose(fp_stats);
-#endif
+	clean_all();
 	return 0;
 }

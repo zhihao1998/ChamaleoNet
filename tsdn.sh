@@ -1,1 +1,1 @@
- make && sudo ./bin/tsdn & python3 utils/net_stat.py 
+ make && sudo ./bin/tsdn 

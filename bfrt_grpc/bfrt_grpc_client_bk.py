@@ -4,11 +4,9 @@ import socket
 import os
 import sys
 import time
-import pickle
-from collections import Counter
+import traceback
 from tabulate import tabulate
 import struct
-from datetime import datetime
 
 #
 # This is optional if you use proper PYTHONPATH
@@ -45,6 +43,15 @@ def mask_to_int(mask):
 def mac_to_bytes(mac_str):
     return bytes.fromhex(mac_str.replace(':', ''))
 
+def log_installed_flow_key(key_counts):
+    with open("/home/zhihaow/codes/honeypot_c_controller/log/installed_flow_key.log", "w+") as f:
+        for k,v in key_counts.items():
+            f.write(f"{k[0]}, {k[1]}, {k[2]}, {v}\n")
+
+def backup_log_file():
+    if os.path.exists('/home/zhihaow/codes/honeypot_c_controller/log/installed_flow_key.log'):
+        os.rename('/home/zhihaow/codes/honeypot_c_controller/log/installed_flow_key.log', 
+                  f'/home/zhihaow/codes/honeypot_c_controller/log/installed_flow_key_{time.time()}.log')
 
 class Bfrt_GRPC_Client:
     def __init__(self, 
@@ -58,17 +65,17 @@ class Bfrt_GRPC_Client:
                  num_tries=5,
                  perform_subscribe=True,
                  target=gc.Target(),
-                 enable_time_log=False,
-                 enable_rule_log=False):
+                 enable_log=None):
 
         if perform_bind and not perform_subscribe:
             raise RuntimeError(
                 "perform_bind must be equal to perform_subscribe")
-        
         self.bfrt_info = None
         self.target = target
-        self.installed_flows = set()
-        self.installed_flows_counter = Counter()
+        self.installed_flow_key = set()  
+        # self.flow_key_installed_count = {}
+        # self.last_key_log_time = time.time()
+        # backup_log_file()
         
         self.interface = gc.ClientInterface(
             grpc_addr, 
@@ -103,29 +110,15 @@ class Bfrt_GRPC_Client:
                                                    1000)
         self.entry_ttl = entry_ttl
         self.clean_batch_size = clean_batch_size
+        # self.small_batch_size = 500
+        self.enable_log = False
+        # self.set_log("/home/zhihaow/codes/honeypot_c_controller/log/bfrt_grpc_client.log")
 
-        # initialize log files
-        self.enable_time_log = enable_time_log
-        self.enable_rule_log = enable_rule_log
-        self.init_log()
 
-    def init_log(self):
-        now = datetime.now()
-        cur_date = now.strftime("%Y%m%d")
-        cur_hour = now.hour
-        cur_min = now.minute
-        cur_sec = now.second
-        cur_time = ''.join([cur_date, '_', str(cur_hour), '-', str(cur_min), '-', str(cur_sec)])
-
-        # self.log_file = open(f"/home/zhihaow/codes/honeypot_c_controller/log/{cur_time}_bfrt.log", "w+")
-
-        if self.enable_time_log:
-            self.time_log_file_fp = open(f"/home/zhihaow/codes/honeypot_c_controller/log/{cur_time}_bfrt_time.log", "w+")
-            self.time_log_file_fp.write("time,op,num,cost\n")
-
-        if self.enable_rule_log:
-            self.last_rule_log_time = time.time()
-            
+    def set_log(self, log_file):
+        self.enable_log = True
+        self.log_file = open(log_file, "w+")
+        self.log_file.write("time,op,num,cost\n")
 
     def __getattr__(self, name):
         """Adds methods from the :py:class:`bfrt_grpc.client.ClientInterface` class."""
@@ -204,7 +197,7 @@ class Bfrt_GRPC_Client:
 
     # Interaction with C controller
     def get_local_flow_entry_num(self) -> int:
-        return len(self.installed_flows)
+        return len(self.installed_flow_key)
     
     def get_table_usage(self) -> int:
         usage = int(next(self.service_table.usage_get(self.target, flags={"from_hw":False})))
@@ -233,28 +226,25 @@ class Bfrt_GRPC_Client:
                 ip = key_dict["meta.internal_ip"]['value']
                 port = key_dict["meta.internal_port"]['value']
                 protocol = key_dict["meta.ip_protocol"]['value']
-                # self.installed_flows[f'{ip}_{port}_{protocol}'][0] = 0
-                self.installed_flows.remove(f'{ip_to_int(ip)}_{port}_{protocol}')
+                # log_file.write(f"{start_time}, Delete entry: {[ip_to_int(ip), port, protocol]}\n")
+                self.installed_flow_key.remove((ip_to_int(ip), port, protocol))
 
                 key_list.append(recv_key)
                 count += 1
             except RuntimeError as e:
                 # traceback.print_exc()
-                # self.log_file.write(f"{start_time}, Remove Error: {e}\n")
+                # print(e)
                 break
             except KeyError as e:
                 # log_file.write(f"{start_time}, Error: {e}\n")
                 # print(f"Trying to delete a non-exist entry, {e}")
-                # self.log_file.write(f"{start_time}, Remove Error: {e}\n")
                 pass
             
         if len(key_list) > 0:
-            # print(f"clean {len(key_list)} entries")
             self.service_table.entry_del(self.target, key_list)
-
-            if self.enable_time_log:
-                self.time_log_file_fp.write(f"{time.time()},remove,{count},{round(time.time() - start_time, 5)}\n")
-                self.time_log_file_fp.flush()
+            if self.enable_log:
+                self.log_file.write(f"{start_time},remove,{count},{round(time.time() - start_time, 5)}\n")
+                self.log_file.flush()
         return 0
         
             
@@ -262,55 +252,53 @@ class Bfrt_GRPC_Client:
         key_list = []
         data_list = []
         start_time = time.time()
-        try:
-            for index, key in enumerate(entry_key_list):
-                if self.enable_rule_log:
-                    self.installed_flows_counter[f'{int_to_ip(key[0])}_{key[1]}_{key[2]}'] += 1
+        for index, key in enumerate(entry_key_list):
+            # self.flow_key_installed_count[(key[0], key[1], key[2])] = self.flow_key_installed_count.get((key[0], key[1], key[2]), 0) + 1
+            if (key[0], key[1], key[2]) in self.installed_flow_key:
+                continue
+            key_list.append(self.service_table.make_key([gc.KeyTuple("meta.internal_ip", key[0]),
+                                                        gc.KeyTuple("meta.internal_port", key[1]),
+                                                        gc.KeyTuple("meta.ip_protocol", key[2])]))
+            self.installed_flow_key.add((key[0], key[1], key[2]))
 
-                if f'{key[0]}_{key[1]}_{key[2]}' in self.installed_flows:
-                    continue
-                key_list.append(self.service_table.make_key([gc.KeyTuple("meta.internal_ip", key[0]),
-                                                            gc.KeyTuple("meta.internal_port", key[1]),
-                                                            gc.KeyTuple("meta.ip_protocol", key[2])]))
-                self.installed_flows.add(f'{key[0]}_{key[1]}_{key[2]}')
-                # for poll mode
-                # data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE")], 'Ingress.drop'))
+            # log_file.write(f"{start_time}, Add entry: {key}\n")
+            # for poll mode
+            # data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_HIT_STATE', str_val="ENTRY_ACTIVE")], 'Ingress.drop'))
 
-                # for notification mode
-                data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_TTL', self.entry_ttl)], 
-                                                            'Ingress.drop'))
-            self.service_table.entry_add(self.target, key_list, data_list)
+            # for notification mode
+            data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_TTL', self.entry_ttl)], 
+                                                          'Ingress.drop'))
+        self.service_table.entry_add(self.target, key_list, data_list)
+        # print(f"Added {len(key_list)} entries, cost {round(time.time() - start_time, 2)}s!")
+        if self.enable_log:
+            # if time.time() - self.last_key_log_time > 60:
+            #     # delete all entries with count less than 2
+            #     self.flow_key_installed_count = {k:v for k,v in self.flow_key_installed_count.items() if v > 1}
+            #     log_installed_flow_key(self.flow_key_installed_count)
+            #     self.last_key_log_time = time.time()
+            self.log_file.write(f"{time.time()},add,{len(key_list)},{round(time.time() - start_time, 5)}\n")
+            self.log_file.flush()
 
-            if self.enable_time_log:
-                self.time_log_file_fp.write(f"{time.time()},add,{len(key_list)},{round(time.time() - start_time, 5)}\n")
-                self.time_log_file_fp.flush()
-            
-            if self.enable_rule_log:
-                c_time = time.time()
-                if c_time - self.last_rule_log_time > 1800:
-                    self.write_counter_to_file()
-                    self.last_rule_log_time = c_time
-                    
-        except Exception as e:
-            pass
-            # self.log_file.write(f"{start_time}, Add Error: {e}\n")
-            # traceback.print_exc()
         return 1
     
-    def write_counter_to_file(self):
-        now = datetime.now()
-        cur_date = now.strftime("%Y%m%d")
-        cur_hour = now.hour
-        cur_min = now.minute
-        cur_sec = now.second
-        cur_time = ''.join([cur_date, '_', str(cur_hour), '-', str(cur_min), '-', str(cur_sec)])
-        rule_log_file = f"/home/zhihaow/codes/honeypot_c_controller/log/rule_counter/{cur_time}_bfrt_rule.pkl"
+    def entry_batch_remove(self, entry_key_list):
+        key_list = []
+        start_time = time.time()
+        for index, key in enumerate(entry_key_list):
+            if (key[0], key[1], key[2]) in self.installed_flow_key:
+                continue
+            key_list.append(self.service_table.make_key([gc.KeyTuple("meta.internal_ip", key[0]),
+                                                        gc.KeyTuple("meta.internal_port", key[1]),
+                                                        gc.KeyTuple("meta.ip_protocol", key[2])]))
+            self.installed_flow_key.add((key[0], key[1], key[2]))
 
-        with open(rule_log_file, "wb") as f:
-            pickle.dump(self.installed_flows_counter, f)
-
-        self.installed_flows_counter = Counter()
- 
+        self.service_table.entry_del(self.target, key_list)
+        # print(f"Added {len(key_list)} entries, cost {round(time.time() - start_time, 2)}s!")
+        if self.enable_log:
+            self.log_file.write(f"{time.time()},add,{len(key_list)},{round(time.time() - start_time, 5)}\n")
+            self.log_file.flush()
+        return 1
+    
     
     
 if __name__ == "__main__":
@@ -329,11 +317,11 @@ if __name__ == "__main__":
     print(controller.get_table_usage())
     time.sleep(6)
 
-    # # single clean time
-    # start_time = time.time()
-    # controller.idle_entry_single_clean()
-    # print("single clean --- %s seconds ---" % (time.time() - start_time))
-    # time.sleep(6)
+    # single clean time
+    start_time = time.time()
+    controller.idle_entry_single_clean()
+    print("single clean --- %s seconds ---" % (time.time() - start_time))
+    time.sleep(6)
 
     controller.entry_batch_add(test_key_list)
     time.sleep(6)
