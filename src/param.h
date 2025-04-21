@@ -49,6 +49,8 @@ Increase this number on high speed network will help ...*/
 #define ENTRY_IDLE_CLEAN_BATCH_SIZE 2000
 #define ENTRY_GC_PERIOD 5000000 //us
 
+#define ACTIVE_HOST_UPDATE_PERIOD 60000000 //us
+
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100
 

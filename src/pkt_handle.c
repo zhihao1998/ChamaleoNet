@@ -478,6 +478,11 @@ void trace_init(void)
     socket_address.sll_halen = ETH_ALEN;
     /* Destination MAC */
     // socket_address.sll_addr[0] = MY_DEST_MAC0;
+
+    pthread_mutex_init(&active_host_list_mutex, NULL);
+
+    memset(incoming_host_list, 0, sizeof(incoming_host_list));
+    memset(active_host_list, 0, sizeof(active_host_list));
 }
 
 void trace_check(void)

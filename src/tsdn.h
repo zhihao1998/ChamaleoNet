@@ -217,6 +217,8 @@ int bfrt_get_local_entry_number();
 int clean_all_idle_entries();
 u_long entry_circ_buf_size();
 int bfrt_add_batch_entries(PyObject *py_arg_tuple);
+void bfrt_update_active_host_list();
+u_long count_active_hosts(const unsigned char *result, int size);
 
 /* Logging */
 FILE *fp_log;
@@ -322,3 +324,8 @@ extern timeval last_log_time;
 extern timeval last_pkt_cleaned_time;
 extern timeval last_hash_cleaned_time;
 extern timeval last_idle_cleaned_time;
+
+extern timeval last_active_host_update_time;
+extern unsigned char active_host_list[65536];
+extern unsigned char incoming_host_list[65536];
+pthread_mutex_t active_host_list_mutex;

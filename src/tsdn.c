@@ -31,6 +31,13 @@ struct timeval last_hash_cleaned_time;
 /* Timer for cleaning idle entries */
 struct timeval last_idle_cleaned_time;
 
+/* Active Host List. */
+struct timeval last_active_host_update_time;
+unsigned char active_host_list[65536];
+unsigned char incoming_host_list[65536];
+uint32_t base_ip_int;
+
+
 #ifdef DO_STATS
 void stats_init()
 {
@@ -318,6 +325,16 @@ static int ProcessPacket(struct timeval *pckt_time,
 		break;
 	}
 
+	if (internal_ip(pip->ip_src))
+	{
+		/* Check if the packet is from an internal network */
+		uint32_t ip_src = ntohl(pip->ip_src.s_addr); 
+		uint32_t offset = ip_src - base_ip_int;
+
+		active_host_list[offset] = 1;
+		// printf("Active IP: offset %u (IP: %s)\n", offset, inet_ntoa(pip->ip_src));
+	}
+
 	return 1;
 }
 
@@ -331,7 +348,9 @@ void print_all_stats()
 		   "installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, "
 		   "replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, "
 		   "expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, "
-		   "active_host_tbl_entry_count: %ld, local_entry_count: %ld, send_pkt_error_count: %ld\n",
+		   "active_host_tbl_entry_count: %ld, local_entry_count: %ld, "
+		   "send_pkt_error_count: %ld\n",
+
 		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
 		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
 		   pkt_list_count_tot, pkt_list_count_use,
@@ -449,6 +468,12 @@ void init_log()
 	log_set_quiet(TRUE);
 }
 
+uint32_t ip_to_int(const char *ip_str) {
+    struct in_addr ip_addr;
+    inet_aton(ip_str, &ip_addr);
+    return ntohl(ip_addr.s_addr); 
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -481,6 +506,8 @@ int main(int argc, char *argv[])
 	int tlen;
 	void *plast;
 	long int location = 0;
+
+	base_ip_int = ip_to_int("154.200.0.0");
 
 	printf("Capturing on the device: %s\n", RECV_INTF);
 
@@ -563,7 +590,7 @@ int main(int argc, char *argv[])
 
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
-	last_idle_cleaned_time = last_hash_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
+	last_active_host_update_time = last_hash_cleaned_time = last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
 
 	struct timeval pkt_process_start_time, pkt_process_end_time;
 	struct timeval pkt_process_end_time_tmp = current_time;

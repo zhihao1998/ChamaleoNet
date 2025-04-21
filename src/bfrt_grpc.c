@@ -6,6 +6,7 @@ static circular_buf_t *p4_entry_circ_buf;
 static pthread_mutex_t entry_install_mutex;
 static pthread_cond_t entry_install_cond;
 char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
+u_long active_hosts = 0;
 
 u_long entry_circ_buf_size()
 {
@@ -118,7 +119,7 @@ void *install_thead_main(void *args)
 		/* Clean faster when it nearly full!! */
 		if (active_host_tbl_entry_count > 750000)
 		{
-			if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD / 2)
+			if (elapsed(last_idle_cleaned_time, current_time) > ENTRY_GC_PERIOD / 4)
 			{
 				clean_all_idle_entries();
 				gettimeofday(&last_idle_cleaned_time, NULL);
@@ -131,6 +132,13 @@ void *install_thead_main(void *args)
 				clean_all_idle_entries();
 				gettimeofday(&last_idle_cleaned_time, NULL);
 			}
+		}
+
+		/* Update active host list every 1 min */
+		if (elapsed(last_active_host_update_time, current_time) > ACTIVE_HOST_UPDATE_PERIOD)
+		{
+			bfrt_update_active_host_list();
+			gettimeofday(&last_active_host_update_time, NULL);
 		}
 	}
 
@@ -165,6 +173,41 @@ void bfrt_clear_tables()
 	Py_DECREF(pFunc);
 	Py_DECREF(pArgs);
 	Py_DECREF(pRes);
+}
+
+u_long count_active_hosts(const unsigned char *result, int size) {
+    u_long count = 0;
+    for (int i = 0; i < size; ++i) {
+        count += result[i]; 
+    }
+    return count;
+}
+
+/* Update active host list */
+void bfrt_update_active_host_list()
+{
+	PyObject *pArgs, *pRes, *pFunc;
+	pFunc = PyObject_GetAttrString(pInstance, "get_active_hosts");
+	pArgs = Py_BuildValue("()");
+	assert(pFunc != NULL);
+
+	PyObject *pList = PyObject_CallObject(pFunc, NULL);
+    if (!pList || !PyList_Check(pList)) {
+        PyErr_Print();
+        fprintf(stderr, "Function did not return a list\n");
+        Py_DECREF(pFunc);
+    }
+
+	pthread_mutex_lock(&active_host_list_mutex);
+	for (Py_ssize_t i = 0; i < 65536; ++i) {
+        PyObject *item = PyList_GetItem(pList, i);  // borrowed ref
+        active_host_list[i] = PyObject_IsTrue(item);        // 0 or 1
+    }
+	pthread_mutex_unlock(&active_host_list_mutex);
+	
+	Py_DECREF(pList);
+	Py_DECREF(pFunc);
+	Py_DECREF(pArgs);
 }
 
 /* Initialze Grpc object */

@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import binascii
+import ipaddress
 import socket
 import os
 import sys
@@ -69,6 +70,10 @@ class Bfrt_GRPC_Client:
         self.target = target
         self.installed_flows = set()
         self.installed_flows_counter = Counter()
+
+        self.active_hosts = [0] * 65536
+        self.base_ip_int = int(ipaddress.IPv4Network("154.200.0.0/16").network_address)
+        self.active_hosts_file = "/home/zhihaow/codes/honeypot_c_controller/log/active_hosts/active_hosts.log"
         
         self.interface = gc.ClientInterface(
             grpc_addr, 
@@ -310,6 +315,26 @@ class Bfrt_GRPC_Client:
             pickle.dump(self.installed_flows_counter, f)
 
         self.installed_flows_counter = Counter()
+
+    def get_active_hosts(self):
+        """
+        Get all active hosts in the table from the local flows
+        """
+        self.active_hosts = [0] * 65536
+        for entry in self.installed_flows:
+            ip, port, protocol = entry.split('_')
+            ip = int(ip)
+            offset = ip - self.base_ip_int
+            if 0 <= offset < 65536:
+                self.active_hosts[offset] = 1
+                
+        # timestamp = int(time.time())
+        # bitmap_str = ''.join(str(x) for x in self.active_hosts)
+
+        # with open(self.active_hosts_file, "a") as f: 
+        #     f.write(f"{timestamp},{bitmap_str}\n")
+        #     f.flush()
+        return self.active_hosts
  
     
     
