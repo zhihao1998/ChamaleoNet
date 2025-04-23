@@ -106,10 +106,14 @@ static flow_hash_t *FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *p
 
 void check_timeout_lazy()
 {
-    int ix, tot_pkt = 0;
+    int ix = 0;
+    lazy_flow_clean_count = 0;
 
     flow_hash_t *flow_hash_head_ptr, *flow_hash_ptr;
+    flow_hash_t *to_clean[FLOW_HASH_TABLE_GC_SIZE * 4]; 
+    int clean_idx = 0;
 
+    // 第一阶段：标记要清理的 flow（避免在遍历中破坏链表）
     for (ix = entry_index; ix < entry_index + FLOW_HASH_TABLE_GC_SIZE; ix++)
     {
         flow_hash_head_ptr = flow_hash_table[ix];
@@ -124,15 +128,24 @@ void check_timeout_lazy()
             {
                 if (tv_sub_2(current_time, flow_hash_ptr->last_pkt_time) >= FLOW_HASH_TABLE_GC_TIMEOUT)
                 {
-                    FreeFlowHash(flow_hash_ptr);
-#ifdef DO_STATS
-                    lazy_flow_hash_count--;
-#endif
+                    to_clean[clean_idx++] = flow_hash_ptr;
                 }
             }
         }
     }
+
+    // 第二阶段：真正清理 flow
+    for (int i = 0; i < clean_idx; ++i)
+    {
+        FreeFlowHash(to_clean[i]);
+#ifdef DO_STATS
+        lazy_flow_hash_count--;
+        lazy_flow_clean_count++;
+#endif
+    }
+
     entry_index = (entry_index + FLOW_HASH_TABLE_GC_SIZE) % FLOW_HASH_TABLE_SIZE;
+
 }
 
 void check_timeout_periodic()
@@ -268,34 +281,30 @@ void FreePktDesc(pkt_desc_t *ppkt_desc)
 
 void FreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
-    hash hval;
-    flow_hash_t *flow_hash_head_ptr;
+    assert(flow_hash_ptr != NULL);
 
-    hval = flow_hash_ptr->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
+    flow_hash_t *prev = flow_hash_ptr->prev;
+    flow_hash_t *next = flow_hash_ptr->next;
+
+    hash hval = flow_hash_ptr->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
 
     assert(flow_hash_table[hval] != NULL);
+    if (flow_hash_table[hval] == flow_hash_ptr) {
+        flow_hash_table[hval] = next;
+    }
+    if (prev != NULL) {
+        prev->next = next;
+    }
+    if (next != NULL) {
+        next->prev = prev;
+    }
+    flow_hash_release(flow_hash_ptr);
 
-    flow_hash_head_ptr = flow_hash_table[hval];
-    if (flow_hash_ptr == flow_hash_table[hval])
-    {
-        /* it is the top of the linked list */
-        flow_hash_table[hval] = flow_hash_ptr->next;
-        flow_hash_release(flow_hash_ptr);
-    }
-    else
-    {
-        /* it is the middle of the linked list */
-        flow_hash_ptr->prev->next = flow_hash_ptr->next;
-        if (flow_hash_ptr->next != NULL)
-        {
-            flow_hash_ptr->next->prev = flow_hash_ptr->prev;
-        }
-        flow_hash_release(flow_hash_ptr);
-    }
 #ifdef DO_STATS
     flow_hash_count--;
 #endif
 }
+
 
 int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
@@ -367,7 +376,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             //          inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4, ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
             //          ntohs(flow_hash_ptr->addr_pair.b_port),
             //          flow_hash_ptr->addr_pair.protocol);
-            
+
             if (internal_ip(flow_hash_ptr->addr_pair.a_address.un.ip4))
             {
                 if (try_install_p4_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
@@ -390,7 +399,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             }
             else
             {
-                printf("Error: Non of the src nor dst IP is internal!\n");
+                // printf("Error: Non of the src nor dst IP is internal!\n");
                 return -1;
             }
 
@@ -479,10 +488,10 @@ void trace_init(void)
     /* Destination MAC */
     // socket_address.sll_addr[0] = MY_DEST_MAC0;
 
-    pthread_mutex_init(&active_host_list_mutex, NULL);
+    pthread_mutex_init(&active_entry_list_mutex, NULL);
 
     memset(incoming_host_list, 0, sizeof(incoming_host_list));
-    memset(active_host_list, 0, sizeof(active_host_list));
+    memset(active_entry_list, 0, sizeof(active_entry_list));
 }
 
 void trace_check(void)

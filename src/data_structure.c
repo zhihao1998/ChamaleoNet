@@ -32,105 +32,71 @@ MMmalloc(size_t size, const char *f_name)
  * Two pointer are used (top and last).
  * Alloc and release from last, while top is used to not loose the list ...
  */
-struct pkt_list_elem
-{
-  struct pkt_list_elem *next;
-  struct pkt_list_elem *prev;
+struct pkt_list_elem {
   ip_packet *ppkt;
+  struct pkt_list_elem *next;
 };
 
+static struct pkt_list_elem *pkt_stack_top = NULL; // freelist 栈顶
 
-static struct pkt_list_elem *top_pkt_flist = NULL;  /* Pointer to the top of      */
-                                                    /* the 'pktlist' free list.    */
-static struct pkt_list_elem *last_pkt_flist = NULL; /* Pointer to the last used   */
-                                                    /* element list.              */
-
-ip_packet * pkt_alloc(void)
+ip_packet *pkt_alloc(void)
 {
-  ip_packet *ppkt_temp;
+    ip_packet *ppkt_temp;
+
+    if (pkt_stack_top != NULL)
+    {
+        // 复用已有的 packet
+        struct pkt_list_elem *elem = pkt_stack_top;
+        pkt_stack_top = elem->next;
+        ppkt_temp = elem->ppkt;
+        free(elem); // 释放包装结构体
+    }
+    else
+    {
+        // freelist 空了，分配新的
+        ppkt_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "pkt_alloc");
 #ifdef DO_STATS
-  pkt_list_count_use++;
+        pkt_list_count_tot++;
+#endif
+    }
+
+#ifdef DO_STATS
+    pkt_list_count_use++;
 #endif
 
-  if ((last_pkt_flist == NULL) || (last_pkt_flist->ppkt == NULL))
-  { /* The LinkList stack is empty.         */
-    /* fprintf (fp_stdout, "FList empty, top == last == NULL\n"); */
-    ppkt_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "pkt_alloc");
-#ifdef DO_STATS
-    pkt_list_count_tot++;
-#endif
     return ppkt_temp;
-  }
-  else
-  { /* The 'pktlist' stack is not empty.   */
-    ppkt_temp = last_pkt_flist->ppkt;
-    last_pkt_flist->ppkt = NULL;
-    if (last_pkt_flist->next != NULL)
-      last_pkt_flist = last_pkt_flist->next;
-    return ppkt_temp;
-  }
 }
 
 void pkt_release(ip_packet *released_ip_packet)
 {
-  struct pkt_list_elem *new_pktlist_elem;
+    struct pkt_list_elem *new_elem;
+
+    if (released_ip_packet == NULL)
+        return;
+
+    memset(released_ip_packet, 0, sizeof(ip_packet));
+
+    new_elem = (struct pkt_list_elem *)MMmalloc(sizeof(struct pkt_list_elem), "pkt_release");
+    new_elem->ppkt = released_ip_packet;
+    new_elem->next = pkt_stack_top;
+    pkt_stack_top = new_elem;
 
 #ifdef DO_STATS
-  pkt_list_count_use--;
+    pkt_list_count_use--;
 #endif
-
-  memset(released_ip_packet, 0, sizeof(ip_packet));
-
-  if ((last_pkt_flist == NULL) || ((last_pkt_flist->ppkt != NULL) && (last_pkt_flist->prev == NULL)))
-  {
-    new_pktlist_elem =
-        (struct pkt_list_elem *)MMmalloc(sizeof(struct pkt_list_elem),
-                                         "pkt_release");
-    new_pktlist_elem->ppkt = released_ip_packet;
-    new_pktlist_elem->prev = NULL;
-    new_pktlist_elem->next = top_pkt_flist;
-    if (new_pktlist_elem->next != NULL)
-      new_pktlist_elem->next->prev = new_pktlist_elem;
-    top_pkt_flist = new_pktlist_elem;
-    last_pkt_flist = new_pktlist_elem;
-  }
-  else
-  {
-    if (last_pkt_flist->ppkt == NULL)
-      new_pktlist_elem = last_pkt_flist;
-    else
-      new_pktlist_elem = last_pkt_flist->prev;
-    new_pktlist_elem->ppkt = released_ip_packet;
-    last_pkt_flist = new_pktlist_elem;
-  }
 }
 
-void pkt_list_print()
-{
-  struct pkt_list_elem *new_pktlist_elem;
 
-  new_pktlist_elem = top_pkt_flist;
-  fprintf(fp_stdout, "\n\t[top]\n");
-  while (new_pktlist_elem != NULL)
-  {
-    fprintf(fp_stdout, "\t|\n");
-    if (new_pktlist_elem == last_pkt_flist)
-      fprintf(fp_stdout, "[last]->");
-    else
-      fprintf(fp_stdout, "\t");
-    fprintf(fp_stdout, "[pkt_list_elem]->");
-    if (new_pktlist_elem->ppkt != NULL)
+void print_freelist_size()
+{
+    int count = 0;
+    struct pkt_list_elem *curr = pkt_stack_top;
+    while (curr != NULL)
     {
-      fprintf(fp_stdout, "[ppkt]");
+        count++;
+        curr = curr->next;
     }
-    else
-    {
-      fprintf(fp_stdout, "[NULL]");
-    }
-    fprintf(fp_stdout, "\n");
-    new_pktlist_elem = new_pktlist_elem->next;
-  }
-  fprintf(fp_stdout, "\n");
+    printf("[FREELIST] pkt_stack_top has %d free packets\n", count);
 }
 
 
@@ -138,73 +104,68 @@ void pkt_list_print()
  *  Two pointer are used (top and last).
  *  Alloc and release from last, while top is used to not loose the list ...
  */
-struct pkt_desc_list_elem
-{
-  struct pkt_desc_list_elem *next;
-  struct pkt_desc_list_elem *prev;
+struct pkt_desc_list_elem {
   pkt_desc_t *pkt_desc_ptr;
+  struct pkt_desc_list_elem *next;
 };
 
-static struct pkt_desc_list_elem *top_pkt_desc_flist = NULL;  /* Pointer to the top of      */
-                                                              /* the 'pkt_desc_list' free list.    */
-static struct pkt_desc_list_elem *last_pkt_desc_flist = NULL; /* Pointer to the last used   */
-                                                              /* element list.  */
+static struct pkt_desc_list_elem *pkt_desc_stack_top = NULL;
 
-/* Alloc a new space for an element in pkt_desc_list */
-pkt_desc_t *pkt_desc_alloc()
+pkt_desc_t *pkt_desc_alloc(void)
 {
-  pkt_desc_t *new_pkt_desc_ptr;
+    pkt_desc_t *new_pkt_desc_ptr;
+
+    if (pkt_desc_stack_top != NULL)
+    {
+        struct pkt_desc_list_elem *elem = pkt_desc_stack_top;
+        pkt_desc_stack_top = elem->next;
+        new_pkt_desc_ptr = elem->pkt_desc_ptr;
+        free(elem); // 释放包装结构体
+    }
+    else
+    {
+        new_pkt_desc_ptr = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
 #ifdef DO_STATS
-  pkt_desc_list_count_use++;
+        pkt_desc_list_count_tot++;
+#endif
+    }
+
+#ifdef DO_STATS
+    pkt_desc_list_count_use++;
 #endif
 
-  if ((last_pkt_desc_flist == NULL) || (last_pkt_desc_flist->pkt_desc_ptr == NULL))
-  { /* The LinkList stack is empty.         */
-    new_pkt_desc_ptr = (pkt_desc_t *)MMmalloc(sizeof(pkt_desc_t), "pkt_desc_alloc");
-#ifdef DO_STATS
-    pkt_desc_list_count_tot++;
-#endif
     return new_pkt_desc_ptr;
-  }
-  else
-  { /* The 'pkt_desc_list' stack is not empty.   */
-    new_pkt_desc_ptr = last_pkt_desc_flist->pkt_desc_ptr;
-    last_pkt_desc_flist->pkt_desc_ptr = NULL;
-    if (last_pkt_desc_flist->next != NULL)
-      last_pkt_desc_flist = last_pkt_desc_flist->next;
-    return new_pkt_desc_ptr;
-  }
 }
 
 void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
 {
-  struct pkt_desc_list_elem *new_pkt_desc_list_elem;
+    struct pkt_desc_list_elem *new_elem;
+
+    if (rel_pkt_desc_ptr == NULL)
+        return;
+
+    memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
+
+    new_elem = (struct pkt_desc_list_elem *)MMmalloc(sizeof(struct pkt_desc_list_elem), "pkt_desc_release");
+    new_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
+    new_elem->next = pkt_desc_stack_top;
+    pkt_desc_stack_top = new_elem;
+
 #ifdef DO_STATS
-  pkt_desc_list_count_use--;
+    pkt_desc_list_count_use--;
 #endif
+}
 
-  memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
-
-  if ((last_pkt_desc_flist == NULL) || ((last_pkt_desc_flist->pkt_desc_ptr != NULL) && (last_pkt_desc_flist->prev == NULL)))
-  {
-    new_pkt_desc_list_elem = (struct pkt_desc_list_elem *)MMmalloc(sizeof(struct pkt_desc_list_elem), "pkt_desc_release");
-    new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
-    new_pkt_desc_list_elem->prev = NULL;
-    new_pkt_desc_list_elem->next = top_pkt_desc_flist;
-    if (new_pkt_desc_list_elem->next != NULL)
-      new_pkt_desc_list_elem->next->prev = new_pkt_desc_list_elem;
-    top_pkt_desc_flist = new_pkt_desc_list_elem;
-    last_pkt_desc_flist = new_pkt_desc_list_elem;
-  }
-  else
-  {
-    if (last_pkt_desc_flist->pkt_desc_ptr == NULL)
-      new_pkt_desc_list_elem = last_pkt_desc_flist;
-    else
-      new_pkt_desc_list_elem = last_pkt_desc_flist->prev;
-    new_pkt_desc_list_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
-    last_pkt_desc_flist = new_pkt_desc_list_elem;
-  }
+void print_pkt_desc_freelist_size()
+{
+    int count = 0;
+    struct pkt_desc_list_elem *curr = pkt_desc_stack_top;
+    while (curr != NULL)
+    {
+        count++;
+        curr = curr->next;
+    }
+    printf("[FREELIST] pkt_desc_stack_top has %d free pkt_desc entries\n", count);
 }
 
 
@@ -242,10 +203,16 @@ void flow_hash_release(flow_hash_t *rel_flow_hash_ptr)
 #ifdef DO_STATS
   flow_hash_list_count_use--;
 #endif
-  memset(rel_flow_hash_ptr, 0, sizeof(flow_hash_t));
+
+  rel_flow_hash_ptr->addr_pair.hash = 0;
+  rel_flow_hash_ptr->lazy_pending = false;
+  rel_flow_hash_ptr->pkt_desc_ptr = NULL;
+  rel_flow_hash_ptr->prev = NULL;
   rel_flow_hash_ptr->next = top_flow_hash_flist;
+
   top_flow_hash_flist = rel_flow_hash_ptr;
 }
+
 
 /* Circular Buffer Operations */
 /* Reference: https://github.com/embeddedartistry/embedded-resources/tree/master/examples/c/circular_buffer */
@@ -333,10 +300,6 @@ void **circular_buf_try_put(circular_buf_t *me, void *buf_slot_ptr)
     me->buf_space[me->tail] = buf_slot_ptr;
     temp_buf_slot_ptr_ptr = &(me->buf_space[me->tail]);
     me->tail = advance_headtail_value(me->tail, me->max);
-    if (me->tail == me->max)
-    {
-      me->tail = 0;
-    }
     return temp_buf_slot_ptr_ptr;
   }
   else
@@ -356,10 +319,6 @@ int circular_buf_get(circular_buf_t *me, void **buf_slot_ptr_ptr)
   if (!circular_buf_empty(me))
   {
     *buf_slot_ptr_ptr = me->buf_space[me->head];
-    if (me->tail == me->max)
-    {
-      me->tail = 0;
-    }
     me->head = advance_headtail_value(me->head, me->max);
     if (me->head == me->tail)
     {

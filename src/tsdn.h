@@ -38,7 +38,6 @@
 #define ETHER_HDRLEN 14
 #endif
 
-
 /*
  * Macros to simplify access to IPv4/IPv6 header fields
  */
@@ -76,7 +75,6 @@ void *MallocZ(int);
 void *ReallocZ(void *oldptr, int obytes, int nbytes);
 void *MMmalloc(size_t size, const char *f_name);
 
-
 /* connection naming information */
 Bool internal_src;
 Bool internal_dst;
@@ -103,8 +101,6 @@ void trace_init(void);
 void trace_check(void);
 void trace_cleanup(void);
 
-
-
 int getpayloadlength(struct ip *pip, void *plast);
 
 /*
@@ -127,8 +123,6 @@ Bool tv_same(struct timeval lhs, struct timeval rhs);
 #define US_PER_SEC 1000000 /* microseconds per second */
 #define MS_PER_SEC 1000    /* milliseconds per second */
 #define US_PER_MS 1000     /* microseconds per millisecond */
-
-
 
 /* memory management and garbage collection routines (freelist) */
 ip_packet *pkt_alloc(void);
@@ -186,7 +180,6 @@ struct ifreq if_idx;
 struct sockaddr_ll socket_address;
 char ifName[IFNAMSIZ];
 
-
 /* connection records are stored in a hash table.  */
 flow_hash_t **flow_hash_table;
 
@@ -195,7 +188,6 @@ flow_hash_t **flow_hash_table;
  */
 char *readline(FILE *fp, int skip_comment, int skip_void_lines);
 #define BUF_SIZE 80
-
 
 void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr);
 int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2);
@@ -224,7 +216,8 @@ u_long count_active_hosts(const unsigned char *result, int size);
 FILE *fp_log;
 FILE *fp_stats;
 
-typedef struct {
+typedef struct
+{
   va_list ap;
   const char *fmt;
   const char *file;
@@ -237,16 +230,24 @@ typedef struct {
 typedef void (*log_LogFn)(log_Event *ev);
 typedef void (*log_LockFn)(bool lock, void *udata);
 
-enum { LOG_STATS, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL };
+enum
+{
+  LOG_STATS,
+  LOG_DEBUG,
+  LOG_INFO,
+  LOG_WARN,
+  LOG_ERROR,
+  LOG_FATAL
+};
 
 #define log_stats(...) log_log(LOG_STATS, __FILE__, __LINE__, __VA_ARGS__)
 #define log_debug(...) log_log(LOG_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
-#define log_info(...)  log_log(LOG_INFO,  __FILE__, __LINE__, __VA_ARGS__)
-#define log_warn(...)  log_log(LOG_WARN,  __FILE__, __LINE__, __VA_ARGS__)
+#define log_info(...) log_log(LOG_INFO, __FILE__, __LINE__, __VA_ARGS__)
+#define log_warn(...) log_log(LOG_WARN, __FILE__, __LINE__, __VA_ARGS__)
 #define log_error(...) log_log(LOG_ERROR, __FILE__, __LINE__, __VA_ARGS__)
 #define log_fatal(...) log_log(LOG_FATAL, __FILE__, __LINE__, __VA_ARGS__)
 
-const char* log_level_string(int level);
+const char *log_level_string(int level);
 void log_set_lock(log_LockFn fn, void *udata);
 void log_set_level(int level);
 void log_set_quiet(bool enable);
@@ -254,7 +255,6 @@ int log_add_callback(log_LogFn fn, void *udata, int level);
 int log_add_fp(FILE *fp, int level);
 
 void log_log(int level, const char *file, int line, const char *fmt, ...);
-
 
 /* Statistic Variables */
 
@@ -277,14 +277,13 @@ u_long icmp_pkt_count_tot;
 // u_long local_icmp_pkt_count;
 
 /* Error Packets */
-u_long unsupported_pkt_count;
 u_long send_pkt_error_count;
 
 // Data Structure Counters
 u_long pkt_buf_count;
 u_long flow_hash_count;
 u_long lazy_flow_hash_count;
-u_long lazy_flow_hash_hit;
+u_long lazy_flow_clean_count;
 
 // Freelist Counters
 u_long pkt_list_count_tot;
@@ -318,14 +317,15 @@ u_long expired_pkt_count_icmp;
 u_long active_host_tbl_entry_count;
 u_long local_entry_count;
 
-
 extern timeval current_time;
 extern timeval last_log_time;
 extern timeval last_pkt_cleaned_time;
 extern timeval last_hash_cleaned_time;
 extern timeval last_idle_cleaned_time;
 
-extern timeval last_active_host_update_time;
-extern unsigned char active_host_list[65536];
+extern timeval last_active_entry_update_time;
+extern timeval last_active_host_merge_time;
+extern unsigned char active_entry_list[65536];
 extern unsigned char incoming_host_list[65536];
-pthread_mutex_t active_host_list_mutex;
+pthread_mutex_t active_entry_list_mutex;
+

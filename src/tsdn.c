@@ -31,12 +31,16 @@ struct timeval last_hash_cleaned_time;
 /* Timer for cleaning idle entries */
 struct timeval last_idle_cleaned_time;
 
-/* Active Host List. */
-struct timeval last_active_host_update_time;
-unsigned char active_host_list[65536];
+struct timeval last_lazy_free_log_time;
+
+	/* Active Host List. */
+	struct timeval last_active_entry_update_time;
+struct timeval last_active_host_merge_time;
+unsigned char active_entry_list[65536];
 unsigned char incoming_host_list[65536];
 uint32_t base_ip_int;
 
+#include <stdio.h>
 
 #ifdef DO_STATS
 void stats_init()
@@ -58,14 +62,13 @@ void stats_init()
 	// u_long out_icmp_pkt_count;
 	// u_long local_icmp_pkt_count;
 
-	unsupported_pkt_count = 0;
 	send_pkt_error_count = 0;
 
 	// Data Structure Counters
 	pkt_buf_count = 0;
 	flow_hash_count = 0;
 	lazy_flow_hash_count = 0;
-	lazy_flow_hash_hit = 0;
+	lazy_flow_clean_count = 0;
 
 	// Freelist Counters
 	pkt_list_count_tot = 0;
@@ -270,12 +273,12 @@ static int ProcessPacket(struct timeval *pckt_time,
 			send_pkt_error_count++;
 		}
 		return 0;
-	// }
-	// else if ()
-	// {
-	// 	// printf("packets from responder %s ->", inet_ntoa(pip->ip_src));
-	// 	// printf(" %s, proto %d dropping\n", inet_ntoa(pip->ip_dst), pip->ip_p);
-	// 	return 0;
+		// }
+		// else if ()
+		// {
+		// 	// printf("packets from responder %s ->", inet_ntoa(pip->ip_src));
+		// 	// printf(" %s, proto %d dropping\n", inet_ntoa(pip->ip_dst), pip->ip_p);
+		// 	return 0;
 	}
 
 	/* Check the IP protocol ICMP/TCP/UDP */
@@ -319,21 +322,18 @@ static int ProcessPacket(struct timeval *pckt_time,
 	}
 
 	default:
-#ifdef DO_STATS
-		unsupported_pkt_count++;
-#endif
 		break;
 	}
 
-	if (internal_ip(pip->ip_src))
-	{
-		/* Check if the packet is from an internal network */
-		uint32_t ip_src = ntohl(pip->ip_src.s_addr); 
-		uint32_t offset = ip_src - base_ip_int;
+	// if (internal_ip(pip->ip_src))
+	// {
+	// 	/* Check if the packet is from an internal network */
+	// 	uint32_t ip_src = ntohl(pip->ip_src.s_addr);
+	// 	uint32_t offset = ip_src - base_ip_int;
 
-		active_host_list[offset] = 1;
-		// printf("Active IP: offset %u (IP: %s)\n", offset, inet_ntoa(pip->ip_src));
-	}
+	// 	incoming_host_list[offset] = 1;
+	// 	// printf("Active IP: offset %u (IP: %s)\n", offset, inet_ntoa(pip->ip_src));
+	// }
 
 	return 1;
 }
@@ -342,8 +342,8 @@ void print_all_stats()
 {
 	printf("----------------------------------------\n");
 	printf("\nDoing Statistics... \n");
-	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, unsupported_pkt_count: %ld, "
-		   "pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_hash_hit: %ld, "
+	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, "
+		   "pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_clean_count: %ld, "
 		   "pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, flow_hash_search_depth: %ld, "
 		   "installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, "
 		   "replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, "
@@ -351,8 +351,8 @@ void print_all_stats()
 		   "active_host_tbl_entry_count: %ld, local_entry_count: %ld, "
 		   "send_pkt_error_count: %ld\n",
 
-		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
-		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
+		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot,
+		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_clean_count,
 		   pkt_list_count_tot, pkt_list_count_use,
 		   flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
 		   installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
@@ -366,10 +366,13 @@ void print_all_stats()
 	{
 		printf("\n%ld.%ld Pcap Statistics\n", current_time.tv_sec, current_time.tv_usec);
 		// fprintf(fp_log, "\n%ld, %ld Pcap Statistics\n", current_time.tv_sec, current_time.tv_usec);
-		printf("Received: %d, Processed: %ld, Still in queue: %ld, Dropped: %d, Dropped by interface: %d\n", 
-				stats_pcap.ps_recv, pkt_count, (stats_pcap.ps_recv-pkt_count), stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
+		printf("Received: %d, Processed: %ld, Still in queue: %ld, Dropped: %d, Dropped by interface: %d\n",
+			   stats_pcap.ps_recv, pkt_count, (stats_pcap.ps_recv - pkt_count), stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
 		// fprintf(fp_log, "Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
 	}
+
+	/* Print the flow hash table distribution */
+	// print_flow_hash_table_distribution();
 }
 
 void clean_all()
@@ -389,15 +392,15 @@ void clean_all()
 
 void sig_proc(int sig)
 {
-	log_stats("stats,%ld,%ld,%ld,%ld,%ld,"
+	log_stats("stats,%ld,%ld,%ld,%ld,"
 			  "%ld,%ld,%ld,%ld,"
 			  "%ld,%ld,%ld,%ld,%ld,"
 			  "%ld,%ld,%ld,%ld,%ld,"
 			  "%ld,%ld,%ld,%ld,"
 			  "%ld,%ld,%ld,%ld,"
 			  "%ld,%ld,%ld",
-			  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
-			  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
+			  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot,
+			  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_clean_count,
 			  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
 			  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
 			  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
@@ -455,8 +458,8 @@ void init_log()
 
 	fp_stats = fopen(stat_file_name, "w+");
 	fprintf(fp_stats, "time,level,file,line,msg,"
-					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,unsupported_pkt_count,"
-					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_hash_hit,"
+					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,"
+					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_clean_count,"
 					  "pkt_list_count_tot,pkt_list_count_use,"
 					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
 					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
@@ -468,10 +471,11 @@ void init_log()
 	log_set_quiet(TRUE);
 }
 
-uint32_t ip_to_int(const char *ip_str) {
-    struct in_addr ip_addr;
-    inet_aton(ip_str, &ip_addr);
-    return ntohl(ip_addr.s_addr); 
+uint32_t ip_to_int(const char *ip_str)
+{
+	struct in_addr ip_addr;
+	inet_aton(ip_str, &ip_addr);
+	return ntohl(ip_addr.s_addr);
 }
 
 int main(int argc, char *argv[])
@@ -590,7 +594,8 @@ int main(int argc, char *argv[])
 
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
-	last_active_host_update_time = last_hash_cleaned_time = last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
+	last_lazy_free_log_time = last_active_host_merge_time = last_hash_cleaned_time = 
+	last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
 
 	struct timeval pkt_process_start_time, pkt_process_end_time;
 	struct timeval pkt_process_end_time_tmp = current_time;
@@ -607,15 +612,15 @@ int main(int argc, char *argv[])
 			install_buf_size = entry_circ_buf_size();
 
 #ifdef LOG_TO_FILE
-			log_stats("stats,%ld,%ld,%ld,%ld,%ld,"
+			log_stats("stats,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld,%ld,"
 					  "%ld,%ld,%ld",
-					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot, unsupported_pkt_count,
-					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_hash_hit,
+					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot,
+					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_clean_count,
 					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
 					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
 					  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
@@ -629,13 +634,22 @@ int main(int argc, char *argv[])
 			gettimeofday(&pkt_process_end_time, NULL);
 			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, current_time));
 #endif
-			if (pkt_count % 1000000 == 0)
+			if (pkt_count % 100000 == 0)
 			{
 				print_all_stats();
-				
 			}
 		}
 #endif
+
+		// /* check active hosts */
+		// if (tv_sub_2(current_time, last_active_host_merge_time) > (ACTIVE_HOST_UPDATE_PERIOD + 1000))
+		// {
+		// 	last_active_host_merge_time = current_time;
+		// 	pthread_mutex_lock(&active_entry_list_mutex);
+		// 	int active_hosts = count_active_hosts(active_entry_list, 65536);
+		// 	// printf("Active hosts: %d\n", active_hosts);
+		// 	pthread_mutex_unlock(&active_entry_list_mutex);
+		// }
 	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
 
 	clean_all();

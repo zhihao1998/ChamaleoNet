@@ -19,4 +19,5 @@ zlog-cfg-cur*
 /analysis/figs
 *.csv
 *.pdf
+/old_log/
 

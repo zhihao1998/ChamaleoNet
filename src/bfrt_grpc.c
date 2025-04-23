@@ -6,7 +6,6 @@ static circular_buf_t *p4_entry_circ_buf;
 static pthread_mutex_t entry_install_mutex;
 static pthread_cond_t entry_install_cond;
 char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
-u_long active_hosts = 0;
 
 u_long entry_circ_buf_size()
 {
@@ -100,13 +99,12 @@ void *install_thead_main(void *args)
 				table_entry_release(table_entry_ptr);
 
 				batch_index++;
-				Py_DECREF(entry_key);
+				Py_XDECREF(entry_key);
 			}
 
 			PyTuple_SetItem(ArgList, 0, entry_list);
 			PyObject_CallObject(p_add_batch_Func, ArgList);
-			Py_DECREF(entry_list);
-			Py_DECREF(ArgList);
+			Py_XDECREF(ArgList);
 
 #ifdef DO_STATS
 			installed_entry_count_tot += batch_index;
@@ -134,15 +132,15 @@ void *install_thead_main(void *args)
 			}
 		}
 
-		/* Update active host list every 1 min */
-		if (elapsed(last_active_host_update_time, current_time) > ACTIVE_HOST_UPDATE_PERIOD)
-		{
-			bfrt_update_active_host_list();
-			gettimeofday(&last_active_host_update_time, NULL);
-		}
+		// /* Update active host list every 1 min */
+		// if (elapsed(last_active_entry_update_time, current_time) > ACTIVE_HOST_UPDATE_PERIOD)
+		// {
+		// 	bfrt_update_active_host_list();
+		// 	gettimeofday(&last_active_entry_update_time, NULL);
+		// }
 	}
 
-	Py_DECREF(p_add_batch_Func);
+	Py_XDECREF(p_add_batch_Func);
 	PyGILState_Release(py_state);
 #endif
 	return NULL;
@@ -158,9 +156,9 @@ int clean_all_idle_entries()
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
-	Py_DECREF(pRes);
+	Py_XDECREF(pFunc);
+	Py_XDECREF(pArgs);
+	Py_XDECREF(pRes);
 	return ret;
 }
 
@@ -170,9 +168,9 @@ void bfrt_clear_tables()
 	pFunc = PyObject_GetAttrString(pInstance, "clear_service_table");
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
-	Py_DECREF(pRes);
+	Py_XDECREF(pFunc);
+	Py_XDECREF(pArgs);
+	Py_XDECREF(pRes);
 }
 
 u_long count_active_hosts(const unsigned char *result, int size) {
@@ -186,28 +184,24 @@ u_long count_active_hosts(const unsigned char *result, int size) {
 /* Update active host list */
 void bfrt_update_active_host_list()
 {
-	PyObject *pArgs, *pRes, *pFunc;
+	PyObject *pArgs, *pFunc;
 	pFunc = PyObject_GetAttrString(pInstance, "get_active_hosts");
 	pArgs = Py_BuildValue("()");
 	assert(pFunc != NULL);
 
 	PyObject *pList = PyObject_CallObject(pFunc, NULL);
-    if (!pList || !PyList_Check(pList)) {
-        PyErr_Print();
-        fprintf(stderr, "Function did not return a list\n");
-        Py_DECREF(pFunc);
-    }
+    assert ((pList) && (PyList_Check(pList)));
 
-	pthread_mutex_lock(&active_host_list_mutex);
+	pthread_mutex_lock(&active_entry_list_mutex);
 	for (Py_ssize_t i = 0; i < 65536; ++i) {
-        PyObject *item = PyList_GetItem(pList, i);  // borrowed ref
-        active_host_list[i] = PyObject_IsTrue(item);        // 0 or 1
+        PyObject *item = PyList_GetItem(pList, i);  
+        active_entry_list[i] = PyObject_IsTrue(item);
     }
-	pthread_mutex_unlock(&active_host_list_mutex);
+	pthread_mutex_unlock(&active_entry_list_mutex);
 	
-	Py_DECREF(pList);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
+	Py_XDECREF(pList);
+	Py_XDECREF(pFunc);
+	Py_XDECREF(pArgs);
 }
 
 /* Initialze Grpc object */
@@ -250,9 +244,9 @@ void bfrt_grpc_init()
 
 void bfrf_grpc_destroy()
 {
-	Py_DECREF(pInstance);
-	Py_DECREF(pClass);
-	Py_DECREF(pModule);
+	Py_XDECREF(pInstance);
+	Py_XDECREF(pClass);
+	Py_XDECREF(pModule);
 	Py_Finalize();
 }
 
@@ -268,9 +262,9 @@ int bfrt_get_table_usage()
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
-	Py_DECREF(pRes);
+	Py_XDECREF(pFunc);
+	Py_XDECREF(pArgs);
+	Py_XDECREF(pRes);
 	return ret;
 }
 
@@ -285,9 +279,9 @@ int bfrt_get_local_entry_number()
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	PyArg_Parse(pRes, "i", &ret);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
-	Py_DECREF(pRes);
+	Py_XDECREF(pFunc);
+	Py_XDECREF(pArgs);
+	Py_XDECREF(pRes);
 	return ret;
 }
 
@@ -301,8 +295,8 @@ int bfrt_print_tables_info()
 	pArgs = Py_BuildValue("()");
 	pRes = PyEval_CallObject(pFunc, pArgs);
 	// PyArg_Parse(pRes, "i", &ret);
-	Py_DECREF(pFunc);
-	Py_DECREF(pArgs);
-	Py_DECREF(pRes);
+	Py_XDECREF(pFunc);
+	Py_XDECREF(pArgs);
+	Py_XDECREF(pRes);
 	return ret;
 }

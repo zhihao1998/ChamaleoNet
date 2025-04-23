@@ -1,7 +1,7 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-#define PKT_BUF_SIZE 10000
+#define PKT_BUF_SIZE 200000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
@@ -19,21 +19,22 @@ Increase this number on high speed network will help ...*/
 #define PKT_BUF_GC_PERIOD 100
 
 /* TIMEOUT in microseconds: timeout to consider a packet is expired (no answering from internal hosts) */
-#define PKT_TIMEOUT 70000
+#define PKT_TIMEOUT 1000000
 
 /* max depth of the linear search in the previous vector... */
-#define LIST_SEARCH_DEPT 5
+#define LIST_SEARCH_DEPT 100
 
 /* connection records are stored in a hash table.  Buckets are linked	*/
 /* lists sorted by most recent access.					*/
 /* oughta be prime  and larger than PKT_BUF_SIZE */
-#define FLOW_HASH_TABLE_SIZE 1000000
 
 /* Every FLOW_HASH_TABLE_GC_PERIOD, scan FLOW_HASH_TABLE_GC_SIZE entries. */
 /* After FLOW_HASH_TABLE_GC_PERIOD / (FLOW_HASH_TABLE_SIZE / FLOW_HASH_TABLE_GC_SIZE), the whole hash table is completely scanned once */
 /* So the lazy free timeout should be 2*FLOW_HASH_TABLE_GC_PERIOD / (FLOW_HASH_TABLE_SIZE / FLOW_HASH_TABLE_GC_SIZE) */
-#define FLOW_HASH_TABLE_GC_SIZE 1000
-#define FLOW_HASH_TABLE_GC_PERIOD 1000
+
+#define FLOW_HASH_TABLE_SIZE 20000000
+#define FLOW_HASH_TABLE_GC_SIZE 10
+#define FLOW_HASH_TABLE_GC_PERIOD 10
 #define FLOW_HASH_TABLE_GC_TIMEOUT 1000000
 
 /* 
@@ -49,7 +50,7 @@ Increase this number on high speed network will help ...*/
 #define ENTRY_IDLE_CLEAN_BATCH_SIZE 2000
 #define ENTRY_GC_PERIOD 5000000 //us
 
-#define ACTIVE_HOST_UPDATE_PERIOD 60000000 //us
+#define ACTIVE_HOST_UPDATE_PERIOD 6000000 //us
 
 /* Max number of nets to check if ip is internal or external */
 #define MAX_INTERNAL_HOSTS  100
@@ -62,9 +63,9 @@ Increase this number on high speed network will help ...*/
 /* Logging Sampling granularity */
 #define DO_STATS
 #define LOG_TO_FILE
-#define PKT_LOG_SAMPLE_CNT 500000      // pkt_count
-#define TIMEOUT_SAMPLE_CNT 500000     // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 60000000  // us
+#define PKT_LOG_SAMPLE_CNT 5000      // pkt_count
+#define TIMEOUT_SAMPLE_CNT 5000     // tot_expired_pkt_count
+#define STATS_LOG_SAMPLE_TIME 50000  // us
 
 #define SWITCH_ENABLED
 
