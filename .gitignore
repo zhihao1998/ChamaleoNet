@@ -10,14 +10,14 @@
 /p4/build
 /p4/log
 */__pycache__
-/log
+!log/archived/*
+log/*.csv
 /.venv
 bf_drivers.log*
 zlog-cfg-cur*
 *.log
 /analysis/results
 /analysis/figs
-*.csv
 *.pdf
 /old_log/
 
