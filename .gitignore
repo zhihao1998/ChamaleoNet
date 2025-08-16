@@ -17,7 +17,10 @@ zlog-cfg-cur*
 *.log
 /analysis/results
 /analysis/figs
-*.csv
+/old_log
+
+# analysis and output files
+/analysis
 *.pdf
 /old_log/
 
