@@ -1,0 +1,2 @@
+# Enable passing-through processing (without buffering) of all hosts in the following subnets.
+192.168.2.0/24

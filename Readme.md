@@ -1,172 +1,148 @@
-# TODO
+<div align="center">
+<h1><span style="font-variant: small-caps;">ChamaleoNet</span>: Programmable Passive Probe for Enhanced Visibility on Erroneous Traffic</h1>
 
-- replay faster
-- how many traffic can be handled with no problem of installing entries
-- separate the traffic by incoming and outgoing (only care about the incoming)
-- the long-live flow (new packets after deleting the entry in switch)
-- install entries by batch rather than single
+[🤖Overview](#🤖overview) | 
+[📦Deployment](#📦deployment) | 
+[📚Cite](#📚cite)
 
-# C-based Controller for Transparent SDN Honeypot
+[![ArXiv Link](https://img.shields.io/badge/arXiv-red?logo=arxiv)](todo)
 
-Source code of the host-based solution of Transparent SDN Honeypot. 
+</div>
 
-> Use the SDN/programmable switch to design and engineering a system that transforms a “live” network into a darknet/honeypot flexible system. The basic idea is to let the system impersonate an internal host when it is not present (e.g., a laptop or a host that is powered off) so that the traffic received by external hosts (e.g., possible attackers) is rerouted to the darknet/honeypot sensor. To do this, we can opt to use the SDN switch to offload the "intelligence" part of the routing decision.
+<h2 id="🤖overview">🤖 Overview</h2>
 
-The logical structure is described as:
+![alt text](./assets/live_deployment.jpg)
 
-![host-flow-diagram.jpg](/.images/host-flow-diagram.jpg)
+<span style="font-variant: small-caps;">ChamaleoNet</span> is an open-source system that brings visibility into *erroneous traffic* — network requests that go unanswered or generate errors. Unlike traditional monitoring tools that focus on performance metrics, security logs, or unsolicited traffic (e.g., network telescopes), <span style="font-variant: small-caps;">ChamaleoNet</span> highlights an overlooked but critical signal:
 
+- clients connecting to offline or firewalled systems
+- misconfigured hosts targeting the wrong servers
+- routing issues
+- malicious actors probing for vulnerable services.
 
-## Dependencies
-This project is developed with the following dependencies:
+By capturing and analyzing this class of traffic, <span style="font-variant: small-caps;">ChamaleoNet</span> helps administrators uncover misconfigurations, detect infected internal hosts, and observe external scans more effectively.
 
-- tcpdump version 4.9.3
-- libpcap version 1.9.1 (with TPACKET_V3)
-- gcc (Ubuntu 9.4.0-1ubuntu1~20.04.2) 9.4.0
-- GNU Make 4.2.1
+This is the code repository for the paper [ChamaleoNet: Programmable Passive Probe for Enhanced Visibility on Erroneous Traffic](https://arxiv.org/), which is under review at IEEE Transactions on Networking.
 
-## To RUN
-1. Create the dirs `make makedir`
-2. Specify the device name `dev` to be captured in `tsdn.c`, which is `virbr0` by default.
-3. Compile the target ```tsdn```.
-4. Run the main executable object by `sudo ./bin/tsdn`. Typically, libpcap requires root privilege. If the current user has root privilege to execute packet capturing, `sudo` can be omitted.
-5. Send some packets to the interface.
+### ✨ Key Features
 
+- **Erroneous traffic monitoring**: Collects packets that normal systems ignore, offering a new lens into failures, misconfigurations, and attacks.
+- **Visibility on external/internal radiation**: Logs radiation from both external hosts (e.g., scans against inactive or firewalled systems) and internal hosts (e.g., misconfigured or compromised devices).
+- **Impersonator support**: Can support impersonating inactive hosts or services, engaging scanners like a honeypot.
+- **SDN-powered scalability**: Built on programmable switches, filtering are offloaded to the high-speed programmable switches.
+- **Privacy by design**: Collects only erroneous packets, strips application payloads, and anonymizes internal IPs where possible.
 
-### Build and Run
+### 🚀 Why <span style="font-variant: small-caps;">ChamaleoNet</span>?
 
+Traditional monitoring systems:
 
-```shell
-iftofinoup
+✅ provide stats on normal traffic (performance, usage),
 
+✅ protect infrastructure against known threats,
 
-sudo p4-build -o p4/build/ p4/tf_honeypot.p4
+✅ log unsolicited traffic on unused subnets (telescopes),
 
-cd p4/log
+❌ but miss erroneous traffic — a valuable signal for both operations and security.
 
-tfm -p tf_honeypot
+<span style="font-variant: small-caps;">ChamaleoNet</span> fills this gap by transforming any campus or enterprise network into a flexible, transparent monitor for erroneous traffic, without interfering with regular operations.
 
-p4 -p tf_honeypot
+<h2 id="📦deployment">📦 Deployment</h2>
 
-sudo tcpdump -vvv -i veth2 -w pcap/test.pcap
+### Requirements
 
-sudo tcpreplay -i veth4 trace/ip_complete.pcap
+#### Hardware requirements
 
-```
+As shown in the figure above,  <span style="font-variant: small-caps;">ChamaleoNet</span>  depends on a programmable switch (e.g., we use P4-based [Intel Tofino](https://www.intel.com/content/www/us/en/products/network-io/programmable-ethernet-switch.html)) and a server hosting the control plane and FSD-NF. There should be a dedicated port on the switch connected to the server, serving as data path. Control path requires a connection to the switch via gRPC. The collector can either be hosted at the same server or a dedicated server connected to the FSD-NF.
 
+#### Software requirements
 
+- gcc compiler
+- Libpcap
+- P4 compiler (tofino-p4c)
+- Python 3.x
+- libpython3-dev
+- BFrt gRPC client library
 
+### Build
 
-## Add virtual interface
+To install <span style="font-variant: small-caps;">ChamaleoNet</span>, follow:
 
-```bash
-sudo brctl addbr brtest
-sudo ifconfig brtest up
-```
+1. **Configuration**
 
-```bash
-sudo bridge fdb add 52:54:00:80:26:bc dev vnet114 master temp
+- Edit the `conf/net.internal` and `conf/net.responder` files to specify the subnets to monitor.
+- Edit the `conf/param.h` file to set the parameters for the FSD-NF, such as sizing the data structures, and setting the port to be monitored.
+- Edit the `p4_src/p4include/definition.p4` and `p4_src/bfrt_setup.py` to set P4-side parameters, such as the switch local port number, and target IP ranges.
 
-
-sudo bridge fdb add 90:2d:77:3f:b5:a2 dev ens5f1 master temp
-
-sudo bridge fdb del 52:54:00:50:f6:6f dev vnet2 master temp
-sudo bridge fdb del 90:2d:77:3f:b5:a2 dev ens5f1 master temp
-
-sudo bridge fdb del 52:54:00:50:f6:6f dev vnet84 master temp
-sudo bridge fdb del 90:2d:77:3f:b5:a2 dev ens5f1v3 master temp
-
-sudo bridge fdb del 90:2d:77:3f:b5:a2 dev vnet14 master temp
-```
+2. **Compile and start P4 program**
 
 ```bash
- sudo brctl show br1
-sudo brctl showmacs br1
-sudo brctl showstp br1
+<your p4 build cmd> p4_src/tf_honeypot.p4
+<your p4 start cmd> -p tf_honeypot # Start the P4 program and enter the BFrt shell
 
-nmcli connection show --active
-```
+bfshell> bfrt_python p4_src/bfrt_setup.py false # Set up the tables and ports on the switch
+``` 
 
-## Attack Simulation
-
-### SYN Flood
+3. **Compile and start the FSD-NF**
 
 ```bash
-sudo tcpreplay -i veth250 --mbps 1000 trace/syn_flood.pcap
+make 
+sudo ./bin/tsdn # raw packet capturing requires root privileges
 ```
+
+4. **Start the packet collection**
 
 ```bash
-sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 -i ens5f1 --stats=2 --mtu-trunc --mbps=1000 polito_with_syn_flood.pcap
-
-sudo tcpreplay-edit -i enp8s0 --stats=5 --mtu-trunc --mbps=1000 trace/polito_with_syn_flood.pcap
-
-sudo tcpreplay-edit --enet-dmac=90:2d:77:3f:b5:a2 --enet-smac=52:54:00:16:f4:4c -i enp8s0 --stats=2 --mtu-trunc --mbps=2000 trace/polito_with_syn_flood.pcap
-
-trafgen --cpp --dev enp8s0 --conf trace/syn_flood.traf -n 10000000 --verbose -b 5Gbit
-
-tcprewrite --enet-dmac=90:2d:77:3f:b5:a2 --enet-smac=52:54:00:16:f4:4c --fixlen=pad --infile=polito-1m_00000_20240510092043.pcap --outfile=out_polito_1m.pcap
-
+tcpdump -i <interface> -w <output_file>
 ```
 
-
-## Benchmarks
-
-### Indicators
-
-#### Packet Counter
-
-- total parsed packet number
-- TCP packet number
-- UDP packet number
-- ICMP packet number
-
-#### Data Structure
-
-- hash table size
-- circular buffer size
-- lazy free buffer size
-- all free list size in use
-- all free list size in total
-
-#### Functionalities
-
-- installed flow number (returned by the grpc client)
-- expired packet number
-
-
-## Performance Profile
-
-### Memory Usage Monitoring
-
-valgrind degrades the performance of the target program a lot, so do the memory usage profiling separately.
+### Project Structure
 
 ```bash
-sudo valgrind --tool=massif ./debug/tsdn
+├── src
+│   ├── bfrt_grpc.c # Interface to the Python-based BFrt controller
+│   ├── data_structure.c # Data structures for packet handling
+│   ├── ip.c # Utilities for IP address handling
+│   ├── log.c # Logging utilities
+│   ├── param.h # Configuration parameters
+│   ├── pkt_handle.c # Packet handling logic
+│   ├── struct.h # Header file for data structures
+│   ├── tsdn.c # Main logic for the project
+│   ├── tsdn.h # Header file for main logic
+│   └── utils.c # Utility functions
+├── bfrt_grpc
+│   ├── bfrt_grpc_client.py # Python client for BFrt gRPC
+├── conf
+│   ├── net.internal # Subnets to be monitored
+│   └── net.responder # Subnets to skip buffering
+├── LICENSE
+├── Makefile # Makefile for building the project
+├── p4_src # P4 source files for the programmable switch
+│   ├── p4include
+│   │   ├── definition.p4
+│   │   ├── egress.p4
+│   │   ├── header.p4
+│   │   └── ingress.p4
+│   ├── tf_honeypot.p4 # P4 program for the honeypot functionality
+│   └── bfrt_setup.py # set up the tables and ports on the switch
 ```
 
-```bash
-sudo valgrind --tool=callgrind --collect-systime=nsec debug/tsdn
-sudo rm -rf *.out.*
-sudo chmod 777  callgrind.out*
+<h2 id="📚cite">📚 Cite</h2>
+
+```bibtex
+@inproceedings{wang2025chamaleonet,
+  title = {ChamaleoNet: Programmable Passive Probe for Enhanced Visibility on Erroneous Traffic},
+  author = {Zhihao Wang, Alessandro Cornacchia, Andrea Bianco, Idilio Drago, Paolo, Dingde Jiang, and Marco Mellia},
+  year = {2025},
+  booktitle = {TBD},
+  url={TBD}, 
+}
 ```
 
-### Traffic Monitoring
+# Acknowledgement
 
-Once the response of one request packet is received, it will be identified as a flow originated or destined to an active service, which is very possible a legitimate flow. The controller installs an entry to the switch to drop all packets from this flow, alleviating the traffic load that it has to process. Here we monitor the traffic speed of the interface that receives traffic from switch, to evaluate how many legitimate flow can be filtered.
-
-```bash
-vnstat --live -i enp8s0  --json > log/recv_speed_log.json
-
-vnstat --live -i enp8s0  --json > log/send_speed_log.json
-```
+The network infrastructure used in this work was supported by the [SUP4RNET](https://sup4rnet.github.io/) at Politecnico di Torino, Italy. Thanks to all authors for their contributions to <span style="font-variant: small-caps;">ChamaleoNet</span>.
 
 
-### Utils
+# Licence
 
-Split a large pcap file into several smaller ones.
-
-```bash
-tcpdump -r polito-1h-10-05-2024-snaplen-100-echelon3.pcap -w ~/Tstat/data/pcap_1s/polito-1s- -G 1
-
-scp net_stat.csv zhihaow@restsrv01-smartdata01:/home/zhihaow/codes/honeypot_c_controller/log
-```
+Licensed under the MIT license.

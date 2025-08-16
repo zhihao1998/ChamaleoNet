@@ -29,10 +29,9 @@ sys.path.append(os.path.join(SDE_PYTHON3, 'tofino', 'bfrt_grpc'))
 import bfrt_grpc.client as gc
 import bfrt_grpc.bfruntime_pb2 as bfruntime_pb2
 
-remote_grpc_addr = '192.168.24.69:50052'
+remote_grpc_addr = '192.168.24.69:50052' # Change this to your controller's IP address
 local_grpc_addr = 'localhost:50052'
-
-
+base_ip_range = "154.200.0.0/16"  # Change this to your IP range to be monitored
 
 def ip_to_int(ipv4_address):
     return struct.unpack('!I', socket.inet_aton(ipv4_address))[0]
@@ -58,9 +57,7 @@ class Bfrt_GRPC_Client:
                  timeout=1,
                  num_tries=5,
                  perform_subscribe=True,
-                 target=gc.Target(),
-                 enable_time_log=False,
-                 enable_rule_log=False):
+                 target=gc.Target()):
 
         if perform_bind and not perform_subscribe:
             raise RuntimeError(
@@ -72,8 +69,7 @@ class Bfrt_GRPC_Client:
         self.installed_flows_counter = Counter()
 
         self.active_hosts = [0] * 65536
-        self.base_ip_int = int(ipaddress.IPv4Network("154.200.0.0/16").network_address)
-        self.active_hosts_file = "/home/zhihaow/codes/honeypot_c_controller/log/active_hosts/active_hosts.log"
+        self.base_ip_int = int(ipaddress.IPv4Network(base_ip_range).network_address) 
         
         self.interface = gc.ClientInterface(
             grpc_addr, 
@@ -108,28 +104,6 @@ class Bfrt_GRPC_Client:
                                                    1000)
         self.entry_ttl = entry_ttl
         self.clean_batch_size = clean_batch_size
-
-        # initialize log files
-        self.enable_time_log = enable_time_log
-        self.enable_rule_log = enable_rule_log
-        self.init_log()
-
-    def init_log(self):
-        now = datetime.now()
-        cur_date = now.strftime("%Y%m%d")
-        cur_hour = now.hour
-        cur_min = now.minute
-        cur_sec = now.second
-        cur_time = ''.join([cur_date, '_', str(cur_hour), '-', str(cur_min), '-', str(cur_sec)])
-
-        # self.log_file = open(f"/home/zhihaow/codes/honeypot_c_controller/log/{cur_time}_bfrt.log", "w+")
-
-        if self.enable_time_log:
-            self.time_log_file_fp = open(f"/home/zhihaow/codes/honeypot_c_controller/log/{cur_time}_bfrt_time.log", "w+")
-            self.time_log_file_fp.write("time,op,num,cost\n")
-
-        if self.enable_rule_log:
-            self.last_rule_log_time = time.time()
             
 
     def __getattr__(self, name):
@@ -256,10 +230,6 @@ class Bfrt_GRPC_Client:
         if len(key_list) > 0:
             # print(f"clean {len(key_list)} entries")
             self.service_table.entry_del(self.target, key_list)
-
-            if self.enable_time_log:
-                self.time_log_file_fp.write(f"{time.time()},remove,{count},{round(time.time() - start_time, 5)}\n")
-                self.time_log_file_fp.flush()
         return 0
         
             
@@ -269,8 +239,6 @@ class Bfrt_GRPC_Client:
         start_time = time.time()
         try:
             for index, key in enumerate(entry_key_list):
-                if self.enable_rule_log:
-                    self.installed_flows_counter[f'{int_to_ip(key[0])}_{key[1]}_{key[2]}'] += 1
 
                 if f'{key[0]}_{key[1]}_{key[2]}' in self.installed_flows:
                     continue
@@ -285,36 +253,12 @@ class Bfrt_GRPC_Client:
                 data_list.append(self.service_table.make_data([gc.DataTuple('$ENTRY_TTL', self.entry_ttl)], 
                                                             'Ingress.drop'))
             self.service_table.entry_add(self.target, key_list, data_list)
-
-            if self.enable_time_log:
-                self.time_log_file_fp.write(f"{time.time()},add,{len(key_list)},{round(time.time() - start_time, 5)}\n")
-                self.time_log_file_fp.flush()
-            
-            if self.enable_rule_log:
-                c_time = time.time()
-                if c_time - self.last_rule_log_time > 1800:
-                    self.write_counter_to_file()
-                    self.last_rule_log_time = c_time
                     
         except Exception as e:
             pass
             # self.log_file.write(f"{start_time}, Add Error: {e}\n")
             # traceback.print_exc()
         return 1
-    
-    def write_counter_to_file(self):
-        now = datetime.now()
-        cur_date = now.strftime("%Y%m%d")
-        cur_hour = now.hour
-        cur_min = now.minute
-        cur_sec = now.second
-        cur_time = ''.join([cur_date, '_', str(cur_hour), '-', str(cur_min), '-', str(cur_sec)])
-        rule_log_file = f"/home/zhihaow/codes/honeypot_c_controller/log/rule_counter/{cur_time}_bfrt_rule.pkl"
-
-        with open(rule_log_file, "wb") as f:
-            pickle.dump(self.installed_flows_counter, f)
-
-        self.installed_flows_counter = Counter()
 
     def get_active_hosts(self):
         """

@@ -1,23 +1,31 @@
+# compilation and build files
 /bin
 /debug
 /obj
 /test
-*.o
-*.out.*
+
+# pcaps
 *.pcap
 /pcap
-/trace
+
+# logs and temporary files
 /p4/build
 /p4/log
 */__pycache__
-!log/archived/*
-log/*.csv
+/log
 /.venv
 bf_drivers.log*
 zlog-cfg-cur*
 *.log
-/analysis/results
-/analysis/figs
-*.pdf
-/old_log/
 
+# analysis and output files
+/analysis
+*.pdf
+
+# settings and util scripts
+/.vscode
+gdb
+/utils
+tsdn.sh
+conf/net.internal
+conf/net.responder

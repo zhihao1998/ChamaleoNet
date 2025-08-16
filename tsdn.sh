@@ -1,1 +1,0 @@
-make && sudo ./bin/tsdn 

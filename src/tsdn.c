@@ -632,7 +632,7 @@ int main(int argc, char *argv[])
 		{
 #ifdef LOG_TO_FILE
 			gettimeofday(&pkt_process_end_time, NULL);
-			log_stats("pkt_processing_time,%d,%d", pkt_count, tv_sub_2(pkt_process_end_time, current_time));
+			log_stats("pkt_processing_time,%ld,%d", pkt_count, tv_sub_2(pkt_process_end_time, current_time));
 #endif
 			if (pkt_count % 100000 == 0)
 			{
