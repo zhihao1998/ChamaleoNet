@@ -6,7 +6,7 @@
 - the long-live flow (new packets after deleting the entry in switch)
 - install entries by batch rather than single
 
-# C-based Controller for Transparent SDN Honeypot
+[![ArXiv Link](https://img.shields.io/badge/arXiv-2508.12496-red?logo=arxiv)](https://arxiv.org/abs/2508.12496)
 
 Source code of the host-based solution of Transparent SDN Honeypot. 
 
@@ -84,7 +84,16 @@ sudo bridge fdb del 90:2d:77:3f:b5:a2 dev vnet14 master temp
 sudo brctl showmacs br1
 sudo brctl showstp br1
 
-nmcli connection show --active
+```bibtex
+@misc{wang2025chamaleonet,
+      title={ChamaleoNet: Programmable Passive Probe for Enhanced Visibility on Erroneous Traffic}, 
+      author={Zhihao Wang and Alessandro Cornacchia and Andrea Bianco and Idilio Drago and Paolo Giaccone and Dingde Jiang and Marco Mellia},
+      year={2025},
+      eprint={2508.12496},
+      archivePrefix={arXiv},
+      primaryClass={cs.CR},
+      url={https://arxiv.org/abs/2508.12496}, 
+}
 ```
 
 ## Attack Simulation
