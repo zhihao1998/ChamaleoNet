@@ -5,7 +5,7 @@
 [📦Deployment](#📦deployment) | 
 [📚Cite](#📚cite)
 
-[![ArXiv Link](https://img.shields.io/badge/arXiv-red?logo=arxiv)](todo)
+[![ArXiv Link](https://img.shields.io/badge/arXiv-2508.12496-red?logo=arxiv)](https://arxiv.org/abs/2508.12496)
 
 </div>
 
@@ -129,12 +129,14 @@ tcpdump -i <interface> -w <output_file>
 <h2 id="📚cite">📚 Cite</h2>
 
 ```bibtex
-@inproceedings{wang2025chamaleonet,
-  title = {ChamaleoNet: Programmable Passive Probe for Enhanced Visibility on Erroneous Traffic},
-  author = {Zhihao Wang, Alessandro Cornacchia, Andrea Bianco, Idilio Drago, Paolo, Dingde Jiang, and Marco Mellia},
-  year = {2025},
-  booktitle = {TBD},
-  url={TBD}, 
+@misc{wang2025chamaleonet,
+      title={ChamaleoNet: Programmable Passive Probe for Enhanced Visibility on Erroneous Traffic}, 
+      author={Zhihao Wang and Alessandro Cornacchia and Andrea Bianco and Idilio Drago and Paolo Giaccone and Dingde Jiang and Marco Mellia},
+      year={2025},
+      eprint={2508.12496},
+      archivePrefix={arXiv},
+      primaryClass={cs.CR},
+      url={https://arxiv.org/abs/2508.12496}, 
 }
 ```
 
