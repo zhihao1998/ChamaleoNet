@@ -29,6 +29,8 @@
 #include <signal.h>
 #include <dirent.h>
 #include <getopt.h>
+#include <stdatomic.h>
+#include <inttypes.h>
 
 #include "struct.h"
 #include "param.h"
@@ -207,10 +209,8 @@ int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service
 int bfrt_get_table_usage();
 int bfrt_get_local_entry_number();
 int clean_all_idle_entries();
-u_long entry_circ_buf_size();
+uint64_t entry_circ_buf_size();
 int bfrt_add_batch_entries(PyObject *py_arg_tuple);
-void bfrt_update_active_host_list();
-u_long count_active_hosts(const unsigned char *result, int size);
 
 /* Logging */
 FILE *fp_log;
@@ -259,63 +259,60 @@ void log_log(int level, const char *file, int line, const char *fmt, ...);
 /* Statistic Variables */
 
 // Packet Counters
-u_long pkt_count;
+uint64_t pkt_count;
 
-u_long tcp_pkt_count_tot;
-// u_long in_tcp_pkt_count;
-// u_long out_tcp_pkt_count;
-// u_long local_tcp_pkt_count;
+uint64_t tcp_pkt_count_tot;
+// uint64_t in_tcp_pkt_count;
+// uint64_t out_tcp_pkt_count;
+// uint64_t local_tcp_pkt_count;
 
-u_long udp_pkt_count_tot;
-// u_long in_udp_pkt_count;
-// u_long out_udp_pkt_count;
-// u_long local_udp_pkt_count;
+uint64_t udp_pkt_count_tot;
+// uint64_t in_udp_pkt_count;
+// uint64_t out_udp_pkt_count;
+// uint64_t local_udp_pkt_count;
 
-u_long icmp_pkt_count_tot;
-// u_long in_icmp_pkt_count;
-// u_long out_icmp_pkt_count;
-// u_long local_icmp_pkt_count;
+uint64_t icmp_pkt_count_tot;
+// uint64_t in_icmp_pkt_count;
+// uint64_t out_icmp_pkt_count;
+// uint64_t local_icmp_pkt_count;
 
 /* Error Packets */
-u_long send_pkt_error_count;
+uint64_t send_pkt_error_count;
 
 // Data Structure Counters
-u_long pkt_buf_count;
-u_long flow_hash_count;
-u_long lazy_flow_hash_count;
-u_long lazy_flow_clean_count;
+uint64_t pkt_buf_count;
+uint64_t flow_hash_count;
+uint64_t lazy_flow_hash_count;
 
 // Freelist Counters
-u_long pkt_list_count_tot;
-u_long pkt_list_count_use;
-u_long pkt_desc_list_count_tot;
-u_long pkt_desc_list_count_use;
-u_long flow_hash_list_count_tot;
-u_long flow_hash_list_count_use;
-
-u_long flow_hash_search_depth;
+uint64_t pkt_list_count_tot;
+uint64_t pkt_list_count_use;
+uint64_t pkt_desc_list_count_tot;
+uint64_t pkt_desc_list_count_use;
+uint64_t flow_hash_list_count_tot;
+uint64_t flow_hash_list_count_use;
 
 // Functionality Counters
-u_long installed_entry_count_tot;
-u_long installed_entry_count_tcp;
-u_long installed_entry_count_udp;
-u_long installed_entry_count_icmp;
+uint64_t installed_entry_count_tot;
+// uint64_t installed_entry_count_tcp;
+// uint64_t installed_entry_count_udp;
+// uint64_t installed_entry_count_icmp;
 
-u_long install_buf_size;
+uint64_t install_buf_size;
 
-u_long replied_flow_count_tot;
-u_long replied_flow_count_tcp;
-u_long replied_flow_count_udp;
-u_long replied_flow_count_icmp;
+uint64_t replied_flow_count_tot;
+// uint64_t replied_flow_count_tcp;
+// uint64_t replied_flow_count_udp;
+// uint64_t replied_flow_count_icmp;
 
-u_long expired_pkt_count_tot;
-u_long expired_pkt_count_tcp;
-u_long expired_pkt_count_udp;
-u_long expired_pkt_count_icmp;
+uint64_t expired_pkt_count_tot;
+uint64_t expired_pkt_count_tcp;
+uint64_t expired_pkt_count_udp;
+uint64_t expired_pkt_count_icmp;
 
 // Flow Entry Counters
-u_long active_host_tbl_entry_count;
-u_long local_entry_count;
+uint64_t active_host_tbl_entry_count;
+uint64_t local_entry_count;
 
 extern timeval current_time;
 extern timeval last_log_time;
@@ -323,9 +320,40 @@ extern timeval last_pkt_cleaned_time;
 extern timeval last_hash_cleaned_time;
 extern timeval last_idle_cleaned_time;
 
+/* Experiments to justify the hash table usage */
+#ifdef FLOW_HASH_MEASURE
+uint64_t flow_hash_total_lookups;
+uint64_t flow_hash_collision_lookups;
+uint64_t flow_hash_total_probes;
+uint64_t flow_hash_missed_lookups;
+uint64_t flow_hash_max_depth;
+double flow_hash_avg_probes;
+uint64_t flow_hash_p99_depth;
+#define FLOW_HASH_MAX_DEPTH 10
+uint64_t flow_hash_depth_hist[FLOW_HASH_MAX_DEPTH + 1];
+#endif
+
+/* Whether to activate the host liveness monitoring */
+#ifdef HOST_LIVENESS_MONITOR
+
+#define INTERNAL_HOST_NUM 65536
+#define ACTIVE_HOST_UPDATE_PERIOD 1000000 // 1s
+
 extern timeval last_active_entry_update_time;
 extern timeval last_active_host_merge_time;
-extern unsigned char active_entry_list[65536];
-extern unsigned char incoming_host_list[65536];
-pthread_mutex_t active_entry_list_mutex;
+extern uint8_t active_internal_host_entry[INTERNAL_HOST_NUM];
+extern uint8_t active_internal_host_send[INTERNAL_HOST_NUM];
+extern uint8_t active_internal_host[INTERNAL_HOST_NUM];
+pthread_mutex_t active_internal_host_entry_mutex;
+uint32_t base_ip_int;
+// bfrt side
+void bfrt_update_active_host_list();
+uint32_t count_active_hosts();
+void merge_host_liveness(void);
+uint8_t check_internal_host_liveness(uint32_t ip_src);
 
+int append_host_alive_after_l4(struct ether_header *peth, struct ip *pip, int tlen, uint8_t host_alive);
+int append_host_alive_to_tos(struct ether_header *peth, struct ip *pip, int tlen, uint8_t host_alive);
+#endif
+
+uint32_t ip_to_int(const char *ip_str);

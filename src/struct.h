@@ -1,4 +1,4 @@
-typedef u_long hash;
+typedef uint64_t hash;
 
 /* type for a timestamp */
 typedef struct timeval timeval;
@@ -38,6 +38,7 @@ typedef struct
   u_short b_port;
   u_short protocol;
   hash hash;
+  uint32_t hash_index;
 } flow_addrblock;
 
 typedef struct ip_packet

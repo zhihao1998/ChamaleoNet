@@ -1,0 +1,36 @@
+X_U64(pkt_count);
+// X_U64(tcp_pkt_count_tot);
+// X_U64(udp_pkt_count_tot);
+// X_U64(icmp_pkt_count_tot);
+X_U64(pkt_buf_count);
+X_U64(flow_hash_count);
+X_U64(lazy_flow_hash_count);
+X_U64(pkt_list_count_tot);
+X_U64(pkt_list_count_use);
+X_U64(flow_hash_list_count_tot);
+X_U64(flow_hash_list_count_use);
+X_U64(installed_entry_count_tot);
+// X_U64(installed_entry_count_tcp);
+// X_U64(installed_entry_count_udp);
+// X_U64(installed_entry_count_icmp);
+X_U64(install_buf_size);
+X_U64(replied_flow_count_tot);
+// X_U64(replied_flow_count_tcp);
+// X_U64(replied_flow_count_udp);
+// X_U64(replied_flow_count_icmp);
+X_U64(expired_pkt_count_tot);
+// X_U64(expired_pkt_count_tcp);
+// X_U64(expired_pkt_count_udp);
+// X_U64(expired_pkt_count_icmp);
+X_U64(active_host_tbl_entry_count);
+// X_U64(local_entry_count);
+// X_U64(send_pkt_error_count);
+#ifdef FLOW_HASH_MEASURE
+X_U64(flow_hash_total_lookups);
+X_U64(flow_hash_collision_lookups);
+X_U64(flow_hash_missed_lookups);
+X_U64(flow_hash_total_probes);
+X_U64(flow_hash_max_depth);
+X_DBL(flow_hash_avg_probes);
+X_U64(flow_hash_p99_depth);
+#endif

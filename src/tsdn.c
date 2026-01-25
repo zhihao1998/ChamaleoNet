@@ -1,4 +1,5 @@
 #include "tsdn.h"
+#include "stats_print.h"
 
 Bool internal_src = TRUE;
 Bool internal_dst = TRUE;
@@ -33,34 +34,71 @@ struct timeval last_idle_cleaned_time;
 
 struct timeval last_lazy_free_log_time;
 
-	/* Active Host List. */
-	struct timeval last_active_entry_update_time;
-struct timeval last_active_host_merge_time;
-unsigned char active_entry_list[65536];
-unsigned char incoming_host_list[65536];
-uint32_t base_ip_int;
+/* Print stats */
+Stats stats_snapshot(void)
+{
+	Stats s = (Stats){0};
 
-#include <stdio.h>
+#define X_U64(name) s.name = (uint64_t)(name);
+#define X_DBL(name) s.name = (double)(name);
+#include "stats_fields.def"
+#undef X_U64
+#undef X_DBL
 
-#ifdef DO_STATS
+	return s;
+}
+
+#ifdef FLOW_HASH_MEASURE
+void flow_hash_stats_init(void)
+{
+	flow_hash_total_lookups = 0;
+	flow_hash_collision_lookups = 0;
+	flow_hash_missed_lookups = 0;
+	flow_hash_total_probes = 0;
+	flow_hash_max_depth = 0;
+	flow_hash_avg_probes = 0;
+	flow_hash_p99_depth = 0;
+	memset(flow_hash_depth_hist, 0, sizeof(flow_hash_depth_hist));
+}
+void flow_hash_stats_cal(void)
+{
+	uint64_t target = (flow_hash_total_lookups * 99 + 99) / 100;
+	uint64_t acc = 0;
+	for (uint32_t d = 0; d <= FLOW_HASH_MAX_DEPTH; d++)
+	{
+		acc += flow_hash_depth_hist[d];
+		if (acc >= target)
+		{
+			flow_hash_p99_depth = d;
+			break;
+		}
+	}
+	if (flow_hash_total_lookups > 0)
+	{
+		flow_hash_avg_probes = (double)flow_hash_total_probes /
+							   (double)flow_hash_total_lookups;
+	}
+}
+#endif
+
 void stats_init()
 {
 	pkt_count = 0;
 
 	tcp_pkt_count_tot = 0;
-	// u_long in_tcp_pkt_count;
-	// u_long out_tcp_pkt_count;
-	// u_long local_tcp_pkt_count;
+	// uint64_t in_tcp_pkt_count;
+	// uint64_t out_tcp_pkt_count;
+	// uint64_t local_tcp_pkt_count;
 
 	udp_pkt_count_tot = 0;
-	// u_long in_udp_pkt_count;
-	// u_long out_udp_pkt_count;
-	// u_long local_udp_pkt_count;
+	// uint64_t in_udp_pkt_count;
+	// uint64_t out_udp_pkt_count;
+	// uint64_t local_udp_pkt_count;
 
 	icmp_pkt_count_tot = 0;
-	// u_long in_icmp_pkt_count;
-	// u_long out_icmp_pkt_count;
-	// u_long local_icmp_pkt_count;
+	// uint64_t in_icmp_pkt_count;
+	// uint64_t out_icmp_pkt_count;
+	// uint64_t local_icmp_pkt_count;
 
 	send_pkt_error_count = 0;
 
@@ -68,7 +106,6 @@ void stats_init()
 	pkt_buf_count = 0;
 	flow_hash_count = 0;
 	lazy_flow_hash_count = 0;
-	lazy_flow_clean_count = 0;
 
 	// Freelist Counters
 	pkt_list_count_tot = 0;
@@ -76,27 +113,27 @@ void stats_init()
 	flow_hash_list_count_tot = 0;
 	flow_hash_list_count_use = 0;
 
-	flow_hash_search_depth = 0;
-
 	// Functionality Counters
 	installed_entry_count_tot = 0;
-	installed_entry_count_tcp = 0;
-	installed_entry_count_udp = 0;
-	installed_entry_count_icmp = 0;
+	// installed_entry_count_tcp = 0;
+	// installed_entry_count_udp = 0;
+	// installed_entry_count_icmp = 0;
 
 	install_buf_size = 0;
 
 	replied_flow_count_tot = 0;
-	replied_flow_count_tcp = 0;
-	replied_flow_count_udp = 0;
-	replied_flow_count_icmp = 0;
+	// replied_flow_count_tcp = 0;
+	// replied_flow_count_udp = 0;
+	// replied_flow_count_icmp = 0;
 
 	expired_pkt_count_tot = 0;
 	expired_pkt_count_tcp = 0;
 	expired_pkt_count_udp = 0;
 	expired_pkt_count_icmp = 0;
-}
+#ifdef FLOW_HASH_MEASURE
+	flow_hash_stats_init();
 #endif
+}
 
 /* global pointer, the pcap info header */
 static pcap_t *pcap;
@@ -218,6 +255,13 @@ int pread_tcpdump(struct timeval *ptime,
 			continue;
 		}
 
+#ifdef MAX_CAPTURE_PKTS
+		if (pkt_count >= (uint64_t)MAX_CAPTURE_PKTS)
+		{
+			return 0;
+		}
+#endif
+
 		return (1);
 	}
 }
@@ -325,54 +369,40 @@ static int ProcessPacket(struct timeval *pckt_time,
 		break;
 	}
 
-	// if (internal_ip(pip->ip_src))
-	// {
-	// 	/* Check if the packet is from an internal network */
-	// 	uint32_t ip_src = ntohl(pip->ip_src.s_addr);
-	// 	uint32_t offset = ip_src - base_ip_int;
+#ifdef HOST_LIVENESS_MONITOR
+	// update host liveness based on the outbound packet
+	if (internal_ip(pip->ip_src))
+	{
+		uint32_t ip_src = ntohl(pip->ip_src.s_addr);
+		uint32_t offset = ip_src - base_ip_int;
+		active_internal_host_send[offset] = 1;
+	}
+	else
+	{
+		uint32_t ip_dst = ntohl(pip->ip_dst.s_addr);
+		uint32_t offset = ip_dst - base_ip_int;
 
-	// 	incoming_host_list[offset] = 1;
-	// 	// printf("Active IP: offset %u (IP: %s)\n", offset, inet_ntoa(pip->ip_src));
-	// }
-
+		uint8_t host_alive = check_internal_host_liveness(ip_dst);
+		// printf("%" PRIu32 " ,%" PRIu32 " ,%" PRIu32 ", %" PRIu8 "\n", ip_dst, base_ip_int, offset, host_alive);
+		// add aliveness to header
+		append_host_alive_to_tos(peth, pip, tlen, host_alive);
+	}
+#endif
 	return 1;
 }
 
 void print_all_stats()
 {
-	printf("----------------------------------------\n");
-	printf("\nDoing Statistics... \n");
-	printf("pkt_count: %ld, tcp_pkt_count_tot: %ld, udp_pkt_count_tot: %ld, icmp_pkt_count_tot: %ld, "
-		   "pkt_buf_count: %ld, flow_hash_count: %ld, lazy_flow_hash_count: %ld, lazy_flow_clean_count: %ld, "
-		   "pkt_list_count_tot: %ld, pkt_list_count_use: %ld, flow_hash_list_count_tot: %ld, flow_hash_list_count_use: %ld, flow_hash_search_depth: %ld, "
-		   "installed_entry_count_tot: %ld, installed_entry_count_tcp: %ld, installed_entry_count_udp: %ld, installed_entry_count_icmp: %ld, install_buf_size: %ld, "
-		   "replied_flow_count_tot: %ld, replied_flow_count_tcp: %ld, replied_flow_count_udp: %ld, replied_flow_count_icmp: %ld, "
-		   "expired_pkt_count_tot: %ld, expired_pkt_count_tcp: %ld, expired_pkt_count_udp: %ld, expired_pkt_count_icmp: %ld, "
-		   "active_host_tbl_entry_count: %ld, local_entry_count: %ld, "
-		   "send_pkt_error_count: %ld\n",
-
-		   pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot,
-		   pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_clean_count,
-		   pkt_list_count_tot, pkt_list_count_use,
-		   flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
-		   installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
-		   replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
-		   expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
-		   active_host_tbl_entry_count, local_entry_count,
-		   send_pkt_error_count);
+	Stats s = stats_snapshot();
+	stats_print(stdout, &s, STATS_FMT_KV, 0);
 
 	/* Print the statistics */
 	if (pcap_stats(pcap, &stats_pcap) >= 0)
 	{
 		printf("\n%ld.%ld Pcap Statistics\n", current_time.tv_sec, current_time.tv_usec);
-		// fprintf(fp_log, "\n%ld, %ld Pcap Statistics\n", current_time.tv_sec, current_time.tv_usec);
 		printf("Received: %d, Processed: %ld, Still in queue: %ld, Dropped: %d, Dropped by interface: %d\n",
 			   stats_pcap.ps_recv, pkt_count, (stats_pcap.ps_recv - pkt_count), stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
-		// fprintf(fp_log, "Received: %d, Dropped: %d, Dropped by interface: %d\n", stats_pcap.ps_recv, stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
 	}
-
-	/* Print the flow hash table distribution */
-	// print_flow_hash_table_distribution();
 }
 
 void clean_all()
@@ -390,27 +420,17 @@ void clean_all()
 #endif
 }
 
+static volatile sig_atomic_t g_stop = 0;
+
 void sig_proc(int sig)
 {
-	log_stats("stats,%ld,%ld,%ld,%ld,"
-			  "%ld,%ld,%ld,%ld,"
-			  "%ld,%ld,%ld,%ld,%ld,"
-			  "%ld,%ld,%ld,%ld,%ld,"
-			  "%ld,%ld,%ld,%ld,"
-			  "%ld,%ld,%ld,%ld,"
-			  "%ld,%ld,%ld",
-			  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot,
-			  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_clean_count,
-			  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
-			  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
-			  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
-			  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
-			  active_host_tbl_entry_count, local_entry_count, send_pkt_error_count);
+	Stats s = stats_snapshot();
+	log_stats("stats,%s", stats_to_csv_string(&s));
+
 	print_all_stats();
 	clean_all();
 	exit(0);
 }
-
 void init_log()
 {
 	time_t t;
@@ -424,58 +444,21 @@ void init_log()
 	sprintf(log_date, "%d%02d%02d_%02d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
 
 	char log_file_name[300], stat_file_name[300], param_file_name[300];
-	// sprintf(param_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_param.txt", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-	// FILE *fp_param = fopen(param_file_name, "w+");
-	/* Record all parameters to param file */
-	// fprintf(fp_param, "PKT_BUF_SIZE: %d\n", PKT_BUF_SIZE);
-	// fprintf(fp_param, "PKT_BUF_GC_SPLIT_SIZE: %d\n", PKT_BUF_GC_SPLIT_SIZE);
-	// fprintf(fp_param, "PKT_BUF_GC_PERIOD: %d\n", PKT_BUF_GC_PERIOD);
-	// fprintf(fp_param, "PKT_TIMEOUT: %d\n", PKT_TIMEOUT);
-
-	// fprintf(fp_param, "FLOW_HASH_TABLE_SIZE: %d\n", FLOW_HASH_TABLE_SIZE);
-	// fprintf(fp_param, "FLOW_HASH_TABLE_GC_SIZE: %d\n", FLOW_HASH_TABLE_GC_SIZE);
-	// fprintf(fp_param, "FLOW_HASH_TABLE_GC_PERIOD: %d\n", FLOW_HASH_TABLE_GC_PERIOD);
-	// fprintf(fp_param, "FLOW_HASH_TABLE_GC_TIMEOUT: %d\n", FLOW_HASH_TABLE_GC_TIMEOUT);
-
-	// fprintf(fp_param, "ENTRY_BUF_SIZE: %d\n", ENTRY_BUF_SIZE);
-	// fprintf(fp_param, "ENTRY_INSTALL_BATCH_SIZE: %d\n", ENTRY_INSTALL_BATCH_SIZE);
-	// fprintf(fp_param, "ENTRY_IDLE_TIMEOUT: %d\n", ENTRY_IDLE_TIMEOUT);
-	// fprintf(fp_param, "ENTRY_IDLE_CLEAN_BATCH_SIZE: %d\n", ENTRY_IDLE_CLEAN_BATCH_SIZE);
-	// fprintf(fp_param, "ENTRY_GC_PERIOD: %d\n", ENTRY_GC_PERIOD);
-
-	// fprintf(fp_param, "PKT_LOG_SAMPLE_CNT: %d\n", PKT_LOG_SAMPLE_CNT);
-	// fprintf(fp_param, "TIMEOUT_SAMPLE_CNT: %d\n", TIMEOUT_SAMPLE_CNT);
-	// fprintf(fp_param, "STATS_LOG_SAMPLE_TIME: %d\n", STATS_LOG_SAMPLE_TIME);
-
-	// fclose(fp_param);
 
 #ifdef LOG_TO_FILE
 	// sprintf(log_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_log.txt", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-	sprintf(stat_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_stat.csv", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-
-	// fp_log = fopen(log_file_name, "w+");
-	// fprintf(fp_log, "Start logging\n");
+	// sprintf(stat_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_stat.csv", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
+	sprintf(stat_file_name, "%s/%s_HashSize%d_GCSize%d_GCPeriod%d_GCTimeout%d.csv", log_dir, log_date,
+			FLOW_HASH_TABLE_SIZE, FLOW_HASH_TABLE_GC_SIZE, FLOW_HASH_TABLE_GC_PERIOD, FLOW_HASH_TABLE_GC_TIMEOUT);
 
 	fp_stats = fopen(stat_file_name, "w+");
-	fprintf(fp_stats, "time,level,file,line,msg,"
-					  "pkt_count,tcp_pkt_count_tot,udp_pkt_count_tot,icmp_pkt_count_tot,"
-					  "pkt_buf_count,flow_hash_count,lazy_flow_hash_count,lazy_flow_clean_count,"
-					  "pkt_list_count_tot,pkt_list_count_use,"
-					  "flow_hash_list_count_tot,flow_hash_list_count_use,flow_hash_search_depth,"
-					  "installed_entry_count_tot,installed_entry_count_tcp,installed_entry_count_udp,installed_entry_count_icmp,install_buf_size,"
-					  "replied_flow_count_tot,replied_flow_count_tcp,replied_flow_count_udp,replied_flow_count_icmp,"
-					  "expired_pkt_count_tot,expired_pkt_count_tcp,expired_pkt_count_udp,expired_pkt_count_icmp,"
-					  "active_host_tbl_entry_count,local_entry_count,send_pkt_error_count\n");
+	Stats s = stats_snapshot();
 	log_add_fp(fp_stats, LOG_STATS);
+
+	fprintf(fp_stats, "time,level,file,line,msg,%s\n", stats_csv_header_to_string());
+
 #endif
 	log_set_quiet(TRUE);
-}
-
-uint32_t ip_to_int(const char *ip_str)
-{
-	struct in_addr ip_addr;
-	inet_aton(ip_str, &ip_addr);
-	return ntohl(ip_addr.s_addr);
 }
 
 int main(int argc, char *argv[])
@@ -510,8 +493,6 @@ int main(int argc, char *argv[])
 	int tlen;
 	void *plast;
 	long int location = 0;
-
-	base_ip_int = ip_to_int("154.200.0.0");
 
 	printf("Capturing on the device: %s\n", RECV_INTF);
 
@@ -594,9 +575,12 @@ int main(int argc, char *argv[])
 
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
-	last_lazy_free_log_time = last_active_host_merge_time = last_hash_cleaned_time = 
-	last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
+	last_lazy_free_log_time = last_hash_cleaned_time = last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
 
+#ifdef HOST_LIVENESS_MONITOR
+	base_ip_int = ip_to_int("154.200.0.0");
+	last_active_entry_update_time = last_active_host_merge_time = current_time;
+#endif
 	struct timeval pkt_process_start_time, pkt_process_end_time;
 	struct timeval pkt_process_end_time_tmp = current_time;
 
@@ -611,46 +595,42 @@ int main(int argc, char *argv[])
 			last_log_time = current_time;
 			install_buf_size = entry_circ_buf_size();
 
-#ifdef LOG_TO_FILE
-			log_stats("stats,%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld,%ld,"
-					  "%ld,%ld,%ld",
-					  pkt_count, tcp_pkt_count_tot, udp_pkt_count_tot, icmp_pkt_count_tot,
-					  pkt_buf_count, flow_hash_count, lazy_flow_hash_count, lazy_flow_clean_count,
-					  pkt_list_count_tot, pkt_list_count_use, flow_hash_list_count_tot, flow_hash_list_count_use, flow_hash_search_depth,
-					  installed_entry_count_tot, installed_entry_count_tcp, installed_entry_count_udp, installed_entry_count_icmp, install_buf_size,
-					  replied_flow_count_tot, replied_flow_count_tcp, replied_flow_count_udp, replied_flow_count_icmp,
-					  expired_pkt_count_tot, expired_pkt_count_tcp, expired_pkt_count_udp, expired_pkt_count_icmp,
-					  active_host_tbl_entry_count, local_entry_count, send_pkt_error_count);
+#ifdef FLOW_HASH_MEASURE
+			flow_hash_stats_cal();
+#endif
+
+			Stats s = stats_snapshot();
+			log_stats("stats,%s", stats_to_csv_string(&s));
+
+#ifdef FLOW_HASH_MEASURE
+			flow_hash_stats_init();
 #endif
 		}
+		if (pkt_count % 100000 == 0)
+		{
+			print_all_stats();
+		}
+#ifdef PKT_PROCESS_TIME_MEASURE
 		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
 		{
-#ifdef LOG_TO_FILE
 			gettimeofday(&pkt_process_end_time, NULL);
 			log_stats("pkt_processing_time,%ld,%d", pkt_count, tv_sub_2(pkt_process_end_time, current_time));
+		}
 #endif
-			if (pkt_count % 100000 == 0)
-			{
-				print_all_stats();
-			}
+#endif
+
+#ifdef HOST_LIVENESS_MONITOR
+		// Merge the two bitmap of host liveness
+		if (tv_sub_2(current_time, last_active_host_merge_time) >= ACTIVE_HOST_UPDATE_PERIOD)
+		{
+			last_active_host_merge_time = current_time;
+			merge_host_liveness();
+			// uint32_t count = count_active_hosts();
+			// printf("Active hosts: %d\n", count);
 		}
 #endif
 
-		// /* check active hosts */
-		// if (tv_sub_2(current_time, last_active_host_merge_time) > (ACTIVE_HOST_UPDATE_PERIOD + 1000))
-		// {
-		// 	last_active_host_merge_time = current_time;
-		// 	pthread_mutex_lock(&active_entry_list_mutex);
-		// 	int active_hosts = count_active_hosts(active_entry_list, 65536);
-		// 	// printf("Active hosts: %d\n", active_hosts);
-		// 	pthread_mutex_unlock(&active_entry_list_mutex);
-		// }
-	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast) > 0));
+	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast)) > 0);
 
 	clean_all();
 	return 0;

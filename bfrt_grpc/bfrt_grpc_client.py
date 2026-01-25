@@ -104,6 +104,7 @@ class Bfrt_GRPC_Client:
                                                    1000)
         self.entry_ttl = entry_ttl
         self.clean_batch_size = clean_batch_size
+        self.max_flows = 0
             
 
     def __getattr__(self, name):
@@ -214,6 +215,10 @@ class Bfrt_GRPC_Client:
                 protocol = key_dict["meta.ip_protocol"]['value']
                 # self.installed_flows[f'{ip}_{port}_{protocol}'][0] = 0
                 self.installed_flows.remove(f'{ip_to_int(ip)}_{port}_{protocol}')
+                #if len(self.installed_flows) > self.max_flows:
+                 #   self.max_flows = len(self.installed_flows)
+                  #  with open('/home/zhihaow/codes/honeypot_c_controller/current_flow_rules.pkl', 'wb') as f:
+                   #     pickle.dump(self.installed_flows, f)
 
                 key_list.append(recv_key)
                 count += 1

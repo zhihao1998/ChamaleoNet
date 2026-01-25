@@ -76,41 +76,65 @@ static pkt_desc_t *NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp,
     return ppkt_desc;
 }
 
+#ifdef FLOW_HASH_MEASURE
+static inline void FlowHashRecordLookup(int search_depth)
+{
+    flow_hash_total_lookups++;
+    flow_hash_total_probes += (uint64_t)search_depth;
+
+    if (search_depth > flow_hash_max_depth)
+        flow_hash_max_depth = search_depth;
+
+    if (search_depth <= FLOW_HASH_MAX_DEPTH)
+        flow_hash_depth_hist[search_depth]++;
+    else
+        flow_hash_depth_hist[FLOW_HASH_MAX_DEPTH]++;
+
+    if (search_depth > 1)
+        flow_hash_collision_lookups++;
+}
+#endif
+
 static flow_hash_t *FindFlowHash(struct ip *pip, void *ptcp, void *plast, int *pdir)
 {
     /* Start to check */
     flow_addrblock pkt_in;
-    hash hval;
     flow_hash_t *flow_hash_ptr;
 
     /* grab the address from this packet */
     CopyAddr(&pkt_in, pip, ptcp);
 
     /* grab the hash value (already computed by CopyAddr) */
-    hval = pkt_in.hash % FLOW_HASH_TABLE_SIZE;
-    flow_hash_search_depth = 0;
+    uint32_t hash_index = pkt_in.hash_index;
+    uint32_t search_depth = 0;
 
     /* Search in the linked lists with the same hash value */
-    for (flow_hash_ptr = flow_hash_table[hval]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
+    for (flow_hash_ptr = flow_hash_table[hash_index]; flow_hash_ptr; flow_hash_ptr = flow_hash_ptr->next)
     {
-        flow_hash_search_depth++;
+        search_depth++;
         if (SameConn(&pkt_in, &flow_hash_ptr->addr_pair, pdir))
         {
-            /* Found */
+// Found
+#ifdef FLOW_HASH_MEASURE
+            FlowHashRecordLookup(search_depth);
+#endif
             return flow_hash_ptr;
         }
     }
 
+// Not found
+#ifdef FLOW_HASH_MEASURE
+    FlowHashRecordLookup(search_depth);
+    flow_hash_missed_lookups++;
+#endif
     return NULL;
 }
 
 void check_timeout_lazy()
 {
     int ix = 0;
-    lazy_flow_clean_count = 0;
-
     flow_hash_t *flow_hash_head_ptr, *flow_hash_ptr;
-    flow_hash_t *to_clean[FLOW_HASH_TABLE_GC_SIZE * 4]; 
+    flow_hash_t *to_clean[FLOW_HASH_TABLE_GC_SIZE * 4];
     int clean_idx = 0;
 
     // 第一阶段：标记要清理的 flow（避免在遍历中破坏链表）
@@ -140,12 +164,10 @@ void check_timeout_lazy()
         FreeFlowHash(to_clean[i]);
 #ifdef DO_STATS
         lazy_flow_hash_count--;
-        lazy_flow_clean_count++;
 #endif
     }
 
     entry_index = (entry_index + FLOW_HASH_TABLE_GC_SIZE) % FLOW_HASH_TABLE_SIZE;
-
 }
 
 void check_timeout_periodic()
@@ -209,12 +231,12 @@ void check_timeout_periodic()
                 default:
                     break;
                 }
-#ifdef LOG_TO_FILE
-                if (expired_pkt_count_tot % PKT_LOG_SAMPLE_CNT == 0)
-                {
-                    log_stats("timeout,%d", elapsed_time);
-                }
-#endif
+// #ifdef LOG_TO_FILE
+//                 if (expired_pkt_count_tot % PKT_LOG_SAMPLE_CNT == 0)
+//                 {
+//                     log_stats("timeout,%d", elapsed_time);
+//                 }
+// #endif
 #endif
             }
             else
@@ -230,15 +252,14 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
     static pkt_desc_t *ppkt_desc;
     flow_hash_t *temp_flow_hash_ptr;
     flow_hash_t *flow_hash_head_ptr;
-    hash hval;
 
     /* Buffer packet */
     ppkt_desc = NewPkt(peth, pip, ptcp, plast);
     assert(ppkt_desc != NULL);
 
     /* Create entry for hash table */
-    hval = ppkt_desc->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
-    flow_hash_head_ptr = flow_hash_table[hval];
+    uint32_t hash_index = ppkt_desc->addr_pair.hash_index;
+    flow_hash_head_ptr = flow_hash_table[hash_index];
 
     temp_flow_hash_ptr = flow_hash_alloc();
     temp_flow_hash_ptr->addr_pair = ppkt_desc->addr_pair;
@@ -250,7 +271,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
         /* it is the first entry in the slot */
         temp_flow_hash_ptr->prev = NULL;
         temp_flow_hash_ptr->next = flow_hash_head_ptr;
-        flow_hash_table[hval] = temp_flow_hash_ptr;
+        flow_hash_table[hash_index] = temp_flow_hash_ptr;
     }
     else
     {
@@ -258,7 +279,7 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip, vo
         flow_hash_head_ptr->prev = temp_flow_hash_ptr;
         temp_flow_hash_ptr->prev = NULL;
         temp_flow_hash_ptr->next = flow_hash_head_ptr;
-        flow_hash_table[hval] = temp_flow_hash_ptr;
+        flow_hash_table[hash_index] = temp_flow_hash_ptr;
     }
     ppkt_desc->flow_hash_ptr = temp_flow_hash_ptr;
 
@@ -286,16 +307,19 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
     flow_hash_t *prev = flow_hash_ptr->prev;
     flow_hash_t *next = flow_hash_ptr->next;
 
-    hash hval = flow_hash_ptr->addr_pair.hash % FLOW_HASH_TABLE_SIZE;
+    uint32_t hash_index = flow_hash_ptr->addr_pair.hash_index;
 
-    assert(flow_hash_table[hval] != NULL);
-    if (flow_hash_table[hval] == flow_hash_ptr) {
-        flow_hash_table[hval] = next;
+    assert(flow_hash_table[hash_index] != NULL);
+    if (flow_hash_table[hash_index] == flow_hash_ptr)
+    {
+        flow_hash_table[hash_index] = next;
     }
-    if (prev != NULL) {
+    if (prev != NULL)
+    {
         prev->next = next;
     }
-    if (next != NULL) {
+    if (next != NULL)
+    {
         next->prev = prev;
     }
     flow_hash_release(flow_hash_ptr);
@@ -304,7 +328,6 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr)
     flow_hash_count--;
 #endif
 }
-
 
 int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr)
 {
@@ -405,20 +428,7 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
 
 #ifdef DO_STATS
             replied_flow_count_tot++;
-            // switch (timeout_level)
-            // {
-            // case 0:
-            //     replied_flow_count_tcp++;
-            //     break;
-            // case 1:
-            //     replied_flow_count_udp++;
-            //     break;
-            // case 2:
-            //     replied_flow_count_icmp++;
-            //     break;
-            // default:
-            //     break;
-            // }
+
 #endif
 #endif
             return 0;
@@ -488,10 +498,12 @@ void trace_init(void)
     /* Destination MAC */
     // socket_address.sll_addr[0] = MY_DEST_MAC0;
 
-    pthread_mutex_init(&active_entry_list_mutex, NULL);
-
-    memset(incoming_host_list, 0, sizeof(incoming_host_list));
-    memset(active_entry_list, 0, sizeof(active_entry_list));
+#ifdef HOST_LIVENESS_MONITOR
+    pthread_mutex_init(&active_internal_host_entry_mutex, NULL);
+    memset(active_internal_host_send, 0, sizeof(active_internal_host_send));
+    memset(active_internal_host_entry, 0, sizeof(active_internal_host_entry));
+    memset(active_internal_host, 0, sizeof(active_internal_host));
+#endif
 }
 
 void trace_check(void)

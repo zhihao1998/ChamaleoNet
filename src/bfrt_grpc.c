@@ -7,7 +7,7 @@ static pthread_mutex_t entry_install_mutex;
 static pthread_cond_t entry_install_cond;
 char ip_src_addr_str[INET_ADDRSTRLEN], ip_dst_addr_str[INET_ADDRSTRLEN];
 
-u_long entry_circ_buf_size()
+uint64_t entry_circ_buf_size()
 {
 	if (p4_entry_circ_buf == NULL)
 	{
@@ -131,13 +131,14 @@ void *install_thead_main(void *args)
 				gettimeofday(&last_idle_cleaned_time, NULL);
 			}
 		}
-
-		// /* Update active host list every 1 min */
-		// if (elapsed(last_active_entry_update_time, current_time) > ACTIVE_HOST_UPDATE_PERIOD)
-		// {
-		// 	bfrt_update_active_host_list();
-		// 	gettimeofday(&last_active_entry_update_time, NULL);
-		// }
+#ifdef HOST_LIVENESS_MONITOR
+		/* Update active host list every ACTIVE_HOST_UPDATE_PERIOD */
+		if (elapsed(last_active_entry_update_time, current_time) > ACTIVE_HOST_UPDATE_PERIOD)
+		{
+			bfrt_update_active_host_list();
+			last_active_entry_update_time = current_time;
+		}
+#endif
 	}
 
 	Py_XDECREF(p_add_batch_Func);
@@ -173,14 +174,7 @@ void bfrt_clear_tables()
 	Py_XDECREF(pRes);
 }
 
-u_long count_active_hosts(const unsigned char *result, int size) {
-    u_long count = 0;
-    for (int i = 0; i < size; ++i) {
-        count += result[i]; 
-    }
-    return count;
-}
-
+#ifdef HOST_LIVENESS_MONITOR
 /* Update active host list */
 void bfrt_update_active_host_list()
 {
@@ -192,17 +186,18 @@ void bfrt_update_active_host_list()
 	PyObject *pList = PyObject_CallObject(pFunc, NULL);
     assert ((pList) && (PyList_Check(pList)));
 
-	pthread_mutex_lock(&active_entry_list_mutex);
+	pthread_mutex_lock(&active_internal_host_entry_mutex);
 	for (Py_ssize_t i = 0; i < 65536; ++i) {
         PyObject *item = PyList_GetItem(pList, i);  
-        active_entry_list[i] = PyObject_IsTrue(item);
+        active_internal_host_entry[i] = PyObject_IsTrue(item);
     }
-	pthread_mutex_unlock(&active_entry_list_mutex);
+	pthread_mutex_unlock(&active_internal_host_entry_mutex);
 	
 	Py_XDECREF(pList);
 	Py_XDECREF(pFunc);
 	Py_XDECREF(pArgs);
 }
+#endif 
 
 /* Initialze Grpc object */
 void bfrt_grpc_init()
