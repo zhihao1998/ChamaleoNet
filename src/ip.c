@@ -161,6 +161,49 @@ int getpayloadlength(struct ip *pip, void *plast)
   return ntohs(pip->ip_len) - (pip->ip_hl * 4);
 }
 
+static inline void canonicalize_v4(uint32_t *ip1, uint16_t *p1,
+                                   uint32_t *ip2, uint16_t *p2)
+{
+  // 如果 (ip1, p1) > (ip2, p2) 就交换
+  if ((*ip1 > *ip2) || (*ip1 == *ip2 && *p1 > *p2))
+  {
+    uint32_t tip = *ip1;
+    *ip1 = *ip2;
+    *ip2 = tip;
+    uint16_t tp = *p1;
+    *p1 = *p2;
+    *p2 = tp;
+  }
+}
+
+static inline uint64_t mix64(uint64_t x)
+{
+  x ^= x >> 30;
+  x *= 0xbf58476d1ce4e5b9ULL;
+  x ^= x >> 27;
+  x *= 0x94d049bb133111ebULL;
+  x ^= x >> 31;
+  return x;
+}
+
+static inline uint64_t flow_hash_u64(uint32_t a_ip, uint32_t b_ip,
+                                     uint16_t a_port, uint16_t b_port,
+                                     uint8_t proto)
+{
+  canonicalize_v4(&a_ip, &a_port, &b_ip, &b_port);
+
+  uint64_t w0 = (uint64_t)a_ip | ((uint64_t)b_ip << 32);
+  uint64_t w1 = (uint64_t)a_port | ((uint64_t)b_port << 16) | ((uint64_t)proto << 32);
+
+  uint64_t x = w0 ^ (w1 + 0x9e3779b97f4a7c15ULL);
+  return mix64(x);
+}
+
+static inline uint32_t hash_flow_index(uint64_t h)
+{
+  return (uint32_t)(((__uint128_t)h * (uint64_t)FLOW_HASH_TABLE_SIZE) >> 64);
+}
+
 /* copy the IP addresses and port numbers into an addrblock structure	*/
 /* in addition to copying the address, we also create a HASH value	*/
 /* which is based on BOTH IP addresses and port numbers.  It allows	*/
@@ -194,17 +237,19 @@ void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr)
 
   default:
     fprintf(fp_stderr, "CopyAddr: Unsupported Layer 4 protocol!\n");
-    break;
+    return;
   }
 
   IP_COPYADDR(&p_flow_addr->a_address, *IPV4ADDR2ADDR(&pip->ip_src));
   IP_COPYADDR(&p_flow_addr->b_address, *IPV4ADDR2ADDR(&pip->ip_dst));
   /* fill in the hashed address */
-  p_flow_addr->hash = p_flow_addr->a_address.un.ip4.s_addr +
-                      p_flow_addr->b_address.un.ip4.s_addr +
-                      p_flow_addr->a_port +
-                      p_flow_addr->b_port +
-                      p_flow_addr->protocol;
+  uint32_t sip = ntohl(p_flow_addr->a_address.un.ip4.s_addr);
+  uint32_t dip = ntohl(p_flow_addr->b_address.un.ip4.s_addr);
+  uint16_t sp = ntohs(p_flow_addr->a_port);
+  uint16_t dp = ntohs(p_flow_addr->b_port);
+  uint8_t proto = p_flow_addr->protocol;
+  p_flow_addr->hash = flow_hash_u64(sip, dip, sp, dp, proto);
+  p_flow_addr->hash_index = hash_flow_index(p_flow_addr->hash);
 }
 
 int WhichDir(flow_addrblock *ppkta1, flow_addrblock *ppkta2)

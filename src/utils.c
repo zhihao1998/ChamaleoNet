@@ -413,14 +413,9 @@ char *readline(FILE *fp, int skip_comment, int skip_void_lines)
         return NULL;
     return buf;
 }
-
 /*
  * Packet sender.
  */
-// int SendPkt(char *sendbuf, int tx_len)
-// {
-//     return 0;
-// }
 
 int SendPkt(char *sendbuf, int tx_len)
 {
@@ -447,7 +442,9 @@ int SendPkt(char *sendbuf, int tx_len)
     eh->ether_dhost[4] = COLLECTOR_DEST_MAC_4;
     eh->ether_dhost[5] = COLLECTOR_DEST_MAC_5;
 
-    if (sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr *)&socket_address, sizeof(struct sockaddr_ll)) != -1)
+    long send_res = sendto(sockfd, sendbuf, tx_len, 0, (struct sockaddr *)&socket_address, sizeof(struct sockaddr_ll));
+
+    if (send_res != -1)
     {
         return 0;
     }
@@ -461,4 +458,11 @@ void get_date(char *nowtime)
     time(&rawtime);
     ltime = localtime(&rawtime);
     strftime(nowtime, 20, "%Y-%m-%d %H:%M:%S", ltime);
+}
+
+uint32_t ip_to_int(const char *ip_str)
+{
+	struct in_addr ip_addr;
+	inet_aton(ip_str, &ip_addr);
+	return ntohl(ip_addr.s_addr);
 }

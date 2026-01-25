@@ -50,9 +50,14 @@ $(DBG_PATH)/%.o: $(SRC_PATH)/%.c*
 $(TARGET_DEBUG): $(OBJ_DEBUG)
 	$(CC) -o $@ $(DBGFLAGS) $(OBJ_DEBUG) $(CFLAGS)
 
-$(TARGET_TEST): $(TEST_PATH)/test.c
-	$(CC) -o $@ $< $(CFLAGS)
+TEST_OBJ := $(OBJ_PATH)/test.o
+OBJ_NO_MAIN := $(filter-out $(OBJ_PATH)/tsdn.o, $(OBJ))
 
+$(TEST_OBJ): $(TEST_PATH)/test.c
+	$(CC) $(COBJFLAGS) -I$(SRC_PATH) -o $@ $<
+
+$(TARGET_TEST): $(TEST_OBJ) $(OBJ_NO_MAIN)
+	$(CC) -o $@ $^ $(CFLAGS)
 
 # phony rules
 .PHONY: makedir
@@ -79,7 +84,7 @@ clean:
 	@rm -f callgrind.out.*
 
 
-.PHONY: cleanlog
+.PHONY: logclean
 logclean:
 	@sudo rm -rf log/*
 	

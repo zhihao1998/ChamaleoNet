@@ -10,14 +10,11 @@
 /p4/build
 /p4/log
 */__pycache__
-/log
+/log*
 /.venv
 bf_drivers.log*
 zlog-cfg-cur*
 *.log
-/analysis/results
-/analysis/figs
-/old_log
 
 # analysis and output files
 /analysis
