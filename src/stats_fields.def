@@ -15,6 +15,7 @@ X_U64(installed_entry_count_tot);
 // X_U64(installed_entry_count_icmp);
 X_U64(install_buf_size);
 X_U64(replied_flow_count_tot);
+X_U64(install_rule_batch_count);
 // X_U64(replied_flow_count_tcp);
 // X_U64(replied_flow_count_udp);
 // X_U64(replied_flow_count_icmp);
@@ -25,6 +26,8 @@ X_U64(expired_pkt_count_tot);
 X_U64(active_host_tbl_entry_count);
 // X_U64(local_entry_count);
 // X_U64(send_pkt_error_count);
+X_U64(entry_install_error_count);
+X_U64(entry_install_dedup_count);
 #ifdef FLOW_HASH_MEASURE
 X_U64(flow_hash_total_lookups);
 X_U64(flow_hash_collision_lookups);

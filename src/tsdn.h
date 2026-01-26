@@ -31,6 +31,9 @@
 #include <getopt.h>
 #include <stdatomic.h>
 #include <inttypes.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include "struct.h"
 #include "param.h"
@@ -300,10 +303,14 @@ uint64_t installed_entry_count_tot;
 
 uint64_t install_buf_size;
 
+uint64_t entry_install_error_count;
+uint64_t entry_install_dedup_count;
+
 uint64_t replied_flow_count_tot;
 // uint64_t replied_flow_count_tcp;
 // uint64_t replied_flow_count_udp;
 // uint64_t replied_flow_count_icmp;
+uint64_t install_rule_batch_count;
 
 uint64_t expired_pkt_count_tot;
 uint64_t expired_pkt_count_tcp;
@@ -357,3 +364,49 @@ int append_host_alive_to_tos(struct ether_header *peth, struct ip *pip, int tlen
 #endif
 
 uint32_t ip_to_int(const char *ip_str);
+
+
+/* Install entry using Unix Direct Socket */
+#define ENTRY_INSTALL_SOCKET
+#ifdef ENTRY_INSTALL_SOCKET
+#define P4_OP_INSTALL 1
+
+int p4_batch_init(const char *uds_path);
+int p4_batch_add_rule(struct in_addr ip, uint16_t port_host, uint8_t proto);
+int p4_batch_flush(void);
+
+
+static inline uint64_t now_ms_monotonic(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
+}
+
+static inline uint64_t flow_key_u64(uint32_t ip_be, uint16_t port, uint8_t proto) {
+    // ip_be: network order; treat as 32-bit blob
+    return ((uint64_t)ip_be << 32) | ((uint64_t)port << 8) | (uint64_t)proto;
+}
+
+// 一个简单的 2^N 桶表，碰撞就覆盖（近似去重，足够用了）
+#define DEDUP_BITS 20
+#define DEDUP_SIZE (1u << DEDUP_BITS)
+
+static uint64_t dedup_keys[DEDUP_SIZE];
+static uint64_t dedup_last_ms[DEDUP_SIZE];
+
+static inline int dedup_should_send(uint32_t ip_be, uint16_t port, uint8_t proto, uint64_t cooldown_ms) {
+    uint64_t k = flow_key_u64(ip_be, port, proto);
+    uint32_t idx = (uint32_t)((k * 11400714819323198485ull) >> (64 - DEDUP_BITS)); // multiplicative hash
+    uint64_t now = now_ms_monotonic();
+
+    if (dedup_keys[idx] == k) {
+        if (now - dedup_last_ms[idx] < cooldown_ms) return 0; // 不发送
+        dedup_last_ms[idx] = now;
+        return 1;
+    }
+    // 新 key 或碰撞覆盖
+    dedup_keys[idx] = k;
+    dedup_last_ms[idx] = now;
+    return 1;
+}
+#endif

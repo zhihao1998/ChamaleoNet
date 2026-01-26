@@ -1,11 +1,11 @@
 #pragma once
 
 /* Experiments */
-#define MAX_CAPTURE_PKTS 2000000
+// #define MAX_CAPTURE_PKTS 50000000
 // #define HOST_LIVENESS_MONITOR
-#define FLOW_HASH_MEASURE
+// #define FLOW_HASH_MEASURE
 // #define PKT_PROCESS_TIME_MEASURE
-#define SWITCH_ENABLED
+// #define SWITCH_ENABLED
 
 // #define HOST_LIVENESS_MONITOR
 /* maximum number of concurrent TCP connection stored in the vector TTP 
@@ -64,7 +64,7 @@ Increase this number on high speed network will help ...*/
 
 
 /* Interfaces to capture and send packets */
-#define RECV_INTF "enp10s0"
+// #define RECV_INTF "enp10s0"
 
 
 /* Logging Sampling granularity */
@@ -77,13 +77,13 @@ Increase this number on high speed network will help ...*/
 
 
 /* Send to the SR-IOV VF interface */
-#define SEND_INTF "enp9s0"
-#define COLLECTOR_DEST_MAC_0 0x52
-#define COLLECTOR_DEST_MAC_1 0x54
-#define COLLECTOR_DEST_MAC_2 0x00
-#define COLLECTOR_DEST_MAC_3 0x6a
-#define COLLECTOR_DEST_MAC_4 0x19
-#define COLLECTOR_DEST_MAC_5 0x9a
+// #define SEND_INTF "enp9s0"
+// #define COLLECTOR_DEST_MAC_0 0x52
+// #define COLLECTOR_DEST_MAC_1 0x54
+// #define COLLECTOR_DEST_MAC_2 0x00
+// #define COLLECTOR_DEST_MAC_3 0x6a
+// #define COLLECTOR_DEST_MAC_4 0x19
+// #define COLLECTOR_DEST_MAC_5 0x9a
 
 #define SENDER_SRC_MAC_0 0x52
 #define SENDER_SRC_MAC_1 0x54
@@ -93,11 +93,11 @@ Increase this number on high speed network will help ...*/
 #define SENDER_SRC_MAC_5 0x0d
 
 /* Send to the bridge interface */
-// #define SEND_INTF "enp8s0"
-// #define COLLECTOR_DEST_MAC_0 0x52
-// #define COLLECTOR_DEST_MAC_1 0x54
-// #define COLLECTOR_DEST_MAC_2 0x00
-// #define COLLECTOR_DEST_MAC_3 0x80
-// #define COLLECTOR_DEST_MAC_4 0x26
-// #define COLLECTOR_DEST_MAC_5 0xbc
+#define SEND_INTF "enp8s0"
+#define COLLECTOR_DEST_MAC_0 0x52
+#define COLLECTOR_DEST_MAC_1 0x54
+#define COLLECTOR_DEST_MAC_2 0x00
+#define COLLECTOR_DEST_MAC_3 0x80
+#define COLLECTOR_DEST_MAC_4 0x26
+#define COLLECTOR_DEST_MAC_5 0xbc
 
