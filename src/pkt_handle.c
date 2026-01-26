@@ -390,7 +390,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
             FreePkt(flow_hash_ptr->pkt_desc_ptr->ppkt);
             flow_hash_ptr->pkt_desc_ptr->is_replied = TRUE;
             flow_hash_ptr->pkt_desc_ptr->ppkt = NULL;
-#ifdef SWITCH_ENABLED
             /* Install Flow Entry */
             // printf("installing flow entry, src: %s:%d -> ",
             //        inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4, ip_src_addr_print_buffer, INET_ADDRSTRLEN),
@@ -402,35 +401,46 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp, void *plas
 
             if (internal_ip(flow_hash_ptr->addr_pair.a_address.un.ip4))
             {
-                if (try_install_p4_entry(flow_hash_ptr->addr_pair.a_address.un.ip4,
-                                         flow_hash_ptr->addr_pair.a_port,
-                                         flow_hash_ptr->addr_pair.protocol))
+                int ret = p4_batch_add_rule(flow_hash_ptr->addr_pair.a_address.un.ip4,
+                                            flow_hash_ptr->addr_pair.a_port,
+                                            flow_hash_ptr->addr_pair.protocol);
+
+                if (ret == 0)
                 {
-                    printf("Error: Failed to install flow entry!\n");
-                    return -1;
+                    // ok
+                }
+                else if (ret == 1 || ret == -1)
+                {
+                    entry_install_error_count++;
+                }
+                else if (ret == 2)
+                {
+                    entry_install_dedup_count++;
                 }
             }
             else if (internal_ip(flow_hash_ptr->addr_pair.b_address.un.ip4))
             {
-                if (try_install_p4_entry(flow_hash_ptr->addr_pair.b_address.un.ip4,
-                                         flow_hash_ptr->addr_pair.b_port,
-                                         flow_hash_ptr->addr_pair.protocol))
+                int ret = p4_batch_add_rule(flow_hash_ptr->addr_pair.b_address.un.ip4,
+                                            flow_hash_ptr->addr_pair.b_port,
+                                            flow_hash_ptr->addr_pair.protocol);
+                if (ret == 0)
                 {
-                    printf("Error: Failed to install flow entry!\n");
-                    return -1;
+                    // ok
+                }
+                else if (ret == 1 || ret == -1)
+                {
+                    entry_install_error_count++;
+                }
+                else if (ret == 2)
+                {
+                    entry_install_dedup_count++;
                 }
             }
             else
             {
-                // printf("Error: Non of the src nor dst IP is internal!\n");
+                printf("Error: Non of the src nor dst IP is internal!\n");
                 return -1;
             }
-
-#ifdef DO_STATS
-            replied_flow_count_tot++;
-
-#endif
-#endif
             return 0;
         }
     }
@@ -504,6 +514,8 @@ void trace_init(void)
     memset(active_internal_host_entry, 0, sizeof(active_internal_host_entry));
     memset(active_internal_host, 0, sizeof(active_internal_host));
 #endif
+
+    p4_batch_init("/tmp/p4_controller.sock");
 }
 
 void trace_check(void)

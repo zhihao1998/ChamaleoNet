@@ -2,13 +2,11 @@
 import binascii
 import ipaddress
 import os
-import pickle
 import socket
 import struct
 import sys
 import time
 from collections import Counter
-from datetime import datetime
 
 from tabulate import tabulate
 
@@ -27,8 +25,9 @@ sys.path.append(os.path.join(SDE_PYTHON3, "tofino", "bfrt_grpc"))
 import bfrt_grpc.bfruntime_pb2 as bfruntime_pb2
 import bfrt_grpc.client as gc
 
-remote_grpc_addr = "192.168.24.69:50052"
+remote_grpc_addr = "192.168.24.69:50052"  # Change this to your controller's IP address
 local_grpc_addr = "localhost:50052"
+base_ip_range = "154.200.0.0/16"  # Change this to your IP range to be monitored
 
 
 def ip_to_int(ipv4_address):
@@ -60,10 +59,7 @@ class Bfrt_GRPC_Client:
         num_tries=5,
         perform_subscribe=True,
         target=gc.Target(),
-        enable_time_log=False,
-        enable_rule_log=False,
     ):
-
         if perform_bind and not perform_subscribe:
             raise RuntimeError("perform_bind must be equal to perform_subscribe")
 
@@ -73,8 +69,7 @@ class Bfrt_GRPC_Client:
         self.installed_flows_counter = Counter()
 
         self.active_hosts = [0] * 65536
-        self.base_ip_int = int(ipaddress.IPv4Network("154.200.0.0/16").network_address)
-        self.active_hosts_file = "/home/zhihaow/codes/honeypot_c_controller/log/active_hosts/active_hosts.log"
+        self.base_ip_int = int(ipaddress.IPv4Network(base_ip_range).network_address)
 
         self.interface = gc.ClientInterface(
             grpc_addr,
@@ -138,7 +133,6 @@ class Bfrt_GRPC_Client:
         print(tabulate(data, headers=["Full Table Name", "Type", "Usage", "Capacity"]))
 
     def print_table_info(self, table_name):
-
         print("====Table Info===")
         t = self.bfrt_info.table_get(table_name)
         print("{:<30}: {}".format("TableName", t.info.name_get()))
@@ -249,9 +243,6 @@ class Bfrt_GRPC_Client:
         start_time = time.time()
         try:
             for index, key in enumerate(entry_key_list):
-                if self.enable_rule_log:
-                    self.installed_flows_counter[f"{int_to_ip(key[0])}_{key[1]}_{key[2]}"] += 1
-
                 if f"{key[0]}_{key[1]}_{key[2]}" in self.installed_flows:
                     continue
                 key_list.append(
@@ -272,16 +263,6 @@ class Bfrt_GRPC_Client:
                     self.service_table.make_data([gc.DataTuple("$ENTRY_TTL", self.entry_ttl)], "Ingress.drop")
                 )
             self.service_table.entry_add(self.target, key_list, data_list)
-
-            if self.enable_time_log:
-                self.time_log_file_fp.write(f"{time.time()},add,{len(key_list)},{round(time.time() - start_time, 5)}\n")
-                self.time_log_file_fp.flush()
-
-            if self.enable_rule_log:
-                c_time = time.time()
-                if c_time - self.last_rule_log_time > 1800:
-                    self.write_counter_to_file()
-                    self.last_rule_log_time = c_time
 
         except Exception:
             pass

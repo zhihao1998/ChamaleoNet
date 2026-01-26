@@ -121,7 +121,11 @@ void stats_init()
 
 	install_buf_size = 0;
 
+	entry_install_error_count = 0;
+	entry_install_dedup_count = 0;
+
 	replied_flow_count_tot = 0;
+	install_rule_batch_count = 0;
 	// replied_flow_count_tcp = 0;
 	// replied_flow_count_udp = 0;
 	// replied_flow_count_icmp = 0;
@@ -494,14 +498,16 @@ int main(int argc, char *argv[])
 	void *plast;
 	long int location = 0;
 
-	printf("Capturing on the device: %s\n", RECV_INTF);
+	char *recv_intf = argv[1];
+
+	printf("Capturing on the device: %s\n", recv_intf);
 
 	/* Capture the Ctrl+C single */
 	signal(SIGINT, sig_proc);
 
 	/* open the device for sniffing. Here we use create+activate rather to avoid the packet buffer in libpcap. */
 	// pcap = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
-	pcap = pcap_create(RECV_INTF, errbuf);
+	pcap = pcap_create(recv_intf, errbuf);
 
 	/* Set immediate mode */
 	if (pcap_set_immediate_mode(pcap, 1) == -1)
@@ -538,7 +544,7 @@ int main(int argc, char *argv[])
 
 	if (pcap == NULL)
 	{
-		fprintf(stderr, "Couldn't open device %s: %s\n", RECV_INTF, errbuf);
+		fprintf(stderr, "Couldn't open device %s: %s\n", recv_intf, errbuf);
 		return (2);
 	}
 
