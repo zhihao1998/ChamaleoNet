@@ -316,13 +316,13 @@ int LazyFreeFlowHash(flow_hash_t *flow_hash_ptr) {
 /* Main entry of packet handler */
 int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
                void *plast) {
-  printf("Processing pkt, src: %s -> ",
-         inet_ntop(AF_INET, &pip->ip_src, ip_src_addr_print_buffer,
-                   INET_ADDRSTRLEN));
-  printf("dst: %s %d\n",
-         inet_ntop(AF_INET, &pip->ip_dst, ip_dst_addr_print_buffer,
-                   INET_ADDRSTRLEN),
-         pip->ip_p);
+  // printf("Processing pkt, src: %s -> ",
+  //        inet_ntop(AF_INET, &pip->ip_src, ip_src_addr_print_buffer,
+  //                  INET_ADDRSTRLEN));
+  // printf("dst: %s %d\n",
+  //        inet_ntop(AF_INET, &pip->ip_dst, ip_dst_addr_print_buffer,
+  //                  INET_ADDRSTRLEN),
+  //        pip->ip_p);
 
   /* Garbage Collection */
   if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD) {
@@ -363,20 +363,53 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
 
       // Update rules with in-band packets
       if (internal_ip(flow_hash_ptr->addr_pair.a_address.un.ip4)) {
+        // printf("Sending pkt to switch, src: %s:%d -> dst: %s:%d, protocol:
+        // %d\n",
+        //        inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4,
+        //                  ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+        //        flow_hash_ptr->addr_pair.a_port,
+        //        inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4,
+        //                  ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+        //        flow_hash_ptr->addr_pair.b_port,
+        //        flow_hash_ptr->addr_pair.protocol);
         int res = SendPktSwitch(
             flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
             flow_hash_ptr->addr_pair.a_port, flow_hash_ptr->addr_pair.protocol);
         if (res == -1) {
-          send_pkt_error_count++;
+          bloom_rule_sending_error_count++;
         }
+        // Push a rule to controller
+        // int res2 = p4_batch_add_rule(
+        //     flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
+        //     flow_hash_ptr->addr_pair.a_port, flow_hash_ptr->addr_pair.protocol);
+        // if (res2 != -1) {
+        //   controller_rule_install_count++;
+        // }
       } else {
+        // printf("Sending pkt to switch, src: %s:%d -> dst: %s:%d, protocol:
+        // %d\n",
+        //        inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.b_address.un.ip4,
+        //                  ip_src_addr_print_buffer, INET_ADDRSTRLEN),
+        //        flow_hash_ptr->addr_pair.b_port,
+        //        inet_ntop(AF_INET, &flow_hash_ptr->addr_pair.a_address.un.ip4,
+        //                  ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
+        //        flow_hash_ptr->addr_pair.a_port,
+        //        flow_hash_ptr->addr_pair.protocol);
         int res = SendPktSwitch(
             flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
             flow_hash_ptr->addr_pair.b_port, flow_hash_ptr->addr_pair.protocol);
         if (res == -1) {
-          send_pkt_error_count++;
+          bloom_rule_sending_error_count++;
         }
+        // Push a rule to controller
+        // int res2 = p4_batch_add_rule(
+        //     flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
+        //     flow_hash_ptr->addr_pair.b_port, flow_hash_ptr->addr_pair.protocol);
+        // if (res2 != -1) {
+        //   controller_rule_install_count++;
+        // }
       }
+      bloom_rule_sending_count_tot++;
       // else {
       //     /* Install Flow Entry */
       //     // printf("installing flow entry, src: %s:%d -> ",
@@ -457,9 +490,11 @@ void trace_init(void) {
   socket_address_switch.sll_family = AF_PACKET;
   socket_address_switch.sll_ifindex = if_idx_switch.ifr_ifindex;
   socket_address_switch.sll_halen = ETH_ALEN;
-  socket_address_switch.sll_protocol = htons(ETH_P_ALL); /* 与 socket 创建时一致，不限制 ether type */
+  socket_address_switch.sll_protocol =
+      htons(ETH_P_ALL); /* 与 socket 创建时一致，不限制 ether type */
 
-  /* 绑定到 VF 接口：SR-IOV VF 上仅靠 sendto 的 sll_ifindex 可能不生效，必须先 bind */
+  /* 绑定到 VF 接口：SR-IOV VF 上仅靠 sendto 的 sll_ifindex 可能不生效，必须先
+   * bind */
   if (bind(sockfd_switch, (struct sockaddr *)&socket_address_switch,
            sizeof(socket_address_switch)) < 0) {
     perror("bind(sockfd_switch)");
