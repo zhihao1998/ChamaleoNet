@@ -62,10 +62,9 @@ int p4_batch_init(const char *uds_path)
 
 #define FLUSH_INTERVAL_NS (10ull * 1000 * 1000)  // 10ms
 
-int p4_batch_add_rule(struct in_addr ip, uint16_t port_host, uint8_t proto)
+int p4_batch_add_rule(uint32_t ip, uint16_t port, uint8_t proto)
 {
-    replied_flow_count_tot++;
-    if (!dedup_should_send(ip.s_addr, port_host, proto, 1000)) {
+    if (!dedup_should_send(ip, port, proto, 1000)) {
         return 2;
     }
 
@@ -100,8 +99,8 @@ int p4_batch_add_rule(struct in_addr ip, uint16_t port_host, uint8_t proto)
     p4_rule_t *r = &g_rules[g_count++];
     r->proto = proto;
     r->reserved = 0;
-    r->port = port_host;
-    r->ipv4 = ip.s_addr;
+    r->port = port;
+    r->ipv4 = ip;
 
     return 0;
 }

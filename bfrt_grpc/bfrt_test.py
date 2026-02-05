@@ -138,15 +138,28 @@ class Bfrt_GRPC_Client:
         for data, key in reg.entry_get(self.target, []):
             reg_values.append(self.get_data_value(data))
         print(reg_values)
+    
+    def dump_counter(self, counter_name):
+        counter = self.bfrt_info.table_get(counter_name)
+        self.name = counter_name
+        data, key = next(counter.entry_get(self.target, [counter.make_key([gc.KeyTuple('$COUNTER_INDEX', 0)])]))
+        print(data.to_dict()["$COUNTER_SPEC_PKTS"])
+
+    # def set_epoch
 
 
 if __name__ == "__main__":
     controller = Bfrt_GRPC_Client()
+    controller.dump_counter("Ingress.bloom_counter_group0_epoch_0")
+    controller.dump_counter("Ingress.bloom_counter_group1_epoch_0")
+    print("--------------------------------")
+    controller.dump_counter("Ingress.bloom_counter_group0_epoch_1")
+    controller.dump_counter("Ingress.bloom_counter_group1_epoch_1")
     # controller.clear_table("Ingress.bloom_group0_epoch0")
     # controller.clear_table("Ingress.bloom_group1_epoch0")
     # controller.clear_table("pipe.Ingress.bloom_group0_epoch1")
     # controller.clear_table("pipe.Ingress.bloom_group1_epoch1")
-    print("dump register: bloom_group0_epoch0")
-    controller.dump_register("Ingress.bloom_group0_epoch0")
-    print("dump register: bloom_group1_epoch0")
-    controller.dump_register("Ingress.bloom_group1_epoch0")
+    # print("dump register: bloom_group0_epoch0")
+    # controller.dump_register("Ingress.bloom_group0_epoch0")
+    # print("dump register: bloom_group1_epoch0")
+    # controller.dump_register("Ingress.bloom_group1_epoch0")

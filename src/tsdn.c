@@ -125,7 +125,7 @@ void stats_init()
 	entry_install_error_count = 0;
 	entry_install_dedup_count = 0;
 
-	replied_flow_count_tot = 0;
+	controller_rule_install_count = 0;
 	install_rule_batch_count = 0;
 	// replied_flow_count_tcp = 0;
 	// replied_flow_count_udp = 0;
@@ -569,14 +569,6 @@ int main(int argc, char *argv[])
 
 	ip_buf = MallocZ(ETHERNET_MTU);
 
-	/* install P4 table entry thread */
-
-	if (pthread_create(&entry_install_thread, NULL, install_thead_main, NULL))
-	{
-		fprintf(stderr, "Error creating entry_install_thread thread\n");
-		return 1;
-	}
-
 	/* make sure every data structure is in place */
 	trace_check();
 
@@ -600,7 +592,6 @@ int main(int argc, char *argv[])
 		if (tv_sub_2(current_time, last_log_time) > STATS_LOG_SAMPLE_TIME)
 		{
 			last_log_time = current_time;
-			install_buf_size = entry_circ_buf_size();
 
 #ifdef FLOW_HASH_MEASURE
 			flow_hash_stats_cal();

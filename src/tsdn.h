@@ -22,7 +22,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/if_packet.h>
-#include <Python.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <time.h>
@@ -209,18 +208,6 @@ void FreeFlowHash(flow_hash_t *flow_hash_ptr);
 void check_timeout_periodic();
 void check_timeout_lazy();
 
-/* Tofino Interaction */
-
-int bfrt_active_host_tbl_add_with_drop(in_addr internal_ip, u_short internal_port, u_short ip_protocol);
-void bfrt_grpc_init();
-void *install_thead_main(void *args);
-int try_install_p4_entry(in_addr service_ip, ushort service_port, ushort service_protocol);
-int bfrt_get_table_usage();
-int bfrt_get_local_entry_number();
-int clean_all_idle_entries();
-uint64_t entry_circ_buf_size();
-int bfrt_add_batch_entries(PyObject *py_arg_tuple);
-
 /* Logging */
 FILE *fp_log;
 FILE *fp_stats;
@@ -301,6 +288,10 @@ uint64_t pkt_desc_list_count_use;
 uint64_t flow_hash_list_count_tot;
 uint64_t flow_hash_list_count_use;
 
+// Rule Sending Counters
+uint64_t bloom_rule_sending_count_tot;
+uint64_t bloom_rule_sending_error_count;
+
 // Functionality Counters
 uint64_t installed_entry_count_tot;
 // uint64_t installed_entry_count_tcp;
@@ -312,7 +303,7 @@ uint64_t install_buf_size;
 uint64_t entry_install_error_count;
 uint64_t entry_install_dedup_count;
 
-uint64_t replied_flow_count_tot;
+uint64_t controller_rule_install_count;
 // uint64_t replied_flow_count_tcp;
 // uint64_t replied_flow_count_udp;
 // uint64_t replied_flow_count_icmp;
@@ -378,7 +369,7 @@ uint32_t ip_to_int(const char *ip_str);
 #define P4_OP_INSTALL 1
 
 int p4_batch_init(const char *uds_path);
-int p4_batch_add_rule(struct in_addr ip, uint16_t port_host, uint8_t proto);
+int p4_batch_add_rule(uint32_t ip, uint16_t port, uint8_t proto);
 int p4_batch_flush(void);
 
 
