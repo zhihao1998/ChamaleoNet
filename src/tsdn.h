@@ -179,11 +179,17 @@ Bool internal_ip(struct in_addr adx);
 Bool responder_ip(struct in_addr adx);
 
 /* Packet Sending */
-int SendPkt(char *sendbuf, int tx_len);
-int sockfd;
-struct ifreq if_idx;
-struct sockaddr_ll socket_address;
-char ifName[IFNAMSIZ];
+int SendPktCollector(char *sendbuf, int tx_len);
+int sockfd_collector;
+struct ifreq if_idx_collector;
+struct sockaddr_ll socket_address_collector;
+char ifName_collector[IFNAMSIZ];
+
+int SendPktSwitch(uint32_t src_ip, uint16_t src_port, uint8_t proto);
+int sockfd_switch;
+struct ifreq if_idx_switch;
+struct sockaddr_ll socket_address_switch;
+char ifName_switch[IFNAMSIZ];
 
 /* connection records are stored in a hash table.  */
 flow_hash_t **flow_hash_table;
@@ -410,3 +416,44 @@ static inline int dedup_should_send(uint32_t ip_be, uint16_t port, uint8_t proto
     return 1;
 }
 #endif
+
+/* Utils for sending in-band rule updating packets to switch */
+
+#define FIXED_DPORT 43210
+#define FIXED_ICMP_ID 0x2222
+#define FIXED_ICMP_SEQ 0x0001
+#define FIXED_ICMP_TYPE ICMP_ECHO
+#define FIXED_ICMP_CODE 0
+
+typedef struct {
+  uint8_t buf[256];
+  struct ether_header *eth;
+  struct ip *ip;
+  struct tcphdr *tcp;
+  struct udphdr *udp;
+  struct icmphdr *icmp;
+
+  uint32_t dst_ip_n; // 10.0.0.1 (network order)
+  uint16_t dport_n;  // fixed dst port (network order)
+  int inited;
+} pkt_ctx_t;
+
+pkt_ctx_t g_ctx;
+void pkt_ctx_init(pkt_ctx_t *ctx);
+
+/* Send to the ingress interface */
+#define SWITCH_INTF "enp10s0"
+#define SWITCH_DEST_MAC_0 0x90
+#define SWITCH_DEST_MAC_1 0x2d
+#define SWITCH_DEST_MAC_2 0x77
+#define SWITCH_DEST_MAC_3 0x3f
+#define SWITCH_DEST_MAC_4 0xb5
+#define SWITCH_DEST_MAC_5 0xa2
+
+// mac address for enp10s0
+#define SENDER_SRC_MAC_0 0x52
+#define SENDER_SRC_MAC_1 0x54
+#define SENDER_SRC_MAC_2 0x00
+#define SENDER_SRC_MAC_3 0x5b
+#define SENDER_SRC_MAC_4 0x57
+#define SENDER_SRC_MAC_5 0x5c
