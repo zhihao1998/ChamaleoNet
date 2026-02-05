@@ -6,7 +6,7 @@ typedef struct timeval timeval;
 #define time2double(t) ((double)(t).tv_sec * 1000000 + (double)(t).tv_usec)
 
 /* type for a Boolean */
-typedef u_char Bool;
+typedef uint8_t  Bool;
 #define TRUE 1
 #define FALSE 0
 #define BOOL2STR(b) (b) ? "TRUE" : "FALSE"
@@ -18,7 +18,7 @@ typedef u_char Bool;
 /* IP address can be either IPv4 or IPv6 */
 typedef struct ipaddr
 {
-  u_char addr_vers; /* 4 or 6 */
+  uint8_t  addr_vers; /* 4 or 6 */
   union
   {
     struct in_addr ip4;
@@ -43,7 +43,7 @@ typedef struct
 
 typedef struct ip_packet
 {
-  u_char raw_pkt[SNAP_LEN]; /* start of the IP header */  
+  uint8_t  raw_pkt[SNAP_LEN]; /* start of the IP header */  
   /* location in the pkt_arr array */
   int loc_pkt_arr;
 } ip_packet;

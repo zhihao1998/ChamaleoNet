@@ -72,9 +72,7 @@ Increase this number on high speed network will help ...*/
 #define LOG_TO_FILE
 #define PKT_LOG_SAMPLE_CNT 10000      // pkt_count
 #define TIMEOUT_SAMPLE_CNT 100000     // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 100000  // us
-
-
+#define STATS_LOG_SAMPLE_TIME 1000000  // us
 
 /* Send to the SR-IOV VF interface */
 // #define SEND_INTF "enp9s0"
@@ -85,15 +83,8 @@ Increase this number on high speed network will help ...*/
 // #define COLLECTOR_DEST_MAC_4 0x19
 // #define COLLECTOR_DEST_MAC_5 0x9a
 
-#define SENDER_SRC_MAC_0 0x52
-#define SENDER_SRC_MAC_1 0x54
-#define SENDER_SRC_MAC_2 0x00
-#define SENDER_SRC_MAC_3 0xd3
-#define SENDER_SRC_MAC_4 0xe0
-#define SENDER_SRC_MAC_5 0x0d
-
 /* Send to the bridge interface */
-#define SEND_INTF "enp8s0"
+#define COLLECTOR_INTF "enp8s0"
 #define COLLECTOR_DEST_MAC_0 0x52
 #define COLLECTOR_DEST_MAC_1 0x54
 #define COLLECTOR_DEST_MAC_2 0x00

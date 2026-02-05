@@ -60,6 +60,7 @@ void flow_hash_stats_init(void)
 	flow_hash_p99_depth = 0;
 	memset(flow_hash_depth_hist, 0, sizeof(flow_hash_depth_hist));
 }
+
 void flow_hash_stats_cal(void)
 {
 	uint64_t target = (flow_hash_total_lookups * 99 + 99) / 100;
@@ -316,7 +317,7 @@ static int ProcessPacket(struct timeval *pckt_time,
 		// printf(" %s, proto %d \n", inet_ntoa(pip->ip_dst), pip->ip_p);
 
 		/* directly send out */
-		if (SendPkt((char *)peth, tlen) == -1)
+		if (SendPktCollector((char *)peth, tlen) == -1)
 		{
 			send_pkt_error_count++;
 		}
@@ -482,11 +483,11 @@ int main(int argc, char *argv[])
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
 	struct bpf_program fp;		   /* The compiled filter */
-	char filter_exp[] = "ip";
+	char filter_exp[] = "ip and not (host 0.0.0.0 or host 255.255.255.255)";
 	struct pcap_pkthdr header; /* The header that pcap gives us */
 	struct ether_header *eptr; /* net/ethernet.h */
-	u_char *ptr;			   /* printing out hardware header info */
-	const u_char *packet;	   /* The actual packet */
+	uint8_t  *ptr;			   /* printing out hardware header info */
+	const uint8_t  *packet;	   /* The actual packet */
 
 	int ret = 0;
 	struct ip *pip;
@@ -607,6 +608,7 @@ int main(int argc, char *argv[])
 
 			Stats s = stats_snapshot();
 			log_stats("stats,%s", stats_to_csv_string(&s));
+			
 
 #ifdef FLOW_HASH_MEASURE
 			flow_hash_stats_init();
