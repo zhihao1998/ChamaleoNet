@@ -1,10 +1,12 @@
 #!/usr/bin/python3
 import binascii
+import csv
 import ipaddress
 import os
 import socket
 import struct
 import sys
+import time
 from collections import Counter
 
 #
@@ -125,41 +127,30 @@ class Bfrt_GRPC_Client:
             except:
                 pass
 
-    def get_key_value(self, key):
-        return key.to_dict()["$REGISTER_INDEX"]["value"]
-
-    def get_data_value(self, data):
-        return data.to_dict()["%s.f1" % self.name]
-
-    def dump_register(self, register_name):
-        reg = self.bfrt_info.table_get(register_name)
-        self.name = register_name
-        reg_values = []
-        for data, key in reg.entry_get(self.target, []):
-            reg_values.append(self.get_data_value(data))
-        print(reg_values)
+    def count_port_pkts(self, port_id: int) -> dict:
+        """统计 port 的收发包数"""
+        port_stats = self.bfrt_info.table_get("$PORT_STAT")
+        data, _ = next(
+            port_stats.entry_get(
+                self.target, [port_stats.make_key([gc.KeyTuple("$DEV_PORT", port_id)])],
+                {"from_hw": True}
+            )
+        )
+        data = data.to_dict()
+        return {"rx": data['$FramesReceivedAll'], "tx": data['$FramesTransmittedAll']}
     
-    def dump_counter(self, counter_name):
-        counter = self.bfrt_info.table_get(counter_name)
-        self.name = counter_name
-        data, key = next(counter.entry_get(self.target, [counter.make_key([gc.KeyTuple('$COUNTER_INDEX', 0)])]))
-        print(data.to_dict()["$COUNTER_SPEC_PKTS"])
-
-    # def set_epoch
-
 
 if __name__ == "__main__":
+    import argparse
+    import datetime
+    parser = argparse.ArgumentParser(description="Bfrt bloom epoch controller")
+    parser.add_argument("-p", "--print-interval", type=int, default=1,
+                        help="Print current epoch occupancy every N seconds (default: 1)")
+    parser.add_argument("-s", "--switch-interval", type=int, default=2,
+                        help="Switch epoch and clear idle epoch registers every N seconds (default: 2)")
+    args = parser.parse_args()
+
+
     controller = Bfrt_GRPC_Client()
-    controller.dump_counter("Ingress.bloom_counter_group0_epoch_0")
-    controller.dump_counter("Ingress.bloom_counter_group1_epoch_0")
-    print("--------------------------------")
-    controller.dump_counter("Ingress.bloom_counter_group0_epoch_1")
-    controller.dump_counter("Ingress.bloom_counter_group1_epoch_1")
-    # controller.clear_table("Ingress.bloom_group0_epoch0")
-    # controller.clear_table("Ingress.bloom_group1_epoch0")
-    # controller.clear_table("pipe.Ingress.bloom_group0_epoch1")
-    # controller.clear_table("pipe.Ingress.bloom_group1_epoch1")
-    # print("dump register: bloom_group0_epoch0")
-    # controller.dump_register("Ingress.bloom_group0_epoch0")
-    # print("dump register: bloom_group1_epoch0")
-    # controller.dump_register("Ingress.bloom_group1_epoch0")
+    print(controller.count_port_pkts(160))
+    print(controller.count_port_pkts(140))

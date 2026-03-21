@@ -17,6 +17,8 @@
 bf_drivers.log*
 zlog-cfg-cur*
 *.log
+/log_ton
+/bfrt_log
 
 
 # analysis and output files

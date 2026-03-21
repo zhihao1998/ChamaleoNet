@@ -2,10 +2,10 @@
 CC ?= gcc
 CXX ?= # FILL: the compiler
 PYFLAGS = $(shell python3-config --includes) $(shell python3-config --ldflags --embed) 
-CFLAGS := -lpcap $(PYFLAGS)
+CFLAGS := -lpcap -lpthread $(PYFLAGS)
 CXXFLAGS := # FILL: compile flags
 DBGFLAGS := -g
-COBJFLAGS := $(CFLAGS) -c
+COBJFLAGS := -O2 $(CFLAGS) -c
 
 # path macros
 BIN_PATH := bin
@@ -86,8 +86,8 @@ clean:
 
 .PHONY: logclean
 logclean:
-	@sudo rm -rf log/*
-	
+	@sudo rm -f log/*
+	@sudo rm -f bfrt_log/*
 
 .PHONY: distclean
 distclean:

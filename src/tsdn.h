@@ -372,6 +372,11 @@ int p4_batch_init(const char *uds_path);
 int p4_batch_add_rule(uint32_t ip, uint16_t port, uint8_t proto);
 int p4_batch_flush(void);
 
+/* Rule install queue + dedicated thread: packet path pushes, install thread pops */
+int rule_queue_push(uint32_t ip, uint16_t port, uint8_t proto);
+void entry_install_thread_start(const char *uds_path);
+void entry_install_thread_stop(void);
+
 
 static inline uint64_t now_ms_monotonic(void) {
     struct timespec ts;
