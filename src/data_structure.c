@@ -28,16 +28,9 @@ MMmalloc(size_t size, const char *f_name)
   return temp_pointer;
 }
 
-/* Garbage collector for the ip_packet structs
- * Two pointer are used (top and last).
- * Alloc and release from last, while top is used to not loose the list ...
- */
-struct pkt_list_elem {
-  ip_packet *ppkt;
-  struct pkt_list_elem *next;
-};
-
-static struct pkt_list_elem *pkt_stack_top = NULL; // freelist 栈顶
+/* Intrusive freelist: store next pointer in raw_pkt[0..7] when free.
+ * Eliminates malloc/free on every release/alloc. */
+static ip_packet *pkt_stack_top = NULL;
 
 ip_packet *pkt_alloc(void)
 {
@@ -45,15 +38,11 @@ ip_packet *pkt_alloc(void)
 
     if (pkt_stack_top != NULL)
     {
-        // 复用已有的 packet
-        struct pkt_list_elem *elem = pkt_stack_top;
-        pkt_stack_top = elem->next;
-        ppkt_temp = elem->ppkt;
-        free(elem); // 释放包装结构体
+        ppkt_temp = pkt_stack_top;
+        pkt_stack_top = *(ip_packet **)(ppkt_temp->raw_pkt);
     }
     else
     {
-        // freelist 空了，分配新的
         ppkt_temp = (ip_packet *)MMmalloc(sizeof(ip_packet), "pkt_alloc");
 #ifdef DO_STATS
         pkt_list_count_tot++;
@@ -69,17 +58,11 @@ ip_packet *pkt_alloc(void)
 
 void pkt_release(ip_packet *released_ip_packet)
 {
-    struct pkt_list_elem *new_elem;
-
     if (released_ip_packet == NULL)
         return;
 
-    memset(released_ip_packet, 0, sizeof(ip_packet));
-
-    new_elem = (struct pkt_list_elem *)MMmalloc(sizeof(struct pkt_list_elem), "pkt_release");
-    new_elem->ppkt = released_ip_packet;
-    new_elem->next = pkt_stack_top;
-    pkt_stack_top = new_elem;
+    *(ip_packet **)(released_ip_packet->raw_pkt) = pkt_stack_top;
+    pkt_stack_top = released_ip_packet;
 
 #ifdef DO_STATS
     pkt_list_count_use--;
@@ -90,11 +73,11 @@ void pkt_release(ip_packet *released_ip_packet)
 void print_freelist_size()
 {
     int count = 0;
-    struct pkt_list_elem *curr = pkt_stack_top;
+    ip_packet *curr = pkt_stack_top;
     while (curr != NULL)
     {
         count++;
-        curr = curr->next;
+        curr = *(ip_packet **)(curr->raw_pkt);
     }
     printf("[FREELIST] pkt_stack_top has %d free packets\n", count);
 }
@@ -104,12 +87,7 @@ void print_freelist_size()
  *  Two pointer are used (top and last).
  *  Alloc and release from last, while top is used to not loose the list ...
  */
-struct pkt_desc_list_elem {
-  pkt_desc_t *pkt_desc_ptr;
-  struct pkt_desc_list_elem *next;
-};
-
-static struct pkt_desc_list_elem *pkt_desc_stack_top = NULL;
+static pkt_desc_t *pkt_desc_stack_top = NULL;
 
 pkt_desc_t *pkt_desc_alloc(void)
 {
@@ -117,10 +95,8 @@ pkt_desc_t *pkt_desc_alloc(void)
 
     if (pkt_desc_stack_top != NULL)
     {
-        struct pkt_desc_list_elem *elem = pkt_desc_stack_top;
-        pkt_desc_stack_top = elem->next;
-        new_pkt_desc_ptr = elem->pkt_desc_ptr;
-        free(elem); // 释放包装结构体
+        new_pkt_desc_ptr = pkt_desc_stack_top;
+        pkt_desc_stack_top = *(pkt_desc_t **)((char *)new_pkt_desc_ptr);
     }
     else
     {
@@ -139,17 +115,11 @@ pkt_desc_t *pkt_desc_alloc(void)
 
 void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
 {
-    struct pkt_desc_list_elem *new_elem;
-
     if (rel_pkt_desc_ptr == NULL)
         return;
 
-    memset(rel_pkt_desc_ptr, 0, sizeof(pkt_desc_t));
-
-    new_elem = (struct pkt_desc_list_elem *)MMmalloc(sizeof(struct pkt_desc_list_elem), "pkt_desc_release");
-    new_elem->pkt_desc_ptr = rel_pkt_desc_ptr;
-    new_elem->next = pkt_desc_stack_top;
-    pkt_desc_stack_top = new_elem;
+    *(pkt_desc_t **)((char *)rel_pkt_desc_ptr) = pkt_desc_stack_top;
+    pkt_desc_stack_top = rel_pkt_desc_ptr;
 
 #ifdef DO_STATS
     pkt_desc_list_count_use--;
@@ -159,11 +129,11 @@ void pkt_desc_release(pkt_desc_t *rel_pkt_desc_ptr)
 void print_pkt_desc_freelist_size()
 {
     int count = 0;
-    struct pkt_desc_list_elem *curr = pkt_desc_stack_top;
+    pkt_desc_t *curr = pkt_desc_stack_top;
     while (curr != NULL)
     {
         count++;
-        curr = curr->next;
+        curr = *(pkt_desc_t **)((char *)curr);
     }
     printf("[FREELIST] pkt_desc_stack_top has %d free pkt_desc entries\n", count);
 }

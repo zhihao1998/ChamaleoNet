@@ -208,7 +208,7 @@ static inline uint32_t hash_flow_index(uint64_t h)
 /* in addition to copying the address, we also create a HASH value	*/
 /* which is based on BOTH IP addresses and port numbers.  It allows	*/
 /* faster comparisons most of the time					*/
-void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr)
+inline void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr)
 {
   p_flow_addr->protocol = pip->ip_p;
   switch (pip->ip_p)
@@ -240,8 +240,11 @@ void CopyAddr(flow_addrblock *p_flow_addr, struct ip *pip, void *p_l4_hdr)
     return;
   }
 
-  IP_COPYADDR(&p_flow_addr->a_address, *IPV4ADDR2ADDR(&pip->ip_src));
-  IP_COPYADDR(&p_flow_addr->b_address, *IPV4ADDR2ADDR(&pip->ip_dst));
+  /* Direct copy for IPv4 - avoids IPV4ADDR2ADDR static and IP_COPYADDR indirection */
+  p_flow_addr->a_address.addr_vers = 4;
+  p_flow_addr->a_address.un.ip4.s_addr = pip->ip_src.s_addr;
+  p_flow_addr->b_address.addr_vers = 4;
+  p_flow_addr->b_address.un.ip4.s_addr = pip->ip_dst.s_addr;
   /* fill in the hashed address */
   uint32_t sip = ntohl(p_flow_addr->a_address.un.ip4.s_addr);
   uint32_t dip = ntohl(p_flow_addr->b_address.un.ip4.s_addr);

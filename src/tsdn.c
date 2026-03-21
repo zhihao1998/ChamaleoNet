@@ -152,9 +152,6 @@ struct in_addr *responder_net_list;
 int *responder_net_mask;
 int tot_responder_nets;
 
-/* Multi Thread Declaration */
-pthread_t entry_install_thread;
-
 /* pkt_rx thread */
 static int
 my_callback(char *user, struct pcap_pkthdr *phdr, unsigned char *buf)
@@ -417,7 +414,7 @@ void clean_all()
 	/* close pcap */
 	pcap_close(pcap);
 	/* close bfrt_grpc */
-	pthread_cancel(entry_install_thread);
+	entry_install_thread_stop();
 	/* close log */
 #ifdef LOG_TO_FILE
 	// fclose(fp_log);

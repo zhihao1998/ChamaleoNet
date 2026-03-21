@@ -1,4 +1,5 @@
 #include "tsdn.h"
+#include <errno.h>
 
 #define P4_MAGIC 0x5034  // 'P4'
 #define P4_VER   1
@@ -62,12 +63,9 @@ int p4_batch_init(const char *uds_path)
 
 #define FLUSH_INTERVAL_NS (10ull * 1000 * 1000)  // 10ms
 
-int p4_batch_add_rule(uint32_t ip, uint16_t port, uint8_t proto)
+/* Same as p4_batch_add_rule but skips dedup (caller already did it). */
+static int p4_batch_add_rule_raw(uint32_t ip, uint16_t port, uint8_t proto)
 {
-    if (!dedup_should_send(ip, port, proto, 1000)) {
-        return 2;
-    }
-
     if (g_sock == -1) {
         if (p4_batch_init("/tmp/p4_controller.sock") != 0)
             return -1;
@@ -103,6 +101,14 @@ int p4_batch_add_rule(uint32_t ip, uint16_t port, uint8_t proto)
     r->ipv4 = ip;
 
     return 0;
+}
+
+int p4_batch_add_rule(uint32_t ip, uint16_t port, uint8_t proto)
+{
+    if (!dedup_should_send(ip, port, proto, 1000)) {
+        return 2;
+    }
+    return p4_batch_add_rule_raw(ip, port, proto);
 }
 
 int p4_batch_flush(void)
@@ -142,4 +148,103 @@ int p4_batch_flush(void)
     }
 
     return -1;
+}
+
+/* ---------------------------------------------------------------------------
+ * Rule install queue: packet thread pushes, install thread pops.
+ * Keeps rule installation off the critical packet processing path.
+ * --------------------------------------------------------------------------- */
+#define RULE_QUEUE_SIZE 65536
+
+typedef struct {
+    uint32_t ip;
+    uint16_t port;
+    uint8_t proto;
+} rule_req_t;
+
+static rule_req_t rule_queue[RULE_QUEUE_SIZE];
+static uint32_t rule_queue_head;
+static uint32_t rule_queue_tail;
+static pthread_mutex_t rule_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t rule_queue_cond = PTHREAD_COND_INITIALIZER;
+static volatile int rule_queue_shutdown = 0;
+
+/* Non-blocking push. Returns 0 on success, -1 if queue full.
+ * Called from packet processing path - must be fast. */
+int rule_queue_push(uint32_t ip, uint16_t port, uint8_t proto)
+{
+    pthread_mutex_lock(&rule_queue_mutex);
+    uint32_t next = (rule_queue_tail + 1) % RULE_QUEUE_SIZE;
+    if (next == rule_queue_head) {
+        pthread_mutex_unlock(&rule_queue_mutex);
+        return -1; /* full */
+    }
+    rule_queue[rule_queue_tail].ip = ip;
+    rule_queue[rule_queue_tail].port = port;
+    rule_queue[rule_queue_tail].proto = proto;
+    rule_queue_tail = next;
+    pthread_cond_signal(&rule_queue_cond);
+    pthread_mutex_unlock(&rule_queue_mutex);
+    return 0;
+}
+
+/* Pop one item. Blocks with timeout until item available or shutdown.
+ * Returns 0 on success, -1 on shutdown, 1 on empty (should not happen when blocking). */
+static int rule_queue_pop(rule_req_t *out)
+{
+    struct timespec ts;
+    pthread_mutex_lock(&rule_queue_mutex);
+    for (;;) {
+        if (rule_queue_shutdown) {
+            pthread_mutex_unlock(&rule_queue_mutex);
+            return -1;
+        }
+        if (rule_queue_head != rule_queue_tail) {
+            out->ip = rule_queue[rule_queue_head].ip;
+            out->port = rule_queue[rule_queue_head].port;
+            out->proto = rule_queue[rule_queue_head].proto;
+            rule_queue_head = (rule_queue_head + 1) % RULE_QUEUE_SIZE;
+            pthread_mutex_unlock(&rule_queue_mutex);
+            return 0;
+        }
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 1;
+        pthread_cond_timedwait(&rule_queue_cond, &rule_queue_mutex, &ts);
+    }
+}
+
+static void *entry_install_thread_func(void *arg)
+{
+    const char *uds_path = (const char *)arg;
+    rule_req_t req;
+
+    p4_batch_init(uds_path);
+
+    while (rule_queue_pop(&req) == 0) {
+        int res = p4_batch_add_rule_raw(req.ip, req.port, req.proto);
+        if (res != -1) {
+            __sync_fetch_and_add(&controller_rule_install_count, 1);
+        }
+    }
+    return NULL;
+}
+
+static pthread_t g_entry_install_thread;
+
+void entry_install_thread_start(const char *uds_path)
+{
+    rule_queue_shutdown = 0;
+    rule_queue_head = 0;
+    rule_queue_tail = 0;
+    pthread_create(&g_entry_install_thread, NULL, entry_install_thread_func,
+                   (void *)uds_path);
+}
+
+void entry_install_thread_stop(void)
+{
+    pthread_mutex_lock(&rule_queue_mutex);
+    rule_queue_shutdown = 1;
+    pthread_cond_broadcast(&rule_queue_cond);
+    pthread_mutex_unlock(&rule_queue_mutex);
+    pthread_join(g_entry_install_thread, NULL);
 }

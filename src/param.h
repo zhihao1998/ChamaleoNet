@@ -2,15 +2,13 @@
 
 /* Experiments */
 // #define MAX_CAPTURE_PKTS 50000000
-// #define HOST_LIVENESS_MONITOR
-// #define FLOW_HASH_MEASURE
+#define FLOW_HASH_MEASURE
 // #define PKT_PROCESS_TIME_MEASURE
 // #define SWITCH_ENABLED
 
-// #define HOST_LIVENESS_MONITOR
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-#define PKT_BUF_SIZE 200000
+#define PKT_BUF_SIZE 400000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,
@@ -87,20 +85,20 @@ Increase this number on high speed network will help ...*/
 >>>>>>> f90330e (add in-band bloom filter rule update)
 
 /* Send to the SR-IOV VF interface */
-// #define SEND_INTF "enp9s0"
-// #define COLLECTOR_DEST_MAC_0 0x52
-// #define COLLECTOR_DEST_MAC_1 0x54
-// #define COLLECTOR_DEST_MAC_2 0x00
-// #define COLLECTOR_DEST_MAC_3 0x6a
-// #define COLLECTOR_DEST_MAC_4 0x19
-// #define COLLECTOR_DEST_MAC_5 0x9a
-
-/* Send to the bridge interface */
-#define COLLECTOR_INTF "enp8s0"
+#define COLLECTOR_INTF "enp9s0"
 #define COLLECTOR_DEST_MAC_0 0x52
 #define COLLECTOR_DEST_MAC_1 0x54
 #define COLLECTOR_DEST_MAC_2 0x00
-#define COLLECTOR_DEST_MAC_3 0x80
-#define COLLECTOR_DEST_MAC_4 0x26
-#define COLLECTOR_DEST_MAC_5 0xbc
+#define COLLECTOR_DEST_MAC_3 0x6a
+#define COLLECTOR_DEST_MAC_4 0x19
+#define COLLECTOR_DEST_MAC_5 0x9a
+
+/* Send to the bridge interface */
+// #define COLLECTOR_INTF "enp8s0"
+// #define COLLECTOR_DEST_MAC_0 0x52
+// #define COLLECTOR_DEST_MAC_1 0x54
+// #define COLLECTOR_DEST_MAC_2 0x00
+// #define COLLECTOR_DEST_MAC_3 0x80
+// #define COLLECTOR_DEST_MAC_4 0x26
+// #define COLLECTOR_DEST_MAC_5 0xbc
 

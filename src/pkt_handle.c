@@ -3,7 +3,6 @@
 int num_ip_packets = -1;           /* how many packets we've allocated */
 static ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
 static pkt_desc_t **pkt_desc_arr = NULL;
-int pkt_index = 0;
 int entry_index = 0;
 // static timeval current_pkt_time;
 
@@ -326,7 +325,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
 
   /* Garbage Collection */
   if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD) {
-    /* Do the expired packet checking */
     last_pkt_cleaned_time = current_time;
     check_timeout_periodic();
   }
@@ -334,7 +332,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
   /* Lazy Free */
   if (elapsed(last_hash_cleaned_time, current_time) >
       FLOW_HASH_TABLE_GC_PERIOD) {
-    /* Do the lazy freeing */
     last_hash_cleaned_time = current_time;
     check_timeout_lazy();
   }
@@ -343,22 +340,21 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
   flow_hash_t *flow_hash_ptr;
   int dir = 0;
 
-  /* do not rely on the header, instead check if it's already in the hash table
-   */
+  /* do not rely on the header, instead check if it's already in the hash table */
   flow_hash_ptr = FindFlowHash(pip, ptcp, plast, &dir);
 
   /* Found the flow, then check the direction of this packet */
-  if (flow_hash_ptr != NULL) {
-    if (flow_hash_ptr->lazy_pending == TRUE) {
+  if (__builtin_expect(flow_hash_ptr != NULL, 1)) {
+    if (__builtin_expect(flow_hash_ptr->lazy_pending == TRUE, 0)) {
       flow_hash_ptr->last_pkt_time = current_time;
       return 0;
     }
-    /* Same direction of this packet, probably another request */
-    if (dir == C2S) {
+    /* Same direction of this packet, probably another request - common case */
+    if (__builtin_expect(dir == C2S, 1)) {
       return 0;
     }
     /* Reversed direction of this packet, probably a response */
-    else if (dir == S2C) {
+    if (dir == S2C) {
       LazyFreeFlowHash(flow_hash_ptr);
 
       // Update rules with in-band packets
@@ -378,13 +374,14 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
         if (res == -1) {
           bloom_rule_sending_error_count++;
         }
-        // Push a rule to controller
-        // int res2 = p4_batch_add_rule(
-        //     flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
-        //     flow_hash_ptr->addr_pair.a_port, flow_hash_ptr->addr_pair.protocol);
-        // if (res2 != -1) {
-        //   controller_rule_install_count++;
-        // }
+        /* Push rule to install queue (dedicated thread does actual install) */
+        if (dedup_should_send(flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
+                              flow_hash_ptr->addr_pair.a_port,
+                              flow_hash_ptr->addr_pair.protocol, 1000)) {
+          rule_queue_push(flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
+                         flow_hash_ptr->addr_pair.a_port,
+                         flow_hash_ptr->addr_pair.protocol);
+        }
       } else {
         // printf("Sending pkt to switch, src: %s:%d -> dst: %s:%d, protocol:
         // %d\n",
@@ -401,13 +398,14 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
         if (res == -1) {
           bloom_rule_sending_error_count++;
         }
-        // Push a rule to controller
-        // int res2 = p4_batch_add_rule(
-        //     flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
-        //     flow_hash_ptr->addr_pair.b_port, flow_hash_ptr->addr_pair.protocol);
-        // if (res2 != -1) {
-        //   controller_rule_install_count++;
-        // }
+        /* Push rule to install queue (dedicated thread does actual install) */
+        if (dedup_should_send(flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
+                              flow_hash_ptr->addr_pair.b_port,
+                              flow_hash_ptr->addr_pair.protocol, 1000)) {
+          rule_queue_push(flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
+                         flow_hash_ptr->addr_pair.b_port,
+                         flow_hash_ptr->addr_pair.protocol);
+        }
       }
       bloom_rule_sending_count_tot++;
       // else {
@@ -510,7 +508,7 @@ void trace_init(void) {
   memset(active_internal_host, 0, sizeof(active_internal_host));
 #endif
 
-  p4_batch_init("/tmp/p4_controller.sock");
+  entry_install_thread_start("/tmp/p4_controller.sock");
 }
 
 void trace_check(void) {
