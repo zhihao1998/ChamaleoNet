@@ -104,7 +104,6 @@ static inline void FlowHashRecordLookup(int search_depth) {
     flow_hash_depth_hist[search_depth]++;
   else
     flow_hash_depth_hist[FLOW_HASH_MAX_DEPTH]++;
-
   if (search_depth > 1)
     flow_hash_collision_lookups++;
 }

@@ -1,6 +1,5 @@
 #include "tsdn.h"
 #include "stats_print.h"
-
 #include <errno.h>
 #include <inttypes.h>
 #include <linux/ethtool.h>
@@ -938,7 +937,6 @@ int main(int argc, char *argv[])
 	int tlen;
 	void *plast;
 	long int location = 0;
-
 	printf("Capturing on the device: %s\n", recv_intf);
 
 	/* Graceful stop: let main loop exit and print final stats once. */

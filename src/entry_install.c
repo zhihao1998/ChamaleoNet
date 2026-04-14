@@ -196,7 +196,6 @@ uint32_t rule_queue_depth(void)
     pthread_mutex_unlock(&rule_queue_mutex);
     return (t + RULE_QUEUE_SIZE - h) % RULE_QUEUE_SIZE;
 }
-
 /* Pop one item. Blocks with timeout until item available or shutdown.
  * Returns 0 on success, -1 on shutdown, 1 on empty (should not happen when blocking). */
 static int rule_queue_pop(rule_req_t *out)

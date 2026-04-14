@@ -20,7 +20,6 @@ zlog-cfg-cur*
 /log_ton
 /bfrt_log
 
-
 # analysis and output files
 /analysis
 *.pdf
