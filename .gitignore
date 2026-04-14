@@ -32,3 +32,4 @@ gdb
 tsdn.sh
 conf/net.internal
 conf/net.responder
+conf/tsdn.interfaces

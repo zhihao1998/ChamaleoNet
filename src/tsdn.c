@@ -1,6 +1,43 @@
 #include "tsdn.h"
 #include "stats_print.h"
 
+#include <errno.h>
+#include <inttypes.h>
+#include <linux/ethtool.h>
+#include <linux/if_packet.h>
+#include <linux/sockios.h>
+#include <sys/stat.h>
+#include <time.h>
+
+#define TSDN_REPO_ROOT "/home/zhihaow/codes/honeypot_c_controller"
+
+static char g_capture_ifname[64];
+static char g_tsdn_run_dir[512];
+
+static int mkdir_p(const char *path, mode_t mode)
+{
+	char buf[512];
+	char *p;
+	size_t n;
+
+	n = snprintf(buf, sizeof(buf), "%s", path);
+	if (n >= sizeof(buf))
+		return -1;
+
+	for (p = buf + 1; *p; p++)
+	{
+		if (*p != '/')
+			continue;
+		*p = '\0';
+		if (mkdir(buf, mode) != 0 && errno != EEXIST)
+			return -1;
+		*p = '/';
+	}
+	if (mkdir(buf, mode) != 0 && errno != EEXIST)
+		return -1;
+	return 0;
+}
+
 Bool internal_src = TRUE;
 Bool internal_dst = TRUE;
 
@@ -143,6 +180,82 @@ void stats_init()
 /* global pointer, the pcap info header */
 static pcap_t *pcap;
 struct pcap_stat stats_pcap;
+
+/*
+ * Linux AF_PACKET + TPACKET/mmap: pcap_stats() often leaves ps_recv/ps_drop at0.
+ * PACKET_STATISTICS returns deltas since the previous getsockopt and clears them;
+ * we accumulate into these totals for display and pcap_pend.
+ */
+static uint64_t g_sock_rx_total;
+static uint64_t g_sock_drop_total;
+
+static void refresh_linux_sock_stats(void)
+{
+#ifdef __linux__
+	int fd;
+	struct tpacket_stats_v3 st3;
+	struct tpacket_stats st;
+	socklen_t len;
+
+	if (pcap == NULL)
+		return;
+	fd = pcap_fileno(pcap);
+	if (fd < 0)
+		return;
+
+	len = sizeof(st3);
+	if (getsockopt(fd, SOL_PACKET, PACKET_STATISTICS, &st3, &len) == 0)
+	{
+		g_sock_rx_total += (uint64_t)st3.tp_packets;
+		g_sock_drop_total += (uint64_t)st3.tp_drops;
+		return;
+	}
+	len = sizeof(st);
+	if (getsockopt(fd, SOL_PACKET, PACKET_STATISTICS, &st, &len) == 0)
+	{
+		g_sock_rx_total += (uint64_t)st.tp_packets;
+		g_sock_drop_total += (uint64_t)st.tp_drops;
+	}
+#endif
+}
+
+/* Prefer pcap_stats when ps_recv > 0; else use accumulated PACKET_STATISTICS.
+ * Returns 1 if recv/drop were taken from PACKET_STATISTICS fallback. */
+static int merge_pcap_rx_display(uint64_t *pr, uint64_t *pd, uint64_t *pif)
+{
+	struct pcap_stat st;
+	int ok = (pcap != NULL && pcap_stats(pcap, &st) == 0);
+	int used_sock = 0;
+
+	refresh_linux_sock_stats();
+
+	*pr = 0;
+	*pd = 0;
+	*pif = 0;
+	if (ok)
+	{
+		*pr = (uint64_t)st.ps_recv;
+		*pd = (uint64_t)st.ps_drop;
+		*pif = (uint64_t)st.ps_ifdrop;
+	}
+
+	/*
+	 * On Linux mmap capture, libpcap and PACKET_STATISTICS may diverge
+	 * per field. Use the larger accumulated value for recv/drop so we
+	 * don't hide kernel-reported drops when pcap_stats keeps drop at 0.
+	 */
+	if (g_sock_rx_total > *pr)
+	{
+		*pr = g_sock_rx_total;
+		used_sock = 1;
+	}
+	if (g_sock_drop_total > *pd)
+	{
+		*pd = g_sock_drop_total;
+		used_sock = 1;
+	}
+	return used_sock;
+}
 
 struct in_addr *internal_net_list;
 int *internal_net_mask;
@@ -393,18 +506,285 @@ static int ProcessPacket(struct timeval *pckt_time,
 	return 1;
 }
 
+/* ethtool stat index: -2 = not resolved, -1 = none, else data[] index */
+static int g_ethtool_oob_idx = -2;
+static uint64_t g_prev_rx_packets;
+static uint64_t g_prev_oob;
+static int g_stat_delta_inited;
+
+static int read_sysfs_u64_path(const char *path, uint64_t *out)
+{
+	FILE *fp;
+
+	fp = fopen(path, "r");
+	if (!fp)
+		return -1;
+	if (fscanf(fp, "%" SCNu64, out) != 1)
+	{
+		fclose(fp);
+		return -1;
+	}
+	fclose(fp);
+	return 0;
+}
+
+/*
+ * Driver counter often related to NIC/host buffer exhaustion (e.g. mlx5
+ * rx_out_of_buffer). Cumulative; we print delta since last sample. Returns0
+ * and *val, or -1 if unavailable.
+ */
+static int ethtool_oob_stat(const char *ifname, uint64_t *val)
+{
+	int fd, ret = -1;
+	struct ifreq ifr;
+	struct ethtool_drvinfo drv = {.cmd = ETHTOOL_GDRVINFO};
+	struct ethtool_gstrings *gs;
+	struct ethtool_stats *es;
+	uint32_t n_stats, i;
+	size_t glen, slen;
+
+	*val = 0;
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0)
+		return -1;
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+	ifr.ifr_data = (void *)&drv;
+	if (ioctl(fd, SIOCETHTOOL, &ifr) < 0)
+		goto out_fd;
+	n_stats = drv.n_stats;
+	if (n_stats == 0 || n_stats > 8192U)
+		goto out_fd;
+
+	glen = sizeof(struct ethtool_gstrings) + (size_t)n_stats * ETH_GSTRING_LEN;
+	slen = sizeof(struct ethtool_stats) + (size_t)n_stats * sizeof(uint64_t);
+	gs = (struct ethtool_gstrings *)calloc(1, glen);
+	es = (struct ethtool_stats *)calloc(1, slen);
+	if (!gs || !es)
+		goto out_alloc;
+
+	gs->cmd = ETHTOOL_GSTRINGS;
+	gs->string_set = ETH_SS_STATS;
+	gs->len = n_stats;
+	ifr.ifr_data = (void *)gs;
+	if (ioctl(fd, SIOCETHTOOL, &ifr) < 0)
+		goto out_alloc;
+
+	if (g_ethtool_oob_idx == -2)
+	{
+		g_ethtool_oob_idx = -1;
+		for (i = 0; i < n_stats; i++)
+		{
+			char *s = (char *)&gs->data[i * ETH_GSTRING_LEN];
+
+			s[ETH_GSTRING_LEN - 1] = '\0';
+			if (strstr(s, "out_of_buffer") || strstr(s, "out_of_buff") ||
+			    strstr(s, "rx_no_buffer") ||
+			    strstr(s, "rx_buf_alloc_fail") ||
+			    strstr(s, "rx_alloc_fail") ||
+			    strstr(s, "no_dma_resources"))
+			{
+				g_ethtool_oob_idx = (int)i;
+				break;
+			}
+		}
+	}
+
+	es->cmd = ETHTOOL_GSTATS;
+	es->n_stats = n_stats;
+	ifr.ifr_data = (void *)es;
+	if (ioctl(fd, SIOCETHTOOL, &ifr) < 0)
+		goto out_alloc;
+
+	if (g_ethtool_oob_idx >= 0 && (uint32_t)g_ethtool_oob_idx < n_stats)
+	{
+		*val = es->data[g_ethtool_oob_idx];
+		ret = 0;
+	}
+
+out_alloc:
+	free(gs);
+	free(es);
+out_fd:
+	close(fd);
+	return ret;
+}
+
+/*
+ * pcap_pend: libpcap ps_recv minus pkt_count (accounting gap: pcap-delivered vs
+ *   packets processed in the main loop; not the same as NIC sysfs counters).
+ * bloom_rsp: S2C responses that entered the bloom / switch-send path (flows
+ *   that need bloom-side handling; see bloom_rule_sending_count_tot).
+ * nic_drx: delta of /sys/.../statistics/rx_packets since last sample (host
+ *   stack view of packets received on this interface).
+ * nic_oob_d: delta of driver ethtool “out of buffer”-style stat when present
+ *   (NIC/driver buffer pressure; not the same as pcap_pend).
+ *
+ * TTY: fixed header, only the value line is redrawn. Logs / .status: one line.
+ */
+static void tsdn_emit_status_line(void)
+{
+	static int status_tty_hdr_done;
+	uint64_t pr = 0, pd = 0, pif = 0;
+	int64_t pcap_pend;
+	uint64_t pkt_pps = 0;
+	uint64_t nic_pps = 0;
+	static struct timespec prev_pps_ts;
+	static uint64_t prev_pps_pkt;
+	static int pps_inited;
+	uint32_t ruleq = rule_queue_depth();
+	char sysfs_rx[256];
+	uint64_t rx_packets = 0, oob_now = 0, nic_drx = 0, nic_oob_d = 0;
+	int have_rx, have_oob;
+	int tty = isatty(fileno(stderr));
+	struct timespec pps_now;
+	double sample_dt = 0.0;
+
+	(void)merge_pcap_rx_display(&pr, &pd, &pif);
+	pcap_pend = (int64_t)pr - (int64_t)pkt_count;
+
+	clock_gettime(CLOCK_MONOTONIC, &pps_now);
+	if (pps_inited)
+	{
+		sample_dt = (pps_now.tv_sec - prev_pps_ts.tv_sec) +
+			    (pps_now.tv_nsec - prev_pps_ts.tv_nsec) / 1e9;
+
+		if (sample_dt >= 1e-3 && pkt_count >= prev_pps_pkt)
+			pkt_pps = (uint64_t)((double)(pkt_count - prev_pps_pkt) / sample_dt + 0.5);
+	}
+	prev_pps_ts = pps_now;
+	prev_pps_pkt = pkt_count;
+	pps_inited = 1;
+
+	snprintf(sysfs_rx, sizeof(sysfs_rx), "/sys/class/net/%s/statistics/rx_packets",
+		 g_capture_ifname);
+	have_rx = (read_sysfs_u64_path(sysfs_rx, &rx_packets) == 0);
+	have_oob = (ethtool_oob_stat(g_capture_ifname, &oob_now) == 0);
+
+	if (!g_stat_delta_inited)
+	{
+		if (have_rx)
+			g_prev_rx_packets = rx_packets;
+		if (have_oob)
+			g_prev_oob = oob_now;
+		g_stat_delta_inited = 1;
+		nic_drx = 0;
+		nic_oob_d = 0;
+	}
+	else
+	{
+		if (have_rx)
+		{
+			nic_drx = rx_packets - g_prev_rx_packets;
+			if (pps_inited && sample_dt >= 1e-3)
+				nic_pps = (uint64_t)((double)nic_drx / sample_dt + 0.5);
+			g_prev_rx_packets = rx_packets;
+		}
+		else
+		{
+			nic_drx = 0;
+			nic_pps = 0;
+		}
+
+		if (have_oob)
+		{
+			nic_oob_d = oob_now - g_prev_oob;
+			g_prev_oob = oob_now;
+		}
+		else
+		{
+			nic_oob_d = 0;
+		}
+	}
+
+	if (tty)
+	{
+		if (!status_tty_hdr_done)
+		{
+			fprintf(stderr,
+				"%-10s %8s %8s %10s %8s %8s %6s %8s %10s %8s %8s %10s %10s %10s %5s\n",
+				"IFACE", "pkt_pps", "nic_pps", "pkt", "buf", "flow", "exp",
+				"bloom_rsp", "pcap_rx", "pcap_drp", "pcap_ifdr",
+				"pcap_pend", "nic_drx", "nic_oob_d", "ruleq");
+			fflush(stderr);
+			status_tty_hdr_done = 1;
+		}
+		else
+			fprintf(stderr, "\033[1A\033[2K\r");
+		fprintf(stderr,
+			"%-10s %8" PRIu64 " %8" PRIu64 " %10" PRIu64 " %8" PRIu64 " %8" PRIu64 " %6" PRIu64
+			" %8" PRIu64 " %10" PRIu64 " %8" PRIu64 " %8" PRIu64 " %10" PRId64
+			" %10" PRIu64,
+			g_capture_ifname, pkt_pps, nic_pps, pkt_count, pkt_buf_count, flow_hash_count,
+			expired_pkt_count_tot, bloom_rule_sending_count_tot, pr, pd, pif,
+			pcap_pend, nic_drx);
+		if (have_oob)
+			fprintf(stderr, " %10" PRIu64, nic_oob_d);
+		else
+			fprintf(stderr, " %10s", "-");
+		fprintf(stderr, " %5u\n", ruleq);
+		fflush(stderr);
+	}
+	else
+	{
+		fprintf(stderr,
+			"[%s] pkt_pps=%" PRIu64 " nic_pps=%" PRIu64 " pkt=%" PRIu64 " buf=%" PRIu64 " flow=%" PRIu64
+			" expired=%" PRIu64 " bloom_rsp=%" PRIu64
+			" pcap_recv=%" PRIu64 " pcap_drop=%" PRIu64 " pcap_ifdrop=%" PRIu64
+			" pcap_pend=%" PRId64 " nic_drx=%" PRIu64 " ",
+			g_capture_ifname, pkt_pps, nic_pps, pkt_count, pkt_buf_count, flow_hash_count,
+			expired_pkt_count_tot, bloom_rule_sending_count_tot, pr, pd, pif,
+			pcap_pend, nic_drx);
+		if (have_oob)
+			fprintf(stderr, "nic_oob_d=%" PRIu64 " ", nic_oob_d);
+		else
+			fprintf(stderr, "nic_oob_d=- ");
+		fprintf(stderr, "ruleq=%u\n", ruleq);
+	}
+
+	if (g_tsdn_run_dir[0] != '\0')
+	{
+		char path[640];
+		FILE *fp;
+
+		snprintf(path, sizeof(path), "%s/tsdn/%s.status", g_tsdn_run_dir,
+			 g_capture_ifname);
+		fp = fopen(path, "w");
+		if (fp)
+		{
+			fprintf(fp,
+				"%-10s %8" PRIu64 " %8" PRIu64 " %10" PRIu64 " %8" PRIu64 " %8" PRIu64
+				" %6" PRIu64 " %8" PRIu64 " %10" PRIu64 " %8" PRIu64 " %8" PRIu64
+				" %10" PRId64 " %10" PRIu64,
+				g_capture_ifname, pkt_pps, nic_pps, pkt_count, pkt_buf_count,
+				flow_hash_count, expired_pkt_count_tot,
+				bloom_rule_sending_count_tot, pr, pd, pif, pcap_pend,
+				nic_drx);
+			if (have_oob)
+				fprintf(fp, " %10" PRIu64, nic_oob_d);
+			else
+				fprintf(fp, " %10s", "-");
+			fprintf(fp, " %5u\n", ruleq);
+			fclose(fp);
+		}
+	}
+}
+
 void print_all_stats()
 {
 	Stats s = stats_snapshot();
+	uint64_t pr, pd, pif;
+	int sock_fb;
+
 	stats_print(stdout, &s, STATS_FMT_KV, 0);
 
-	/* Print the statistics */
-	if (pcap_stats(pcap, &stats_pcap) >= 0)
-	{
-		printf("\n%ld.%ld Pcap Statistics\n", current_time.tv_sec, current_time.tv_usec);
-		printf("Received: %d, Processed: %ld, Still in queue: %ld, Dropped: %d, Dropped by interface: %d\n",
-			   stats_pcap.ps_recv, pkt_count, (stats_pcap.ps_recv - pkt_count), stats_pcap.ps_drop, stats_pcap.ps_ifdrop);
-	}
+	sock_fb = merge_pcap_rx_display(&pr, &pd, &pif);
+	printf("\n%ld.%ld Pcap statistics (recv/drop: %s)\n", current_time.tv_sec,
+	       current_time.tv_usec,
+	       sock_fb ? "Linux PACKET_STATISTICS (pcap_stats recv was 0)"
+			: "libpcap pcap_stats");
+	printf("Received: %" PRIu64 ", Processed: %" PRIu64 ", Still in queue: %" PRId64 ", Dropped: %" PRIu64 ", Dropped by interface: %" PRIu64 "\n",
+	       pr, pkt_count, (int64_t)pr - (int64_t)pkt_count, pd, pif);
 }
 
 void clean_all()
@@ -426,38 +806,80 @@ static volatile sig_atomic_t g_stop = 0;
 
 void sig_proc(int sig)
 {
-	Stats s = stats_snapshot();
-	log_stats("stats,%s", stats_to_csv_string(&s));
-
-	print_all_stats();
-	clean_all();
-	exit(0);
+	(void)sig;
+	g_stop = 1;
+	if (pcap != NULL)
+		pcap_breakloop(pcap);
 }
-void init_log()
+void init_log(const char *capture_ifname)
 {
-	time_t t;
-	struct tm *tm;
-	t = time(NULL);
-	tm = localtime(&t);
+	const char *ifname =
+	    (capture_ifname && capture_ifname[0]) ? capture_ifname : "unknown";
+	snprintf(g_capture_ifname, sizeof(g_capture_ifname), "%s", ifname);
 
-	char log_dir[100];
-	sprintf(log_dir, "/home/zhihaow/codes/honeypot_c_controller/log");
-	char log_date[100];
-	sprintf(log_date, "%d%02d%02d_%02d-%02d-%02d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	struct tm *tm = localtime(&tv.tv_sec);
 
-	char log_file_name[300], stat_file_name[300], param_file_name[300];
+	char log_date[64];
+	snprintf(log_date, sizeof(log_date), "%d%02d%02d_%02d-%02d-%02d",
+		 tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour,
+		 tm->tm_min, tm->tm_sec);
+
+	char run_dir[512];
+	const char *env_run = getenv("TSDN_LOG_RUN_DIR");
+	if (env_run != NULL && env_run[0] != '\0')
+	{
+		snprintf(run_dir, sizeof(run_dir), "%s", env_run);
+	}
+	else
+	{
+		snprintf(run_dir, sizeof(run_dir), "%s/log/runs/%s", TSDN_REPO_ROOT,
+			 log_date);
+	}
+
+	snprintf(g_tsdn_run_dir, sizeof(g_tsdn_run_dir), "%s", run_dir);
+	{
+		char sub[576];
+		snprintf(sub, sizeof(sub), "%s/tsdn", run_dir);
+		if (mkdir_p(sub, 0755) != 0)
+		{
+			fprintf(stderr, "init_log: warning: cannot mkdir %s: %s\n", sub,
+				strerror(errno));
+		}
+	}
+
+	char log_file_name[300], stat_file_name[768], param_file_name[300];
+	(void)log_file_name;
+	(void)param_file_name;
 
 #ifdef LOG_TO_FILE
-	// sprintf(log_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_log.txt", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-	// sprintf(stat_file_name, "%s/%s_buf%d_GCsize%d_GCperiod%d_T%d_stat.csv", log_dir, log_date, PKT_BUF_SIZE, PKT_BUF_GC_SPLIT_SIZE, PKT_BUF_GC_PERIOD, PKT_TIMEOUT);
-	sprintf(stat_file_name, "%s/%s_HashSize%d_GCSize%d_GCPeriod%d_GCTimeout%d.csv", log_dir, log_date,
-			FLOW_HASH_TABLE_SIZE, FLOW_HASH_TABLE_GC_SIZE, FLOW_HASH_TABLE_GC_PERIOD, FLOW_HASH_TABLE_GC_TIMEOUT);
+	if (mkdir_p(run_dir, 0755) != 0)
+	{
+		fprintf(stderr, "init_log: cannot create directory %s: %s\n", run_dir,
+			strerror(errno));
+		exit(1);
+	}
+
+	/* One file per process; run_dir is usually log/runs/<timestamp>/ (shared via TSDN_LOG_RUN_DIR for multi-tsdn). */
+	snprintf(stat_file_name, sizeof(stat_file_name),
+		 "%s/%s_pid%ld_HashSize%d_GCSize%d_GCPeriod%d_GCTimeout%d.csv",
+		 run_dir, ifname, (long)getpid(), FLOW_HASH_TABLE_SIZE,
+		 FLOW_HASH_TABLE_GC_SIZE, FLOW_HASH_TABLE_GC_PERIOD,
+		 FLOW_HASH_TABLE_GC_TIMEOUT);
 
 	fp_stats = fopen(stat_file_name, "w+");
-	Stats s = stats_snapshot();
+	if (!fp_stats)
+	{
+		fprintf(stderr, "init_log: cannot open %s: %s\n", stat_file_name,
+			strerror(errno));
+		exit(1);
+	}
+	fprintf(stderr, "stats csv: %s\n", stat_file_name);
 	log_add_fp(fp_stats, LOG_STATS);
 
-	fprintf(fp_stats, "time,level,file,line,msg,%s\n", stats_csv_header_to_string());
+	fprintf(fp_stats, "time,level,file,line,msg,%s\n",
+		stats_csv_header_to_string());
 
 #endif
 	log_set_quiet(TRUE);
@@ -465,6 +887,12 @@ void init_log()
 
 int main(int argc, char *argv[])
 {
+	if (argc < 2)
+	{
+		fprintf(stderr, "usage: %s <capture_interface>\n", argv[0]);
+		return 1;
+	}
+	char *recv_intf = argv[1];
 
 	InitGlobalArrays();
 	/* parse the flags */
@@ -472,10 +900,24 @@ int main(int argc, char *argv[])
 
 	/* initialize  */
 	trace_init();
-	init_log();
+	init_log(recv_intf);
 
-	LoadInternalNets("/home/zhihaow/codes/honeypot_c_controller/conf/net.internal");
-	LoadResponderNets("/home/zhihaow/codes/honeypot_c_controller/conf/net.responder");
+	if (!LoadInternalNets(
+		"/home/zhihaow/codes/honeypot_c_controller/conf/net.internal"))
+	{
+		fprintf(stderr, "error: loading conf/net.internal failed\n");
+		return 1;
+	}
+	if (!LoadResponderNets(
+		"/home/zhihaow/codes/honeypot_c_controller/conf/net.responder"))
+	{
+		fprintf(stderr, "error: loading conf/net.responder failed\n");
+		return 1;
+	}
+	fprintf(stderr,
+		"net config: %d internal prefix(es), %d responder prefix(es) "
+		"(responder src|dst hits bypass flow state and go to collector)\n",
+		tot_internal_nets, tot_responder_nets);
 	// LoadGlobals("conf/globals.conf");
 
 	char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
@@ -487,6 +929,7 @@ int main(int argc, char *argv[])
 	const uint8_t  *packet;	   /* The actual packet */
 
 	int ret = 0;
+	int loop_ret = 0;
 	struct ip *pip;
 	int phystype;
 	struct ether_header *phys; /* physical transport header */
@@ -496,12 +939,12 @@ int main(int argc, char *argv[])
 	void *plast;
 	long int location = 0;
 
-	char *recv_intf = argv[1];
-
 	printf("Capturing on the device: %s\n", recv_intf);
 
-	/* Capture the Ctrl+C single */
+	/* Graceful stop: let main loop exit and print final stats once. */
 	signal(SIGINT, sig_proc);
+	signal(SIGTERM, sig_proc);
+	signal(SIGQUIT, sig_proc);
 
 	/* open the device for sniffing. Here we use create+activate rather to avoid the packet buffer in libpcap. */
 	// pcap = pcap_open_live(dev, BUFSIZ, 1, 1, errbuf);
@@ -596,15 +1039,11 @@ int main(int argc, char *argv[])
 
 			Stats s = stats_snapshot();
 			log_stats("stats,%s", stats_to_csv_string(&s));
-			
+			tsdn_emit_status_line();
 
 #ifdef FLOW_HASH_MEASURE
 			flow_hash_stats_init();
 #endif
-		}
-		if (pkt_count % 100000 == 0)
-		{
-			print_all_stats();
 		}
 #ifdef PKT_PROCESS_TIME_MEASURE
 		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
@@ -626,8 +1065,23 @@ int main(int argc, char *argv[])
 		}
 #endif
 
-	} while ((ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast)) > 0);
+	} while (!g_stop &&
+		 (loop_ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast)) > 0);
 
+	ret = loop_ret;
+
+	if (ret < 0)
+		fprintf(stderr, "capture loop exited on pcap error, printing final stats\n");
+	else if (g_stop)
+		fprintf(stderr, "capture loop stopped by signal, printing final stats\n");
+	else
+		fprintf(stderr, "capture loop ended, printing final stats\n");
+
+	{
+		Stats s = stats_snapshot();
+		log_stats("stats,%s", stats_to_csv_string(&s));
+	}
+	print_all_stats();
 	clean_all();
-	return 0;
+	return (ret < 0) ? 1 : 0;
 }

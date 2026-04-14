@@ -374,6 +374,7 @@ int p4_batch_flush(void);
 
 /* Rule install queue + dedicated thread: packet path pushes, install thread pops */
 int rule_queue_push(uint32_t ip, uint16_t port, uint8_t proto);
+uint32_t rule_queue_depth(void);
 void entry_install_thread_start(const char *uds_path);
 void entry_install_thread_stop(void);
 

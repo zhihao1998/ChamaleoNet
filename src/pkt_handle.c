@@ -27,6 +27,7 @@ static pkt_desc_t *NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp,
   pkt_desc_t *ppkt_desc;
   int old_new_ip_packets = num_ip_packets;
   int steps = 0;
+  static uint64_t pkt_buf_overflow_drop_count = 0;
 
   /* look for the next eventually available free block */
   num_ip_packets = (num_ip_packets + 1) % PKT_BUF_SIZE;
@@ -39,7 +40,15 @@ static pkt_desc_t *NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp,
     num_ip_packets++;
     num_ip_packets = num_ip_packets % PKT_BUF_SIZE;
   }
-  assert(pkt_arr[num_ip_packets] == NULL);
+  if (pkt_arr[num_ip_packets] != NULL) {
+    pkt_buf_overflow_drop_count++;
+    if ((pkt_buf_overflow_drop_count % 1024) == 1) {
+      fprintf(fp_stderr,
+              "pkt buffer overflow: drop packet (count=%" PRIu64 ")\n",
+              pkt_buf_overflow_drop_count);
+    }
+    return NULL;
+  }
 
   /* create a new packet buffer */
   ppkt = pkt_arr[num_ip_packets] = pkt_alloc();
@@ -67,7 +76,18 @@ static pkt_desc_t *NewPkt(struct ether_header *peth, struct ip *pip, void *ptcp,
   /* push pkt_desc to circular buf */
   pkt_desc_t **tmp_pkt_desc_pp =
       (pkt_desc_t **)circular_buf_try_put(pkt_circ_buf, (void *)ppkt_desc);
-  assert(tmp_pkt_desc_pp != NULL);
+  if (tmp_pkt_desc_pp == NULL) {
+    pkt_buf_overflow_drop_count++;
+    if ((pkt_buf_overflow_drop_count % 1024) == 1) {
+      fprintf(fp_stderr,
+              "pkt descriptor queue full: drop packet (count=%" PRIu64 ")\n",
+              pkt_buf_overflow_drop_count);
+    }
+    pkt_desc_release(ppkt_desc);
+    pkt_arr[num_ip_packets] = NULL;
+    pkt_release(ppkt);
+    return NULL;
+  }
 
   return ppkt_desc;
 }
@@ -236,7 +256,9 @@ static flow_hash_t *CreateFlowHash(struct ether_header *peth, struct ip *pip,
 
   /* Buffer packet */
   ppkt_desc = NewPkt(peth, pip, ptcp, plast);
-  assert(ppkt_desc != NULL);
+  if (ppkt_desc == NULL) {
+    return NULL;
+  }
 
   /* Create entry for hash table */
   uint32_t hash_index = ppkt_desc->addr_pair.hash_index;
@@ -432,6 +454,9 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
   /* Did not find the flow, create one */
   else {
     flow_hash_ptr = CreateFlowHash(peth, pip, ptcp, plast);
+    if (flow_hash_ptr == NULL) {
+      return 0;
+    }
 
 #ifdef DO_STATS
     pkt_buf_count++;

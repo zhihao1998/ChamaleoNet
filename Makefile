@@ -86,8 +86,8 @@ clean:
 
 .PHONY: logclean
 logclean:
-	@sudo rm -f log/*
-	@sudo rm -f bfrt_log/*
+	@sudo rm -rf log/*
+	@sudo rm -rf bfrt_log/*
 
 .PHONY: distclean
 distclean:

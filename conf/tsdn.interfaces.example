@@ -1,0 +1,15 @@
+# Used by: ./tsdn-multi.sh start   (with no interface arguments)
+# Copy to tsdn.interfaces and edit:
+#   cp conf/tsdn.interfaces.example conf/tsdn.interfaces
+#
+# One interface per line, or several names separated by spaces.
+# Lines whose first non-blank character is # are ignored.
+
+enp10s0
+enp11s0
+enp12s0
+enp13s0
+enp14s0
+enp15s0
+enp16s0
+enp17s0

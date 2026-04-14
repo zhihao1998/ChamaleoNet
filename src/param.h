@@ -8,7 +8,7 @@
 
 /* maximum number of concurrent TCP connection stored in the vector TTP 
 Increase this number on high speed network will help ...*/
-#define PKT_BUF_SIZE 400000
+#define PKT_BUF_SIZE 200000
 
 /* Define granularity of garbage collection splitting. 
  The flow table is not scanned in one time,

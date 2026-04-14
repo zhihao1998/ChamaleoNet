@@ -188,6 +188,15 @@ int rule_queue_push(uint32_t ip, uint16_t port, uint8_t proto)
     return 0;
 }
 
+uint32_t rule_queue_depth(void)
+{
+    pthread_mutex_lock(&rule_queue_mutex);
+    uint32_t h = rule_queue_head;
+    uint32_t t = rule_queue_tail;
+    pthread_mutex_unlock(&rule_queue_mutex);
+    return (t + RULE_QUEUE_SIZE - h) % RULE_QUEUE_SIZE;
+}
+
 /* Pop one item. Blocks with timeout until item available or shutdown.
  * Returns 0 on success, -1 on shutdown, 1 on empty (should not happen when blocking). */
 static int rule_queue_pop(rule_req_t *out)
