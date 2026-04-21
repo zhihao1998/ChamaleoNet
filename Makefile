@@ -2,7 +2,7 @@
 CC ?= gcc
 CXX ?= # FILL: the compiler
 PYFLAGS = $(shell python3-config --includes) $(shell python3-config --ldflags --embed) 
-CFLAGS := -lpcap -lpthread $(PYFLAGS)
+CFLAGS := -lpcap -lpthread -lrt $(PYFLAGS)
 CXXFLAGS := # FILL: compile flags
 DBGFLAGS := -g
 COBJFLAGS := -O2 $(CFLAGS) -c

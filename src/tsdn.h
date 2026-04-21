@@ -438,19 +438,6 @@ typedef struct {
 pkt_ctx_t g_ctx;
 void pkt_ctx_init(pkt_ctx_t *ctx);
 
-/* Send to the ingress interface */
-#define SWITCH_INTF "enp10s0"
-#define SWITCH_DEST_MAC_0 0x90
-#define SWITCH_DEST_MAC_1 0x2d
-#define SWITCH_DEST_MAC_2 0x77
-#define SWITCH_DEST_MAC_3 0x3f
-#define SWITCH_DEST_MAC_4 0xb5
-#define SWITCH_DEST_MAC_5 0xa2
-
-// mac address for enp10s0
-#define SENDER_SRC_MAC_0 0x52
-#define SENDER_SRC_MAC_1 0x54
-#define SENDER_SRC_MAC_2 0x00
-#define SENDER_SRC_MAC_3 0x5b
-#define SENDER_SRC_MAC_4 0x57
-#define SENDER_SRC_MAC_5 0x5c
+/* Runtime source MAC for SWITCH_INTF */
+extern uint8_t sender_src_mac[ETH_ALEN];
+int init_sender_src_mac(void);

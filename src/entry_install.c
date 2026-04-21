@@ -1,4 +1,5 @@
 #include "tsdn.h"
+#include "shm_rule_ring.h"
 #include <errno.h>
 
 #define P4_MAGIC 0x5034  // 'P4'
@@ -33,6 +34,9 @@ static __thread struct sockaddr_un g_addr;
 static __thread p4_rule_t g_rules[P4_MAX_RULES_PER_MSG];
 static __thread uint16_t g_count = 0;
 static __thread struct timespec g_last_flush_ts = {0, 0};
+static int g_sink_use_shm = 0;
+static char g_shm_name[128] = {0};
+static shm_rule_ring_t g_shm_ring;
 
 static inline uint64_t now_ns(void)
 {
@@ -43,6 +47,9 @@ static inline uint64_t now_ns(void)
 
 int p4_batch_init(const char *uds_path)
 {
+    if (g_sink_use_shm) {
+        return 0;
+    }
     if (g_sock != -1) return 0;
 
     g_sock = socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK, 0);
@@ -114,8 +121,32 @@ int p4_batch_add_rule(uint32_t ip, uint16_t port, uint8_t proto)
 int p4_batch_flush(void)
 {
     install_rule_batch_count++;
-    if (g_sock == -1) return -1;
     if (g_count == 0) return 0;
+
+    if (g_sink_use_shm) {
+        uint16_t sent = 0;
+        for (uint16_t i = 0; i < g_count; ++i) {
+            p4_rule_t *r = &g_rules[i];
+            if (shm_rule_ring_push(&g_shm_ring, r->ipv4, r->port, r->proto) != 0) {
+                break;
+            }
+            sent++;
+        }
+        if (sent == 0) {
+            return 1;
+        }
+        if (sent < g_count) {
+            memmove(g_rules, g_rules + sent, (size_t)(g_count - sent) * sizeof(p4_rule_t));
+            g_count -= sent;
+            clock_gettime(CLOCK_MONOTONIC, &g_last_flush_ts);
+            return 1;
+        }
+        g_count = 0;
+        clock_gettime(CLOCK_MONOTONIC, &g_last_flush_ts);
+        return 0;
+    }
+
+    if (g_sock == -1) return -1;
 
     const size_t hdr_sz = sizeof(p4_batch_hdr_t);
     const size_t rules_sz = (size_t)g_count * sizeof(p4_rule_t);
@@ -226,7 +257,9 @@ static void *entry_install_thread_func(void *arg)
     const char *uds_path = (const char *)arg;
     rule_req_t req;
 
-    p4_batch_init(uds_path);
+    if (!g_sink_use_shm) {
+        p4_batch_init(uds_path);
+    }
 
     while (rule_queue_pop(&req) == 0) {
         int res = p4_batch_add_rule_raw(req.ip, req.port, req.proto);
@@ -241,6 +274,21 @@ static pthread_t g_entry_install_thread;
 
 void entry_install_thread_start(const char *uds_path)
 {
+    const char *shm_name = getenv("P4_RULE_SHM_NAME");
+    if (shm_name && shm_name[0] == '/') {
+        strncpy(g_shm_name, shm_name, sizeof(g_shm_name) - 1);
+        g_shm_name[sizeof(g_shm_name) - 1] = '\0';
+        if (shm_rule_ring_open(&g_shm_ring, g_shm_name, 262144u) == 0) {
+            g_sink_use_shm = 1;
+            log_info("entry install sink: SHM %s", g_shm_name);
+        } else {
+            g_sink_use_shm = 0;
+            log_warn("failed to open SHM ring %s, fallback to UDS", g_shm_name);
+        }
+    } else {
+        g_sink_use_shm = 0;
+    }
+
     rule_queue_shutdown = 0;
     rule_queue_head = 0;
     rule_queue_tail = 0;
@@ -255,4 +303,7 @@ void entry_install_thread_stop(void)
     pthread_cond_broadcast(&rule_queue_cond);
     pthread_mutex_unlock(&rule_queue_mutex);
     pthread_join(g_entry_install_thread, NULL);
+    if (g_sink_use_shm) {
+        shm_rule_ring_close(&g_shm_ring);
+    }
 }

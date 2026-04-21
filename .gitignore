@@ -32,3 +32,4 @@ tsdn.sh
 conf/net.internal
 conf/net.responder
 conf/tsdn.interfaces
+conf/controller.env

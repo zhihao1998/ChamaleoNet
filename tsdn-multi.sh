@@ -5,6 +5,7 @@
 #
 # Commands (see also ./tsdn-multi.sh --help):
 #   start [iface ...]   With no args: read conf/tsdn.interfaces (or TSDN_INTERFACES_FILE).
+#   start-all [iface ...]  Start controller + one tsdn per interface.
 #   list                Print the interface list that a no-arg start would use.
 #   follow | tail       tail -F all per-iface logs (Ctrl+C stops tail, not tsdn).
 #   watch | top         Dynamic refresh of per-iface *.status (same data as stderr lines).
@@ -16,15 +17,18 @@
 #   TSDN_SKIP_MAKE=1       Do not run make before start.
 #   TSDN_SKIP_IFUP=1       Skip "sudo ifconfig <iface> up" before each instance.
 #   TSDN_WATCH_INTERVAL    Seconds between watch refreshes (default 1).
+#   P4_RULE_SHM_NAME       SHM ring name for controller IPC (default /p4_rule_ring).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TSDN_MULTI_SH="$(readlink -f "${BASH_SOURCE[0]}")"
 BIN="$ROOT/bin/tsdn"
+CTRL_START="$ROOT/bfrt_grpc/start_controller.sh"
 RUNS_ROOT="$ROOT/log/runs"
 LATEST_RUN_LINK="$RUNS_ROOT/latest"
 IFACES_CONF="${TSDN_INTERFACES_FILE:-$ROOT/conf/tsdn.interfaces}"
+P4_RULE_SHM_NAME="${P4_RULE_SHM_NAME:-/p4_rule_ring}"
 
 active_tsdn_dir() {
 	if [[ -L "$LATEST_RUN_LINK" ]] && [[ -d "$(readlink -f "$LATEST_RUN_LINK")/tsdn" ]]; then
@@ -43,6 +47,7 @@ Symlink log/runs/latest points at the last start (used by follow / status iface 
 
 Commands:
   start [iface ...]           no args: read $IFACES_CONF (default conf/tsdn.interfaces)
+  start-all [iface ...]       start controller + tsdn workers in one run dir
   list                        print interface list from config (same as bare start)
   stop [timeout_seconds]      TERM then KILL this repo's bin/tsdn (default timeout: 5s)
   status                      show matching processes
@@ -54,6 +59,7 @@ Env: TSDN_INTERFACES_FILE=path   → default iface list file for "start" / "list
      TSDN_SKIP_MAKE=1   → skip make before start
      TSDN_SKIP_IFUP=1   → skip ifconfig up before start
      TSDN_WATCH_INTERVAL=seconds → interval for watch (default 1)
+     P4_RULE_SHM_NAME=/p4_rule_ring → shared ring name for rule IPC
 EOF
 }
 
@@ -99,6 +105,14 @@ bring_interfaces_up() {
 	done
 }
 
+cleanup_shm_ring() {
+	local shm_name="$1"
+	local shm_path="/dev/shm/${shm_name#/}"
+	# Remove stale ring (often root-owned from previous runs with strict umask).
+	# Ignore errors if it does not exist.
+	sudo rm -f "$shm_path" 2>/dev/null || true
+}
+
 ensure_bin() {
 	if [[ ! -x "$BIN" ]]; then
 		echo "error: $BIN not found or not executable; run start with build enabled" >&2
@@ -120,7 +134,9 @@ do_make() {
 	)
 }
 
-cmd_start() {
+cmd_start_common() {
+	local with_controller="${1:-0}"
+	shift || true
 	local -a ifaces
 	mapfile -t ifaces < <(resolve_start_ifaces "$@")
 
@@ -140,24 +156,49 @@ cmd_start() {
 	{
 		echo "# started $ts"
 		echo "# run_dir $log_run"
+		echo "# p4_rule_shm_name $P4_RULE_SHM_NAME"
 		printf '%s\n' "${ifaces[@]}"
 	} >"$tsdn_dir/README-interfaces.txt"
 
 	bring_interfaces_up "${ifaces[@]}"
+	cleanup_shm_ring "$P4_RULE_SHM_NAME"
+
+	if [[ "$with_controller" == "1" ]]; then
+		if [[ ! -x "$CTRL_START" ]]; then
+			echo "error: controller launcher not found or not executable: $CTRL_START" >&2
+			exit 1
+		fi
+		local ctrl_log="$log_run/controller.log"
+		echo "[$ts] starting controller (log: $ctrl_log)" | tee -a "$ctrl_log"
+		stdbuf -oL -eL env TSDN_LOG_RUN_DIR="$log_run" P4_RULE_SHM_NAME="$P4_RULE_SHM_NAME" "$CTRL_START" >>"$ctrl_log" 2>&1 &
+		echo "  controller pid $! → $ctrl_log"
+	fi
 
 	for iface in "${ifaces[@]}"; do
 		local logf="$tsdn_dir/${iface}.log"
 		echo "[$ts] starting tsdn on $iface (log: $logf)" | tee -a "$logf"
-		# sudo drops env by default — pass TSDN_LOG_RUN_DIR explicitly.
-		stdbuf -oL -eL sudo env TSDN_LOG_RUN_DIR="$log_run" "$BIN" "$iface" >>"$logf" 2>&1 &
+		# sudo drops env by default — pass required vars explicitly.
+		stdbuf -oL -eL sudo env TSDN_LOG_RUN_DIR="$log_run" P4_RULE_SHM_NAME="$P4_RULE_SHM_NAME" "$BIN" "$iface" >>"$logf" 2>&1 &
 		echo "  pid $! → $iface"
 	done
 
 	echo ""
 	echo "Run directory: $log_run (stats CSV + tsdn/*.log)"
+	echo "SHM ring:      $P4_RULE_SHM_NAME"
+	if [[ "$with_controller" == "1" ]]; then
+		echo "Controller:    $log_run/controller.log"
+	fi
 	echo "Watch output:  $0 follow   → tails log/runs/latest/tsdn/*.log"
 	echo "Live metrics:  $0 watch    → refreshes log/runs/latest/tsdn/*.status"
 	echo "Stop all:       $0 stop"
+}
+
+cmd_start() {
+	cmd_start_common 0 "$@"
+}
+
+cmd_start_all() {
+	cmd_start_common 1 "$@"
 }
 
 cmd_stop() {
@@ -394,6 +435,7 @@ main() {
 
 	case "$cmd" in
 	start) cmd_start "$@" ;;
+	start-all) cmd_start_all "$@" ;;
 	list) cmd_list "$@" ;;
 	stop) cmd_stop "$@" ;;
 	status) cmd_status ;;

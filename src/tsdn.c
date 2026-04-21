@@ -68,8 +68,6 @@ struct timeval last_hash_cleaned_time;
 /* Timer for cleaning idle entries */
 struct timeval last_idle_cleaned_time;
 
-struct timeval last_lazy_free_log_time;
-
 /* Print stats */
 Stats stats_snapshot(void)
 {
@@ -1012,7 +1010,7 @@ int main(int argc, char *argv[])
 
 	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
 						&plast);
-	last_lazy_free_log_time = last_hash_cleaned_time = last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
+	last_hash_cleaned_time = last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
 
 #ifdef HOST_LIVENESS_MONITOR
 	base_ip_int = ip_to_int("154.200.0.0");

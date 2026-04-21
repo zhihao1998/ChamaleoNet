@@ -42,7 +42,7 @@ Increase this number on high speed network will help ...*/
 #define FLOW_HASH_TABLE_SIZE 1000000
 #define FLOW_HASH_TABLE_GC_SIZE 10
 #define FLOW_HASH_TABLE_GC_PERIOD 10
-#define FLOW_HASH_TABLE_GC_TIMEOUT 1000000
+#define FLOW_HASH_TABLE_GC_TIMEOUT 200000
 
 /* 
 * Switch GRPC Client 
@@ -72,21 +72,38 @@ Increase this number on high speed network will help ...*/
 #define TIMEOUT_SAMPLE_CNT 100000     // tot_expired_pkt_count
 #define STATS_LOG_SAMPLE_TIME 1000000  // us
 
-/* Send to the SR-IOV VF interface */
+/* ===================== Packet Egress Config: Collector ===================== */
 #define COLLECTOR_INTF "enp9s0"
-#define COLLECTOR_DEST_MAC_0 0x52
-#define COLLECTOR_DEST_MAC_1 0x54
-#define COLLECTOR_DEST_MAC_2 0x00
-#define COLLECTOR_DEST_MAC_3 0x6a
-#define COLLECTOR_DEST_MAC_4 0x19
-#define COLLECTOR_DEST_MAC_5 0x9a
+#define COLLECTOR_DST_MAC_0 0x52
+#define COLLECTOR_DST_MAC_1 0x54
+#define COLLECTOR_DST_MAC_2 0x00
+#define COLLECTOR_DST_MAC_3 0x6a
+#define COLLECTOR_DST_MAC_4 0x19
+#define COLLECTOR_DST_MAC_5 0x9a
 
 /* Send to the bridge interface */
 // #define COLLECTOR_INTF "enp8s0"
-// #define COLLECTOR_DEST_MAC_0 0x52
-// #define COLLECTOR_DEST_MAC_1 0x54
-// #define COLLECTOR_DEST_MAC_2 0x00
-// #define COLLECTOR_DEST_MAC_3 0x80
-// #define COLLECTOR_DEST_MAC_4 0x26
-// #define COLLECTOR_DEST_MAC_5 0xbc
+// #define COLLECTOR_DST_MAC_0 0x52
+// #define COLLECTOR_DST_MAC_1 0x54
+// #define COLLECTOR_DST_MAC_2 0x00
+// #define COLLECTOR_DST_MAC_3 0x80
+// #define COLLECTOR_DST_MAC_4 0x26
+// #define COLLECTOR_DST_MAC_5 0xbc
+
+/* ======================= Packet Egress Config: Switch ====================== */
+#define SWITCH_INTF "enp10s0"
+#define SWITCH_DST_MAC_0 0x90
+#define SWITCH_DST_MAC_1 0x2d
+#define SWITCH_DST_MAC_2 0x77
+#define SWITCH_DST_MAC_3 0x3f
+#define SWITCH_DST_MAC_4 0xb5
+#define SWITCH_DST_MAC_5 0xa2
+
+/* Fallback source MAC for SWITCH_INTF (used if dynamic lookup fails) */
+#define SWITCH_SRC_MAC_FALLBACK_0 0x52
+#define SWITCH_SRC_MAC_FALLBACK_1 0x54
+#define SWITCH_SRC_MAC_FALLBACK_2 0x00
+#define SWITCH_SRC_MAC_FALLBACK_3 0x5b
+#define SWITCH_SRC_MAC_FALLBACK_4 0x57
+#define SWITCH_SRC_MAC_FALLBACK_5 0x5c
 

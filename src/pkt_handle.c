@@ -293,8 +293,6 @@ void FreePkt(ip_packet *ppkt_temp) {
 #endif
 }
 
-void FreePktDesc(pkt_desc_t *ppkt_desc) { pkt_desc_release(ppkt_desc); }
-
 void FreeFlowHash(flow_hash_t *flow_hash_ptr) {
   assert(flow_hash_ptr != NULL);
 
@@ -521,6 +519,9 @@ void trace_init(void) {
            sizeof(socket_address_switch)) < 0) {
     perror("bind(sockfd_switch)");
   }
+
+  /* Read source MAC from SWITCH_INTF dynamically */
+  init_sender_src_mac();
 
   /* 初始化全局发包上下文，供 SendPktSwitch 使用 */
   pkt_ctx_init(&g_ctx);

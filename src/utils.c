@@ -9,6 +9,28 @@ extern struct in_addr *responder_net_list;
 extern int *responder_net_mask;
 extern int tot_responder_nets;
 
+uint8_t sender_src_mac[ETH_ALEN] = {
+    SWITCH_SRC_MAC_FALLBACK_0, SWITCH_SRC_MAC_FALLBACK_1,
+    SWITCH_SRC_MAC_FALLBACK_2, SWITCH_SRC_MAC_FALLBACK_3,
+    SWITCH_SRC_MAC_FALLBACK_4, SWITCH_SRC_MAC_FALLBACK_5};
+
+int init_sender_src_mac(void) {
+  struct ifreq if_mac;
+
+  memset(&if_mac, 0, sizeof(if_mac));
+  strncpy(if_mac.ifr_name, ifName_switch, IFNAMSIZ - 1);
+
+  if (ioctl(sockfd_switch, SIOCGIFHWADDR, &if_mac) < 0) {
+    fprintf(fp_stderr,
+            "Warning: failed to get MAC for %s, fallback to default: %s\n",
+            ifName_switch, strerror(errno));
+    return -1;
+  }
+
+  memcpy(sender_src_mac, if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
+  return 0;
+}
+
 /*
  * Time Calculation
  */
@@ -375,19 +397,14 @@ int SendPktCollector(char *sendbuf, int tx_len) {
   // replace the source MAC address and the destination MAC address
   // with the source MAC address and the destination MAC address of the
   // interface memcpy(eh->ether_shost, if_idx.ifr_hwaddr.sa_data, ETH_ALEN);
-  eh->ether_shost[0] = SENDER_SRC_MAC_0;
-  eh->ether_shost[1] = SENDER_SRC_MAC_1;
-  eh->ether_shost[2] = SENDER_SRC_MAC_2;
-  eh->ether_shost[3] = SENDER_SRC_MAC_3;
-  eh->ether_shost[4] = SENDER_SRC_MAC_4;
-  eh->ether_shost[5] = SENDER_SRC_MAC_5;
+  memcpy(eh->ether_shost, sender_src_mac, ETH_ALEN);
 
-  eh->ether_dhost[0] = COLLECTOR_DEST_MAC_0;
-  eh->ether_dhost[1] = COLLECTOR_DEST_MAC_1;
-  eh->ether_dhost[2] = COLLECTOR_DEST_MAC_2;
-  eh->ether_dhost[3] = COLLECTOR_DEST_MAC_3;
-  eh->ether_dhost[4] = COLLECTOR_DEST_MAC_4;
-  eh->ether_dhost[5] = COLLECTOR_DEST_MAC_5;
+  eh->ether_dhost[0] = COLLECTOR_DST_MAC_0;
+  eh->ether_dhost[1] = COLLECTOR_DST_MAC_1;
+  eh->ether_dhost[2] = COLLECTOR_DST_MAC_2;
+  eh->ether_dhost[3] = COLLECTOR_DST_MAC_3;
+  eh->ether_dhost[4] = COLLECTOR_DST_MAC_4;
+  eh->ether_dhost[5] = COLLECTOR_DST_MAC_5;
 
   long send_res = sendto(sockfd_collector, sendbuf, tx_len, 0,
                          (struct sockaddr *)&socket_address_collector,
@@ -409,19 +426,14 @@ void pkt_ctx_init(pkt_ctx_t *ctx) {
   ctx->icmp = (struct icmphdr *)((uint8_t *)ctx->ip + sizeof(struct ip));
 
   // 固定 MAC（只做一次）
-  ctx->eth->ether_shost[0] = SENDER_SRC_MAC_0;
-  ctx->eth->ether_shost[1] = SENDER_SRC_MAC_1;
-  ctx->eth->ether_shost[2] = SENDER_SRC_MAC_2;
-  ctx->eth->ether_shost[3] = SENDER_SRC_MAC_3;
-  ctx->eth->ether_shost[4] = SENDER_SRC_MAC_4;
-  ctx->eth->ether_shost[5] = SENDER_SRC_MAC_5;
+  memcpy(ctx->eth->ether_shost, sender_src_mac, ETH_ALEN);
 
-  ctx->eth->ether_dhost[0] = SWITCH_DEST_MAC_0;
-  ctx->eth->ether_dhost[1] = SWITCH_DEST_MAC_1;
-  ctx->eth->ether_dhost[2] = SWITCH_DEST_MAC_2;
-  ctx->eth->ether_dhost[3] = SWITCH_DEST_MAC_3;
-  ctx->eth->ether_dhost[4] = SWITCH_DEST_MAC_4;
-  ctx->eth->ether_dhost[5] = SWITCH_DEST_MAC_5;
+  ctx->eth->ether_dhost[0] = SWITCH_DST_MAC_0;
+  ctx->eth->ether_dhost[1] = SWITCH_DST_MAC_1;
+  ctx->eth->ether_dhost[2] = SWITCH_DST_MAC_2;
+  ctx->eth->ether_dhost[3] = SWITCH_DST_MAC_3;
+  ctx->eth->ether_dhost[4] = SWITCH_DST_MAC_4;
+  ctx->eth->ether_dhost[5] = SWITCH_DST_MAC_5;
 
   ctx->eth->ether_type = htons(0x8888);
 

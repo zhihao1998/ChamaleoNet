@@ -12,6 +12,8 @@ import struct
 import sys
 import threading
 import time
+import queue
+import mmap
 from datetime import datetime
 
 # =========================
@@ -25,6 +27,22 @@ HDR = struct.Struct("!HBBHH")
 RULE = struct.Struct("!BBHI")
 HDR_SIZE = HDR.size
 RULE_SIZE = RULE.size
+
+SHM_RING_MAGIC = 0x31515250
+SHM_RING_VERSION = 1
+SHM_RING_HDR_SIZE = 64
+SHM_OFF_MAGIC = 0
+SHM_OFF_VERSION = 4
+SHM_OFF_CAP = 8
+SHM_OFF_HEAD = 16
+SHM_OFF_TAIL = 20
+SHM_OFF_DROPPED = 28
+SHM_OFF_PUSHES = 32
+SHM_OFF_POPS = 40
+DEFAULT_SHM_NAME = "/p4_rule_ring"
+
+SHM_HDR_U32 = struct.Struct("<I")
+SHM_HDR_U64 = struct.Struct("<Q")
 
 # =========================
 # 统计
@@ -87,11 +105,71 @@ def unpack_flow_key(k: int):
     return ip_int, port, proto
 
 
+def fmt_num(value: int) -> str:
+    """格式化整数，便于控制台阅读。"""
+    return f"{value:,}"
+
+
+def build_status_report(
+    now_dt: datetime,
+    current_epoch: int,
+    did_epoch_switch: bool,
+    v0: int,
+    v1: int,
+    rin: int,
+    rpend: int,
+    rinst: int,
+    add_fail_s: int,
+    pend_sz: int,
+    fail_sz: int,
+    hot_sz: int,
+    local_num: int,
+    usage: int,
+    active_num: int,
+    s: dict,
+    rx_pkts_s: int,
+    tx_pkts_s: int,
+    ring_depth: int,
+    ring_pushes: int,
+    ring_pops: int,
+    ring_dropped: int,
+) -> str:
+    """按分组构建可读性更高的状态输出。"""
+    switched_mark = "yes" if did_epoch_switch else "no"
+    label_w = 11
+    value_w = 14
+
+    def cell(label: str, value: int) -> str:
+        return f"{label:<{label_w}} {fmt_num(value):>{value_w}}"
+
+    def row(group: str, items) -> str:
+        cols = " | ".join(cell(label, value) for label, value in items)
+        return f"{group:<5} | {cols}"
+
+    divider = "-" * 120
+    return "\n".join(
+        [
+            divider,
+            f"[{now_dt.strftime('%H:%M:%S')}] epoch={current_epoch:<2} switched={switched_mark}",
+            row("rate", [("in/s", rin), ("pend_add/s", rpend), ("inst/s", rinst), ("add_fail/s", add_fail_s)]),
+            row("queue", [("pending", pend_sz), ("fail_cd", fail_sz), ("hot_rules", hot_sz)]),
+            row("table", [("local", local_num), ("usage", usage), ("active_hosts", active_num)]),
+            row("bloom", [("g0", v0), ("g1", v1)]),
+            row("pkt", [("ok", s["pkts_ok"]), ("bad", s["pkts_bad"]), ("trunc", s["pkts_trunc"]), ("sock_drop", s["sock_drop"])]),
+            row("batch", [("ok", s["batches_ok"]), ("fail", s["batches_fail"]), ("rx_pkts/s", rx_pkts_s), ("tx_pkts/s", tx_pkts_s)]),
+            row("ring", [("depth", ring_depth), ("pushes", ring_pushes), ("pops", ring_pops), ("dropped", ring_dropped)]),
+            divider,
+        ]
+    )
+
+
 # =========================
 # 全局：待下发规则集合、失败冷却、active host 状态
-# pending_set/failed_until 仅主线程访问；rule_epoch_seen/active_hosts 需 data_lock
+# pending_queue: UDX 线程写入、主线程读取；pending_set/failed_until 主线程访问
+# active_hosts 需 data_lock
 # =========================
 pending_set = set()
+pending_queue = queue.SimpleQueue()
 failed_until = {}
 FAILED_COOLDOWN_SEC = 0.2
 FAILED_MAX_SIZE = 200000
@@ -101,24 +179,22 @@ FAILED_MAX_SIZE = 200000
 active_hosts = {}
 UDX_ACTIVE_SEC = 60.0  # UDX 侧最近收到规则后仍视为活跃的秒数
 
-# 热点规则：过去 N 个 epoch 内重复出现的规则才下发，短暂流由 bloom filter 过滤
-# rule_epoch_seen: flow_key -> set of epoch_index
-rule_epoch_seen = {}
-HOT_WINDOW_EPOCHS = 5   # 观察窗口：过去 N 个 epoch
-HOT_MIN_EPOCHS = 2      # 至少出现在几个 epoch 才视为热点
+# 热点规则窗口（兼容参数保留）：快速下发模式下不做全量热点扫描，避免 epoch 切换卡顿
+HOT_WINDOW_EPOCHS = 1
 
-# 性能调优（高负载 ~65k flows, 20k pending）
+# 性能调优（高负载 ~65k flows）
 MAX_IDLE_PER_LOOP = 80   # 每轮最多处理 idle 数，避免主循环长时间阻塞
-MAX_PUSH_PER_LOOP = 2048  # 每轮最多下发规则数（约 1 批），避免一次 20k 导致主循环阻塞 10-20 秒
+MAX_PUSH_PER_LOOP = 8192  # 每轮最多下发规则数（吞吐优先）
 ACTIVE_CLEAN_INTERVAL = 5.0  # active_hosts 清理间隔(秒)，减轻 65k 级遍历
 # 优先保证 bloom 清理/占用读取按固定间隔准时执行，可牺牲部分待安装规则
-RULE_INSTALL_BUDGET_SEC = 0.2   # 每轮规则下发时间预算
+RULE_INSTALL_BUDGET_SEC = 0.8   # 每轮规则下发时间预算（提高安装连续性）
 EPOCH_SWITCH_MARGIN_SEC = 0.05  # 规则安装必须在下次 bloom 前此时刻停止，保证 bloom 准时
 REFRESH_HOT_MAX_SEC = 0.35      # refresh_hot_rules 单次最多计算时间
-PENDING_CAP_FOR_BLOOM = 50000  # 若 pending 超过此值且接近 bloom 时刻则丢弃超出部分，保证不拖慢清理/读取
+PENDING_CAP_FOR_BLOOM = 200000  # 放宽 pending 上限，减少高负载下的规则丢弃
+MAX_ENQUEUE_DRAIN_PER_LOOP = 50000  # 每轮从 pending_queue 搬运到 pending_set 的最大条数
 hot_rules_count = [0]  # 缓存，由 refresh_hot_rules 更新
 
-INCOMING_PORT = 160
+INCOMING_PORT = 140
 OUTGOING_PORT = 140
 
 def parse_datagram_to_keys(data: bytes):
@@ -152,6 +228,58 @@ def parse_datagram_to_keys(data: bytes):
         stats["pkts_ok"] += 1
         stats["rules_in"] += len(keys)
     return keys
+
+
+class ShmRuleRingReader:
+    """Read rules from POSIX SHM ring produced by C workers."""
+
+    def __init__(self, shm_name: str):
+        if not shm_name.startswith("/"):
+            raise ValueError("shm_name must start with '/'")
+        shm_path = f"/dev/shm/{shm_name[1:]}"
+        self.fd = os.open(shm_path, os.O_RDWR)
+        size = os.fstat(self.fd).st_size
+        if size < SHM_RING_HDR_SIZE:
+            raise RuntimeError("shared ring is too small")
+        self.mm = mmap.mmap(self.fd, size)
+        self.capacity = SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_CAP)[0]
+        magic = SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_MAGIC)[0]
+        version = SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_VERSION)[0]
+        if magic != SHM_RING_MAGIC or version != SHM_RING_VERSION:
+            raise RuntimeError("shared ring magic/version mismatch")
+        self.slot_base = SHM_RING_HDR_SIZE
+        self.slot_size = RULE_SIZE
+
+    def close(self):
+        self.mm.close()
+        os.close(self.fd)
+
+    def drain(self, max_items: int = 50000):
+        keys = []
+        cap = self.capacity
+        head = SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_HEAD)[0]
+        tail = SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_TAIL)[0]
+        while head != tail and len(keys) < max_items:
+            off = self.slot_base + head * self.slot_size
+            proto, _, port, ipv4_int = RULE.unpack_from(self.mm, off)
+            keys.append(flow_key(ipv4_int, port, proto))
+            head = (head + 1) % cap
+        if keys:
+            SHM_HDR_U32.pack_into(self.mm, SHM_OFF_HEAD, head)
+            pops = SHM_HDR_U64.unpack_from(self.mm, SHM_OFF_POPS)[0]
+            SHM_HDR_U64.pack_into(self.mm, SHM_OFF_POPS, pops + len(keys))
+        return keys
+
+    def snapshot(self):
+        head = SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_HEAD)[0]
+        tail = SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_TAIL)[0]
+        depth = (tail + self.capacity - head) % self.capacity
+        return {
+            "depth": depth,
+            "pushes": SHM_HDR_U64.unpack_from(self.mm, SHM_OFF_PUSHES)[0],
+            "pops": SHM_HDR_U64.unpack_from(self.mm, SHM_OFF_POPS)[0],
+            "dropped": SHM_HDR_U32.unpack_from(self.mm, SHM_OFF_DROPPED)[0],
+        }
 
 
 class Bfrt_GRPC_Client:
@@ -437,19 +565,15 @@ class Bfrt_GRPC_Client:
 
 
 def record_udx_rules(keys: list, epoch_counter_ref: list):
-    """记录 UDX 收到的规则及其出现的 epoch，并更新 active_hosts.last_udx。
-    写时修剪：单 key 的 epoch 集合过大时在此处修剪，避免 refresh_hot_rules 持锁做海量写回阻塞收包。"""
+    """记录 UDX 收到的规则并更新 active_hosts.last_udx。
+    规则直接入 pending_queue，主线程尽快下发，避免 epoch 切换时全量扫描。"""
     if not keys:
         return
     now = time.monotonic()
+    for k in keys:
+        pending_queue.put(k)
     with data_lock:
-        epoch = epoch_counter_ref[0]
-        min_epoch = epoch - HOT_WINDOW_EPOCHS
         for k in keys:
-            s = rule_epoch_seen.setdefault(k, set())
-            s.add(epoch)
-            if len(s) > HOT_WINDOW_EPOCHS * 2:
-                rule_epoch_seen[k] = {e for e in s if e >= min_epoch}
             ip_int = unpack_flow_key(k)[0]
             if ip_int not in active_hosts:
                 active_hosts[ip_int] = {"flow_count": 0, "last_udx": None}
@@ -457,40 +581,8 @@ def record_udx_rules(keys: list, epoch_counter_ref: list):
 
 
 def refresh_hot_rules(controller: Bfrt_GRPC_Client, epoch_counter: int, now: float, max_time_sec: float = None):
-    """epoch 切换后调用：修剪 rule_epoch_seen（仅删空 key），将热点规则加入 pending_set。max_time_sec 超时则中断。
-    不在持锁时做海量 rule_epoch_seen[k]=trimmed 写回（由 record_udx_rules 写时修剪），避免长时间阻塞 UDX 收包。"""
-    min_epoch = epoch_counter - HOT_WINDOW_EPOCHS
-    deadline = (time.monotonic() + max_time_sec) if max_time_sec else None
-    with data_lock:
-        items = [(k, set(epochs)) for k, epochs in rule_epoch_seen.items()]
-    to_prune = []
-    to_add_pending = []
-    hot_cnt = 0
-    installed = controller.installed_flows
-    for k, epochs in items:
-        if deadline is not None and time.monotonic() >= deadline:
-            break
-        trimmed = {e for e in epochs if e >= min_epoch}
-        if not trimmed:
-            to_prune.append(k)
-            continue
-        if len(trimmed) >= HOT_MIN_EPOCHS:
-            hot_cnt += 1
-            if k in installed:
-                continue
-            until = failed_until.get(k)
-            if until is not None and now < until:
-                continue
-            to_add_pending.append(k)
-    with data_lock:
-        for k in to_prune:
-            rule_epoch_seen.pop(k, None)
-        for k in to_add_pending:
-            pending_set.add(k)
-        hot_rules_count[0] = hot_cnt
-    if to_add_pending:
-        with stats_lock:
-            stats["rules_pending_add"] += len(to_add_pending)
+    """兼容保留：快速下发模式下不执行热点全量扫描。"""
+    hot_rules_count[0] = len(pending_set)
 
 
 LOOP_INTERVAL_SEC = 0.01  # 主循环 select 超时
@@ -534,6 +626,7 @@ def main_loop(
     epoch_print_interval_sec=1.0,
     epoch_switch_interval_sec=2.0,
     epoch_csv_path=None,
+    shm_name=None,
 ):
     """
     单主循环：select 驱动 UDX 接收，周期性完成批量下发、idle 删除、epoch 轮换、统计打印。
@@ -551,6 +644,15 @@ def main_loop(
     buf = bytearray(65536)
     epoch_counter_ref = [0]
     threading.Thread(target=udx_receiver_thread, args=(sock, buf, epoch_counter_ref), daemon=True).start()
+    shm_reader = None
+    next_shm_retry = 0.0
+    if shm_name:
+        try:
+            shm_reader = ShmRuleRingReader(shm_name)
+            print(f"[ipc] SHM enabled: {shm_name}")
+        except Exception as e:
+            print(f"[ipc] SHM not ready ({shm_name}): {e}; will retry")
+            next_shm_retry = time.monotonic() + 1.0
 
     # Bloom 初始化
     for e in (0, 1):
@@ -569,7 +671,7 @@ def main_loop(
             "in_s", "pend_add_s", "inst_s", "add_fail_s",
             "pending", "fail_cd", "hot_rules", "local", "usage", "active_hosts",
             "pkts_ok", "pkts_bad", "pkts_trunc", "batch_ok", "batch_fail", "sock_drop",
-            "rx_pkts_s", "tx_pkts_s"
+            "rx_pkts_s", "tx_pkts_s", "ring_depth", "ring_pushes", "ring_pops", "ring_dropped"
         ])
         csv_file.flush()
 
@@ -584,6 +686,12 @@ def main_loop(
     try:
         while True:
             now = time.monotonic()
+            if shm_name and shm_reader is None and now >= next_shm_retry:
+                try:
+                    shm_reader = ShmRuleRingReader(shm_name)
+                    print(f"[ipc] SHM enabled: {shm_name}")
+                except Exception:
+                    next_shm_retry = now + 1.0
             # 避免睡过 epoch 切换点：只睡到 min(下个 loop 间隔, 下次 bloom 时刻)
             sleep_until = min(now + LOOP_INTERVAL_SEC, next_epoch_switch)
             delay = sleep_until - time.monotonic()
@@ -616,6 +724,34 @@ def main_loop(
             idle_max = MAX_IDLE_PER_LOOP if margin > EPOCH_SWITCH_MARGIN_SEC * 2 else min(10, MAX_IDLE_PER_LOOP)
             controller.idle_entry_batch_clean(max_fetch=idle_max)
 
+            # 2.5 快速下发：把 UDX 线程收到的规则搬运到 pending_set（主线程）
+            if shm_reader is not None:
+                shm_keys = shm_reader.drain()
+                if shm_keys:
+                    with stats_lock:
+                        stats["rules_in"] += len(shm_keys)
+                    record_udx_rules(shm_keys, epoch_counter_ref)
+
+            enqueue_added = 0
+            drained = 0
+            while drained < MAX_ENQUEUE_DRAIN_PER_LOOP:
+                try:
+                    k = pending_queue.get_nowait()
+                except queue.Empty:
+                    break
+                drained += 1
+                if k in controller.installed_flows:
+                    continue
+                until = failed_until.get(k)
+                if until is not None and now < until:
+                    continue
+                if k not in pending_set:
+                    pending_set.add(k)
+                    enqueue_added += 1
+            if enqueue_added:
+                with stats_lock:
+                    stats["rules_pending_add"] += enqueue_added
+
             # 3. 统计与 csv 使用上次 epoch 轮换前读到的 v0,v1
             v0, v1 = last_bloom_v0, last_bloom_v1
 
@@ -647,6 +783,13 @@ def main_loop(
                     usage = -1
                 local_num = controller.get_local_flow_entry_num()
                 active_num = controller.get_active_host_count()
+                ring_depth = ring_pushes = ring_pops = ring_dropped = 0
+                if shm_reader is not None:
+                    rs = shm_reader.snapshot()
+                    ring_depth = rs["depth"]
+                    ring_pushes = rs["pushes"]
+                    ring_pops = rs["pops"]
+                    ring_dropped = rs["dropped"]
                 if now - last_active_clean >= ACTIVE_CLEAN_INTERVAL:
                     last_active_clean = now
                     with data_lock:
@@ -669,22 +812,40 @@ def main_loop(
                         s["pkts_ok"], s["pkts_bad"], s["pkts_trunc"],
                         s["batches_ok"], s["batches_fail"], s["sock_drop"],
                         rx_pkts_s, tx_pkts_s,
+                        ring_depth, ring_pushes, ring_pops, ring_dropped,
                     ])
                     csv_file.flush()
-                did_epoch_switch_since_report = False
                 print(
-                    f"[{datetime.now().strftime('%H:%M:%S')}] "
-                    f"in/s={rin} pend_add/s={rpend} inst/s={rinst} add_fail/s={add_fail_s} "
-                    f"pending={pend_sz} fail_cd={fail_sz} hot_rules={hot_sz} local={local_num} usage={usage} "
-                    f"active_hosts={active_num} "
-                    f"bloom_epoch={current_epoch} bloom_g0={v0} bloom_g1={v1} "
-                    f"pkts_ok={s['pkts_ok']} bad={s['pkts_bad']} trunc={s['pkts_trunc']} "
-                    f"batch_ok={s['batches_ok']} batch_fail={s['batches_fail']} sock_drop={s['sock_drop']} "
-                    f"rx_pkts/s={rx_pkts_s} tx_pkts/s={tx_pkts_s}"
+                    build_status_report(
+                        now_dt=datetime.now(),
+                        current_epoch=current_epoch,
+                        did_epoch_switch=did_epoch_switch_since_report,
+                        v0=v0,
+                        v1=v1,
+                        rin=rin,
+                        rpend=rpend,
+                        rinst=rinst,
+                        add_fail_s=add_fail_s,
+                        pend_sz=pend_sz,
+                        fail_sz=fail_sz,
+                        hot_sz=hot_sz,
+                        local_num=local_num,
+                        usage=usage,
+                        active_num=active_num,
+                        s=s,
+                        rx_pkts_s=rx_pkts_s,
+                        tx_pkts_s=tx_pkts_s,
+                        ring_depth=ring_depth,
+                        ring_pushes=ring_pushes,
+                        ring_pops=ring_pops,
+                        ring_dropped=ring_dropped,
+                    )
                 )
+                did_epoch_switch_since_report = False
 
             # 5. 规则安装（时间预算内执行，超时则本轮丢弃/延后，保证下一轮 bloom 不迟到）
-            margin = next_epoch_switch - now
+            install_now = time.monotonic()
+            margin = next_epoch_switch - install_now
             if pending_set and margin > EPOCH_SWITCH_MARGIN_SEC:
                 # 若 pending 过多且已接近 bloom 时刻，丢弃超出部分，避免下一轮被安装拖住
                 if len(pending_set) > PENDING_CAP_FOR_BLOOM and margin < 0.5:
@@ -693,15 +854,21 @@ def main_loop(
                         if pending_set:
                             pending_set.pop()
                 for k in list(failed_until.keys())[:5000]:
-                    if failed_until.get(k, 0) <= now:
+                    if failed_until.get(k, 0) <= install_now:
                         failed_until.pop(k, None)
-                install_deadline = now + RULE_INSTALL_BUDGET_SEC
-                # 每批较小（512），便于频繁检查 install_deadline，避免单批 gRPC 过长拖过 bloom
-                install_batch = min(512, batch_max)
-                while pending_set and time.monotonic() < install_deadline:
-                    keys = list(pending_set)[:min(MAX_PUSH_PER_LOOP, len(pending_set))]
-                    for k in keys:
-                        pending_set.discard(k)
+                # deadline 受两个约束：本轮 install 预算 + 必须在下次 epoch 前留出安全 margin
+                install_deadline = min(
+                    install_now + RULE_INSTALL_BUDGET_SEC,
+                    next_epoch_switch - EPOCH_SWITCH_MARGIN_SEC,
+                )
+                # 每批适当增大，提升吞吐，同时仍受 deadline 保护
+                install_batch = min(1024, batch_max)
+                while pending_set:
+                    tnow = time.monotonic()
+                    if tnow >= install_deadline:
+                        break
+                    take_n = min(MAX_PUSH_PER_LOOP, len(pending_set))
+                    keys = [pending_set.pop() for _ in range(take_n)]
                     for i in range(0, len(keys), install_batch):
                         if time.monotonic() >= install_deadline:
                             for k in keys[i:]:
@@ -711,6 +878,8 @@ def main_loop(
                     if time.monotonic() >= install_deadline:
                         break
     finally:
+        if shm_reader is not None:
+            shm_reader.close()
         if csv_file:
             csv_file.close()
 
@@ -740,20 +909,28 @@ if __name__ == "__main__":
     parser.add_argument(
         "--hot-window",
         type=int,
-        default=5,
-        help="Hot rule window: past N epochs (default: 5)",
+        default=2,
+        help="Hot rule window: must appear in all of past N epochs (default: 2)",
     )
     parser.add_argument(
-        "--hot-min",
-        type=int,
-        default=2,
-        help="Min epochs a rule must appear to be hot (default: 2)",
+        "--shm-name",
+        default=os.environ.get("P4_RULE_SHM_NAME", DEFAULT_SHM_NAME),
+        help="POSIX SHM name for rule ring, e.g. /p4_rule_ring",
     )
     args = parser.parse_args()
 
     HOT_WINDOW_EPOCHS = args.hot_window
-    HOT_MIN_EPOCHS = args.hot_min
-    epoch_csv = f"bfrt_log/{datetime.now().strftime('%Y%m%d_%H%M%S')}_bloom_occupancy.csv"
+    log_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "log",
+        "runs",
+        "latest",
+    )
+    os.makedirs(log_dir, exist_ok=True)
+    epoch_csv = os.path.join(
+        log_dir,
+        f"bfrt_controller_{datetime.now().strftime('%Y%m%d_%H%M%S')}_bloom_occupancy.csv",
+    )
     main_loop(
         sock_path=args.sock,
         entry_ttl=args.entry_ttl,
@@ -762,4 +939,5 @@ if __name__ == "__main__":
         epoch_print_interval_sec=args.epoch_print,
         epoch_switch_interval_sec=args.epoch_switch,
         epoch_csv_path=epoch_csv,
+        shm_name=args.shm_name if args.shm_name else None,
     )
