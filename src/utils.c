@@ -9,26 +9,31 @@ extern struct in_addr *responder_net_list;
 extern int *responder_net_mask;
 extern int tot_responder_nets;
 
-uint8_t sender_src_mac[ETH_ALEN] = {
-    SWITCH_SRC_MAC_FALLBACK_0, SWITCH_SRC_MAC_FALLBACK_1,
-    SWITCH_SRC_MAC_FALLBACK_2, SWITCH_SRC_MAC_FALLBACK_3,
-    SWITCH_SRC_MAC_FALLBACK_4, SWITCH_SRC_MAC_FALLBACK_5};
+uint8_t sender_src_mac_switch[ETH_ALEN] = {0};
+uint8_t sender_src_mac_collector[ETH_ALEN] = {0};
 
-int init_sender_src_mac(void) {
+static void read_iface_mac_or_die(int sockfd, const char *ifname,
+                                  const char *role, uint8_t *out_mac) {
   struct ifreq if_mac;
 
   memset(&if_mac, 0, sizeof(if_mac));
-  strncpy(if_mac.ifr_name, ifName_switch, IFNAMSIZ - 1);
+  strncpy(if_mac.ifr_name, ifname, IFNAMSIZ - 1);
 
-  if (ioctl(sockfd_switch, SIOCGIFHWADDR, &if_mac) < 0) {
+  if (ioctl(sockfd, SIOCGIFHWADDR, &if_mac) < 0) {
     fprintf(fp_stderr,
-            "Warning: failed to get MAC for %s, fallback to default: %s\n",
-            ifName_switch, strerror(errno));
-    return -1;
+            "fatal: SIOCGIFHWADDR failed for %s iface %s: %s\n",
+            role, ifname, strerror(errno));
+    exit(1);
   }
 
-  memcpy(sender_src_mac, if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
-  return 0;
+  memcpy(out_mac, if_mac.ifr_hwaddr.sa_data, ETH_ALEN);
+}
+
+void init_sender_src_macs(void) {
+  read_iface_mac_or_die(sockfd_switch, ifName_switch, "switch egress",
+                        sender_src_mac_switch);
+  read_iface_mac_or_die(sockfd_collector, ifName_collector, "collector egress",
+                        sender_src_mac_collector);
 }
 
 /*
@@ -397,14 +402,9 @@ int SendPktCollector(char *sendbuf, int tx_len) {
   // replace the source MAC address and the destination MAC address
   // with the source MAC address and the destination MAC address of the
   // interface memcpy(eh->ether_shost, if_idx.ifr_hwaddr.sa_data, ETH_ALEN);
-  memcpy(eh->ether_shost, sender_src_mac, ETH_ALEN);
+  memcpy(eh->ether_shost, sender_src_mac_collector, ETH_ALEN);
 
-  eh->ether_dhost[0] = COLLECTOR_DST_MAC_0;
-  eh->ether_dhost[1] = COLLECTOR_DST_MAC_1;
-  eh->ether_dhost[2] = COLLECTOR_DST_MAC_2;
-  eh->ether_dhost[3] = COLLECTOR_DST_MAC_3;
-  eh->ether_dhost[4] = COLLECTOR_DST_MAC_4;
-  eh->ether_dhost[5] = COLLECTOR_DST_MAC_5;
+  memcpy(eh->ether_dhost, collector_dst_mac, ETH_ALEN);
 
   long send_res = sendto(sockfd_collector, sendbuf, tx_len, 0,
                          (struct sockaddr *)&socket_address_collector,
@@ -425,46 +425,41 @@ void pkt_ctx_init(pkt_ctx_t *ctx) {
   ctx->udp = (struct udphdr *)((uint8_t *)ctx->ip + sizeof(struct ip));
   ctx->icmp = (struct icmphdr *)((uint8_t *)ctx->ip + sizeof(struct ip));
 
-  // 固定 MAC（只做一次）
-  memcpy(ctx->eth->ether_shost, sender_src_mac, ETH_ALEN);
+  // Fixed MAC (set once)
+  memcpy(ctx->eth->ether_shost, sender_src_mac_switch, ETH_ALEN);
 
-  ctx->eth->ether_dhost[0] = SWITCH_DST_MAC_0;
-  ctx->eth->ether_dhost[1] = SWITCH_DST_MAC_1;
-  ctx->eth->ether_dhost[2] = SWITCH_DST_MAC_2;
-  ctx->eth->ether_dhost[3] = SWITCH_DST_MAC_3;
-  ctx->eth->ether_dhost[4] = SWITCH_DST_MAC_4;
-  ctx->eth->ether_dhost[5] = SWITCH_DST_MAC_5;
+  memcpy(ctx->eth->ether_dhost, switch_dst_mac, ETH_ALEN);
 
   ctx->eth->ether_type = htons(0x8888);
 
-  // 固定 dst ip = 10.0.0.1
+  // Fixed dst ip = 10.0.0.1
   ctx->dst_ip_n = inet_addr("10.0.0.1");
   ctx->ip->ip_dst.s_addr = ctx->dst_ip_n;
 
-  // IP 固定字段
+  // Fixed IP header fields
   ctx->ip->ip_v = 4;
   ctx->ip->ip_hl = 5;
   ctx->ip->ip_tos = 0;
   ctx->ip->ip_id = 0;
   ctx->ip->ip_off = 0;
   ctx->ip->ip_ttl = 64;
-  ctx->ip->ip_sum = 0; // 不算
+  ctx->ip->ip_sum = 0; // not computed
 
-  // 固定目的端口
+  // Fixed destination port
   ctx->dport_n = htons((uint16_t)FIXED_DPORT);
 
-  // TCP 模板：固定目的端口，最小头
+  // TCP template: fixed dport, minimal header
   ctx->tcp->doff = 5;
   ctx->tcp->dest = ctx->dport_n;
   ctx->tcp->window = htons(65535);
   ctx->tcp->check = 0;
   ctx->tcp->th_flags = TH_SYN;
 
-  // UDP 模板：固定目的端口
+  // UDP template: fixed dport
   ctx->udp->dest = ctx->dport_n;
   ctx->udp->check = 0;
 
-  // ICMP 模板：字段全固定
+  // ICMP template: all fields fixed
   ctx->icmp->type = FIXED_ICMP_TYPE;
   ctx->icmp->code = FIXED_ICMP_CODE;
   ctx->icmp->checksum = 0;
@@ -475,7 +470,7 @@ void pkt_ctx_init(pkt_ctx_t *ctx) {
 }
 
 int SendPktSwitch(uint32_t src_ip, uint16_t src_port, uint8_t proto) {
-  // 只改：src ip / proto（dst ip 固定；checksum 永远 0）
+  // Only vary src ip / proto (dst ip fixed; checksum always 0)
   g_ctx.ip->ip_src.s_addr = src_ip;
   g_ctx.ip->ip_p = proto;
   g_ctx.ip->ip_sum = 0;
@@ -484,7 +479,7 @@ int SendPktSwitch(uint32_t src_ip, uint16_t src_port, uint8_t proto) {
   uint16_t ip_len = 0;
 
   if (proto == IPPROTO_TCP) {
-    // 只改：源端口（目的端口固定）
+    // Only vary source port (dport fixed)
     g_ctx.tcp->source = src_port;
     g_ctx.tcp->check = 0;
 
@@ -493,7 +488,7 @@ int SendPktSwitch(uint32_t src_ip, uint16_t src_port, uint8_t proto) {
     g_ctx.ip->ip_len = htons(ip_len);
 
   } else if (proto == IPPROTO_UDP) {
-    // 只改：源端口（目的端口固定）
+    // Only vary source port (dport fixed)
     g_ctx.udp->source = src_port;
     g_ctx.udp->check = 0;
 
@@ -503,7 +498,7 @@ int SendPktSwitch(uint32_t src_ip, uint16_t src_port, uint8_t proto) {
     g_ctx.ip->ip_len = htons(ip_len);
 
   } else if (proto == IPPROTO_ICMP) {
-    // ICMP 头全固定，不改
+    // ICMP header fully fixed, no changes
     g_ctx.icmp->checksum = 0;
 
     l4_len = (uint16_t)sizeof(struct icmphdr); // 8

@@ -42,7 +42,7 @@ Increase this number on high speed network will help ...*/
 #define FLOW_HASH_TABLE_SIZE 1000000
 #define FLOW_HASH_TABLE_GC_SIZE 10
 #define FLOW_HASH_TABLE_GC_PERIOD 10
-#define FLOW_HASH_TABLE_GC_TIMEOUT 200000
+#define FLOW_HASH_TABLE_GC_TIMEOUT 1000000
 
 /* 
 * Switch GRPC Client 
@@ -65,45 +65,29 @@ Increase this number on high speed network will help ...*/
 // #define RECV_INTF "enp10s0"
 
 
-/* Logging Sampling granularity */
+/* Logging Sampling granularity
+ * Wall-clock stats/status (.status file + stats CSV) interval is driven at runtime by
+ * TSDN_STATS_LOG_SAMPLE_US (see tsdn.c). Optional presets: TSDN_LOG_OUTPUT_MODE=debug|daemon
+ * at the end of conf/controller.env (sourced as shell).
+ */
 #define DO_STATS
 #define LOG_TO_FILE
 #define PKT_LOG_SAMPLE_CNT 10000      // pkt_count
 #define TIMEOUT_SAMPLE_CNT 100000     // tot_expired_pkt_count
-#define STATS_LOG_SAMPLE_TIME 1000000  // us
+#define STATS_LOG_SAMPLE_TIME 1000000  // us (compile-time default; runtime env overrides)
 
-/* ===================== Packet Egress Config: Collector ===================== */
-#define COLLECTOR_INTF "enp9s0"
-#define COLLECTOR_DST_MAC_0 0x52
-#define COLLECTOR_DST_MAC_1 0x54
-#define COLLECTOR_DST_MAC_2 0x00
-#define COLLECTOR_DST_MAC_3 0x6a
-#define COLLECTOR_DST_MAC_4 0x19
-#define COLLECTOR_DST_MAC_5 0x9a
+/* pcap idle wake-up period (ms), used to run timeout GC when no packets arrive */
+#define PCAP_IDLE_TICK_MS 20
 
-/* Send to the bridge interface */
-// #define COLLECTOR_INTF "enp8s0"
-// #define COLLECTOR_DST_MAC_0 0x52
-// #define COLLECTOR_DST_MAC_1 0x54
-// #define COLLECTOR_DST_MAC_2 0x00
-// #define COLLECTOR_DST_MAC_3 0x80
-// #define COLLECTOR_DST_MAC_4 0x26
-// #define COLLECTOR_DST_MAC_5 0xbc
-
-/* ======================= Packet Egress Config: Switch ====================== */
-#define SWITCH_INTF "enp10s0"
-#define SWITCH_DST_MAC_0 0x90
-#define SWITCH_DST_MAC_1 0x2d
-#define SWITCH_DST_MAC_2 0x77
-#define SWITCH_DST_MAC_3 0x3f
-#define SWITCH_DST_MAC_4 0xb5
-#define SWITCH_DST_MAC_5 0xa2
-
-/* Fallback source MAC for SWITCH_INTF (used if dynamic lookup fails) */
-#define SWITCH_SRC_MAC_FALLBACK_0 0x52
-#define SWITCH_SRC_MAC_FALLBACK_1 0x54
-#define SWITCH_SRC_MAC_FALLBACK_2 0x00
-#define SWITCH_SRC_MAC_FALLBACK_3 0x5b
-#define SWITCH_SRC_MAC_FALLBACK_4 0x57
-#define SWITCH_SRC_MAC_FALLBACK_5 0x5c
-
+/* ================== Packet Egress (runtime only; no compile-time defaults) ==================
+ * Collector and switch *destination* MACs must come from the environment (set
+ * by tsdn-multi.sh from conf/tsdn.interfaces), or tsdn exits at startup.
+ * MACs are static: set in conf/tsdn.interfaces (collector / switch_dst lines) or via
+ * TSDN_COLLECTOR_DST_MAC / TSDN_SWITCH_DST_MAC in conf/controller.env; the binary only reads env.
+ *   TSDN_COLLECTOR_INTF       — raw socket for packets to the collector
+ *   TSDN_COLLECTOR_SRC_MAC    — optional source MAC override for collector egress
+ *   TSDN_COLLECTOR_DST_MAC    — aa:bb:cc:dd:ee:ff (or hyphen-separated)
+ *   TSDN_SWITCH_DST_MAC       — next-hop Ethernet MAC toward the P4 switch
+ * Switch egress *interface* is always the capture interface (argv[1]), source MAC is read from that iface.
+ * Collector egress source MAC defaults to SIOCGIFHWADDR on TSDN_COLLECTOR_INTF, then optional override applies.
+ */

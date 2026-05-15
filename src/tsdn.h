@@ -101,7 +101,7 @@ struct tcphdr *gettcp(struct ip *pip, void **pplast);
 struct udphdr *getudp(struct ip *pip, void **pplast);
 struct icmphdr *geticmp(struct ip *pip, void **pplast);
 char *get_ppayload(struct tcphdr *ptcp, void **pplast);
-void trace_init(void);
+void trace_init(const char *capture_ifname);
 void trace_check(void);
 void trace_cleanup(void);
 
@@ -178,6 +178,9 @@ Bool internal_ip(struct in_addr adx);
 Bool responder_ip(struct in_addr adx);
 
 /* Packet Sending */
+extern unsigned char collector_dst_mac[ETH_ALEN];
+extern unsigned char switch_dst_mac[ETH_ALEN];
+
 int SendPktCollector(char *sendbuf, int tx_len);
 int sockfd_collector;
 struct ifreq if_idx_collector;
@@ -390,7 +393,7 @@ static inline uint64_t flow_key_u64(uint32_t ip_be, uint16_t port, uint8_t proto
     return ((uint64_t)ip_be << 32) | ((uint64_t)port << 8) | (uint64_t)proto;
 }
 
-// 一个简单的 2^N 桶表，碰撞就覆盖（近似去重，足够用了）
+// Simple 2^N-bucket table; collisions overwrite (approximate dedup, good enough)
 #define DEDUP_BITS 20
 #define DEDUP_SIZE (1u << DEDUP_BITS)
 
@@ -403,11 +406,11 @@ static inline int dedup_should_send(uint32_t ip_be, uint16_t port, uint8_t proto
     uint64_t now = now_ms_monotonic();
 
     if (dedup_keys[idx] == k) {
-        if (now - dedup_last_ms[idx] < cooldown_ms) return 0; // 不发送
+        if (now - dedup_last_ms[idx] < cooldown_ms) return 0; // suppress send
         dedup_last_ms[idx] = now;
         return 1;
     }
-    // 新 key 或碰撞覆盖
+    // New key or collision overwrite
     dedup_keys[idx] = k;
     dedup_last_ms[idx] = now;
     return 1;
@@ -438,6 +441,7 @@ typedef struct {
 pkt_ctx_t g_ctx;
 void pkt_ctx_init(pkt_ctx_t *ctx);
 
-/* Runtime source MAC for SWITCH_INTF */
-extern uint8_t sender_src_mac[ETH_ALEN];
-int init_sender_src_mac(void);
+/* Runtime source MACs for switch egress and collector egress */
+extern uint8_t sender_src_mac_switch[ETH_ALEN];
+extern uint8_t sender_src_mac_collector[ETH_ALEN];
+void init_sender_src_macs(void);

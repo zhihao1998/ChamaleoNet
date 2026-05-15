@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 
 # =========================
-# P4 用户态下发报文协议
+# P4 userspace datagram protocol (rule push)
 # =========================
 P4_MAGIC = 0x5034
 P4_VER = 1
@@ -22,24 +22,24 @@ HDR_SIZE = HDR.size
 RULE_SIZE = RULE.size
 
 # =========================
-# 统计
+# Statistics
 # =========================
 stats = {
     "pkts_ok": 0,
     "pkts_bad": 0,
     "pkts_trunc": 0,
-    "sock_drop": 0,  # recv 侧主动丢（比如 parse 失败不计）
+    "sock_drop": 0,  # recv-side drops (e.g. parse failures not counted elsewhere)
     "rules_in": 0,
-    "rules_pending_add": 0,  # 加入 pending 的条目数（已去重后）
-    "rules_installed": 0,  # 成功写入/视为写入的条目数
+    "rules_pending_add": 0,  # entries added to pending (after dedup)
+    "rules_installed": 0,  # successful or assumed-success installs
     "batches_ok": 0,
     "batches_fail": 0,
-    "adds_fail": 0,  # 单条写入失败次数
+    "adds_fail": 0,  # per-entry add failures
 }
 stats_lock = threading.Lock()
 
 # =========================
-# 控制器依赖（Tofino BFRT）
+# Controller dependencies (Tofino BFRT)
 # =========================
 SDE_INSTALL = os.environ["SDE_INSTALL"]
 PYTHON3_VER = "{}.{}".format(sys.version_info.major, sys.version_info.minor)
@@ -86,20 +86,20 @@ def unpack_flow_key(k: int):
 
 
 # =========================
-# 全局简化去重：pending_set 是唯一“待下发”集合
+# Global dedup: pending_set is the only "pending install" set
 # =========================
 pending_set = set()  # set[int]
 pending_lock = threading.Lock()
 
-# 为了避免某些异常导致“同一条一直重试刷屏”，加一个很轻的失败冷却
+# Light failure cooldown so one bad entry does not retry-spam forever
 failed_until = {}  # dict[int -> float(monotonic)]
 FAILED_COOLDOWN_SEC = 0.2
-FAILED_MAX_SIZE = 200000  # 防止 dict 无限增长
+FAILED_MAX_SIZE = 200000  # cap dict growth
 
 
 def parse_datagram_to_keys(data: bytes):
     """
-    成功返回 list[int] (packed keys)，失败返回 None
+    On success returns list[int] (packed keys), else None.
     """
     mv = memoryview(data)
     if len(mv) < HDR_SIZE:
@@ -153,7 +153,7 @@ class Bfrt_GRPC_Client:
         self.bfrt_info = None
         self.target = target
 
-        # 本地已安装集合（只在“确认成功/或确认不必再重试”时写入）
+        # Local installed set (only after confirmed success or no-retry-needed)
         self.installed_flows = set()  # set[int]
         self.installed_flows_lock = threading.Lock()
 
@@ -209,8 +209,8 @@ class Bfrt_GRPC_Client:
 
     def idle_entry_batch_clean(self):
         """
-        保留原逻辑：通过 idletime notification 批量删硬件表项
-        并同步更新 installed_flows（以及 failed_until，避免残留）
+        Original behavior: batch-delete hardware entries via idletime notifications
+        and sync installed_flows (and failed_until to avoid stale state).
         """
         key_list = []
         removed_keys = []
@@ -239,10 +239,10 @@ class Bfrt_GRPC_Client:
             try:
                 self.service_table.entry_del(self.target, key_list)
             except Exception:
-                # 删失败就不动本地集合，避免更不一致
+                # On delete failure, keep local sets unchanged to avoid worse inconsistency
                 return 0
 
-            # 删成功再更新本地
+            # On success, update local state
             with self.installed_flows_lock:
                 for k in removed_keys:
                     self.installed_flows.discard(k)
@@ -255,18 +255,18 @@ class Bfrt_GRPC_Client:
     def entry_add_batch(self, keys_batch):
         """
         keys_batch: list[int] packed keys
-        目标：
-          - 尽可能批量 entry_add
-          - 若批量失败，退化到单条 add，避免“一条坏导致全批重试刷屏”
-          - 对于单条失败：设置短冷却，避免无限重试；不盲目加入 installed
+        Goals:
+          - Prefer bulk entry_add
+          - On batch failure, fall back to per-entry adds so one bad key does not retry-spam the whole batch
+          - On single-entry failure: short cooldown, avoid infinite retry; do not blindly add to installed
         """
-        # 先过滤掉本地已安装
+        # Filter out already-installed keys locally
         with self.installed_flows_lock:
             keys_batch = [k for k in keys_batch if k not in self.installed_flows]
         if not keys_batch:
             return
 
-        # 批量构造
+        # Build batch keys/data
         key_list = []
         data_list = []
         entry_triples = []
@@ -274,7 +274,7 @@ class Bfrt_GRPC_Client:
             ip_int, port, proto = unpack_flow_key(k)
 
             entry_triples.append((ip_int, port, proto))
-            # 关键：internal_ip 用字符串，避免类型解释差异导致 match/del 不一致
+            # internal_ip as string avoids type mismatch between match and delete
             service_keys = self.service_table.make_key(
                 [
                     gc.KeyTuple("meta.internal_ip", int_to_ip(ip_int)),
@@ -291,7 +291,7 @@ class Bfrt_GRPC_Client:
                 )
             )
 
-        # 先尝试整批写
+        # Try whole batch first
         try:
             self.service_table.entry_add(self.target, key_list, data_list)
             with self.installed_flows_lock:
@@ -305,7 +305,7 @@ class Bfrt_GRPC_Client:
             with stats_lock:
                 stats["batches_fail"] += 1
 
-        # 整批失败：退化逐条写，避免重复风暴
+        # Whole batch failed: per-entry writes to avoid retry storms
         now = time.monotonic()
         ok_count = 0
         for k, (ip_int, port, proto) in zip(keys_batch, entry_triples):
@@ -328,10 +328,10 @@ class Bfrt_GRPC_Client:
                 ok_count += 1
 
             except Exception:
-                # 单条失败：不要立刻反复重试，设置短冷却
+                # Single-entry failure: cooldown instead of tight retry loop
                 with pending_lock:
                     if len(failed_until) > FAILED_MAX_SIZE:
-                        # 粗暴清理一半（足够简单）
+                        # Simple: drop half when oversized
                         for kk in list(failed_until.keys())[: len(failed_until) // 2]:
                             failed_until.pop(kk, None)
                     failed_until[k] = now + FAILED_COOLDOWN_SEC
@@ -345,10 +345,10 @@ class Bfrt_GRPC_Client:
 
 def add_pending_keys(controller: Bfrt_GRPC_Client, keys):
     """
-    keys: list[int] packed keys（已 parse）
-    只做两件事：
-      1) 不在 installed 的才考虑
-      2) 不在失败冷却窗口的才加入 pending_set（全局唯一去重）
+    keys: list[int] packed keys (already parsed)
+    Two steps:
+      1) Skip keys already installed
+      2) Keys outside failure cooldown go into pending_set (global dedup)
     """
     if not keys:
         return
@@ -356,7 +356,7 @@ def add_pending_keys(controller: Bfrt_GRPC_Client, keys):
     now = time.monotonic()
     added = 0
 
-    # 固定加锁顺序：installed -> pending，避免死锁
+    # Lock order: installed -> pending (avoid deadlock)
     with controller.installed_flows_lock:
         with pending_lock:
             for k in keys:
@@ -375,8 +375,8 @@ def add_pending_keys(controller: Bfrt_GRPC_Client, keys):
 
 def receiver_and_parse(sock: socket.socket, controller: Bfrt_GRPC_Client):
     """
-    简化：直接在 receiver 里 parse + 丢到 pending_set（集合去重）
-    保留高效 DGRAM drain + MSG_TRUNC 检测
+    Simplified: parse in receiver thread and enqueue pending_set (set dedup).
+    Keeps efficient DGRAM drain + MSG_TRUNC detection.
     """
     sel = selectors.DefaultSelector()
     sock.setblocking(False)
@@ -411,7 +411,7 @@ def receiver_and_parse(sock: socket.socket, controller: Bfrt_GRPC_Client):
 
 def batcher_simple(controller: Bfrt_GRPC_Client, max_batch=2048, flush_interval=0.01):
     """
-    每 flush_interval 把 pending_set swap 出来，按 max_batch 下发
+    Every flush_interval, swap pending_set out and install in max_batch chunks.
     """
     while True:
         time.sleep(flush_interval)
@@ -422,15 +422,15 @@ def batcher_simple(controller: Bfrt_GRPC_Client, max_batch=2048, flush_interval=
             keys = list(pending_set)
             pending_set.clear()
 
-            # 顺便清理过期冷却项（避免 dict 越积越多）
+            # Prune expired cooldown entries (keep dict bounded)
             now = time.monotonic()
             if failed_until:
-                # 简单线性清理一部分即可
+                # Linear scan of a slice is enough
                 for k in list(failed_until.keys())[:5000]:
                     if failed_until.get(k, 0) <= now:
                         failed_until.pop(k, None)
 
-        # 分块下发
+        # Chunked installs
         for i in range(0, len(keys), max_batch):
             controller.entry_add_batch(keys[i : i + max_batch])
 

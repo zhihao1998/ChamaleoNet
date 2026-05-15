@@ -2,6 +2,7 @@
 #include "stats_print.h"
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <linux/ethtool.h>
 #include <linux/if_packet.h>
 #include <linux/sockios.h>
@@ -12,6 +13,7 @@
 
 static char g_capture_ifname[64];
 static char g_tsdn_run_dir[512];
+static int g_stats_log_sample_time_us = STATS_LOG_SAMPLE_TIME;
 
 static int mkdir_p(const char *path, mode_t mode)
 {
@@ -35,6 +37,38 @@ static int mkdir_p(const char *path, mode_t mode)
 	if (mkdir(buf, mode) != 0 && errno != EEXIST)
 		return -1;
 	return 0;
+}
+
+static void tsdn_load_log_tunables(void)
+{
+	const char *env_stats_us = getenv("TSDN_STATS_LOG_SAMPLE_US");
+
+	if (env_stats_us != NULL && env_stats_us[0] != '\0')
+	{
+		char *endp = NULL;
+		unsigned long v = strtoul(env_stats_us, &endp, 10);
+
+		if (endp != env_stats_us && *endp == '\0' && v > 0 && v <= (unsigned long)INT_MAX)
+		{
+			g_stats_log_sample_time_us = (int)v;
+		}
+		else
+		{
+			fprintf(stderr,
+				"invalid TSDN_STATS_LOG_SAMPLE_US=%s, fallback to default %d us\n",
+				env_stats_us, STATS_LOG_SAMPLE_TIME);
+			g_stats_log_sample_time_us = STATS_LOG_SAMPLE_TIME;
+		}
+	}
+
+	{
+		const char *env_mode = getenv("TSDN_LOG_OUTPUT_MODE");
+		if (env_mode != NULL && env_mode[0] != '\0')
+			fprintf(stderr, "stats log: mode=%s interval=%d us\n", env_mode,
+				g_stats_log_sample_time_us);
+		else
+			fprintf(stderr, "stats log interval: %d us\n", g_stats_log_sample_time_us);
+	}
 }
 
 Bool internal_src = TRUE;
@@ -784,6 +818,50 @@ void print_all_stats()
 	       pr, pkt_count, (int64_t)pr - (int64_t)pkt_count, pd, pif);
 }
 
+static void run_periodic_tasks(int has_packet)
+{
+	if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD)
+	{
+		last_pkt_cleaned_time = current_time;
+		check_timeout_periodic();
+	}
+
+	if (elapsed(last_hash_cleaned_time, current_time) > FLOW_HASH_TABLE_GC_PERIOD)
+	{
+		last_hash_cleaned_time = current_time;
+		check_timeout_lazy();
+	}
+
+#ifdef DO_STATS
+	if (tv_sub_2(current_time, last_log_time) > g_stats_log_sample_time_us)
+	{
+		last_log_time = current_time;
+
+#ifdef FLOW_HASH_MEASURE
+		flow_hash_stats_cal();
+#endif
+
+		Stats s = stats_snapshot();
+		log_stats("stats,%s", stats_to_csv_string(&s));
+		tsdn_emit_status_line();
+
+#ifdef FLOW_HASH_MEASURE
+		flow_hash_stats_init();
+#endif
+	}
+#endif
+
+#ifdef HOST_LIVENESS_MONITOR
+	if (tv_sub_2(current_time, last_active_host_merge_time) >= ACTIVE_HOST_UPDATE_PERIOD)
+	{
+		last_active_host_merge_time = current_time;
+		merge_host_liveness();
+	}
+#endif
+
+	(void)has_packet;
+}
+
 void clean_all()
 {
 	/* free all data structure */
@@ -858,14 +936,14 @@ void init_log(const char *capture_ifname)
 		exit(1);
 	}
 
-	/* One file per process; run_dir is usually log/runs/<timestamp>/ (shared via TSDN_LOG_RUN_DIR for multi-tsdn). */
+	/* One file per interface/profile in a run_dir; avoids file explosion during crash-restart loops. */
 	snprintf(stat_file_name, sizeof(stat_file_name),
-		 "%s/%s_pid%ld_HashSize%d_GCSize%d_GCPeriod%d_GCTimeout%d.csv",
-		 run_dir, ifname, (long)getpid(), FLOW_HASH_TABLE_SIZE,
+		 "%s/%s_HashSize%d_GCSize%d_GCPeriod%d_GCTimeout%d.csv",
+		 run_dir, ifname, FLOW_HASH_TABLE_SIZE,
 		 FLOW_HASH_TABLE_GC_SIZE, FLOW_HASH_TABLE_GC_PERIOD,
 		 FLOW_HASH_TABLE_GC_TIMEOUT);
 
-	fp_stats = fopen(stat_file_name, "w+");
+	fp_stats = fopen(stat_file_name, "a+");
 	if (!fp_stats)
 	{
 		fprintf(stderr, "init_log: cannot open %s: %s\n", stat_file_name,
@@ -875,8 +953,20 @@ void init_log(const char *capture_ifname)
 	fprintf(stderr, "stats csv: %s\n", stat_file_name);
 	log_add_fp(fp_stats, LOG_STATS);
 
-	fprintf(fp_stats, "time,level,file,line,msg,%s\n",
-		stats_csv_header_to_string());
+	{
+		int need_header = 1;
+		if (fseek(fp_stats, 0, SEEK_END) == 0)
+		{
+			long size = ftell(fp_stats);
+			if (size > 0)
+				need_header = 0;
+		}
+		if (need_header)
+		{
+			fprintf(fp_stats, "time,level,file,line,msg,%s\n",
+				stats_csv_header_to_string());
+		}
+	}
 
 #endif
 	log_set_quiet(TRUE);
@@ -896,8 +986,9 @@ int main(int argc, char *argv[])
 	// CheckArguments(&argc, argv);
 
 	/* initialize  */
-	trace_init();
+	trace_init(recv_intf);
 	init_log(recv_intf);
+	tsdn_load_log_tunables();
 
 	if (!LoadInternalNets(
 		"/home/zhihaow/codes/honeypot_c_controller/conf/net.internal"))
@@ -1008,39 +1099,39 @@ int main(int argc, char *argv[])
 	/* make sure every data structure is in place */
 	trace_check();
 
-	ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip,
-						&plast);
+	gettimeofday(&current_time, NULL);
 	last_hash_cleaned_time = last_idle_cleaned_time = last_pkt_cleaned_time = last_log_time = current_time;
 
 #ifdef HOST_LIVENESS_MONITOR
 	base_ip_int = ip_to_int("154.200.0.0");
 	last_active_entry_update_time = last_active_host_merge_time = current_time;
 #endif
-	struct timeval pkt_process_start_time, pkt_process_end_time;
-	struct timeval pkt_process_end_time_tmp = current_time;
+#ifdef PKT_PROCESS_TIME_MEASURE
+	struct timeval pkt_process_end_time;
+#endif
 
-	do
+	while (!g_stop)
 	{
+		loop_ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast);
+		if (loop_ret < 0)
+		{
+			ret = loop_ret;
+			break;
+		}
+		if (loop_ret == 0)
+		{
+			if (!live_flag)
+			{
+				ret = 0;
+				break;
+			}
+			continue;
+		}
 
 		ProcessPacket(&current_time, pip, plast, tlen, phys, phystype, location, DEFAULT_NET);
+		run_periodic_tasks(1);
 
 #ifdef DO_STATS
-		if (tv_sub_2(current_time, last_log_time) > STATS_LOG_SAMPLE_TIME)
-		{
-			last_log_time = current_time;
-
-#ifdef FLOW_HASH_MEASURE
-			flow_hash_stats_cal();
-#endif
-
-			Stats s = stats_snapshot();
-			log_stats("stats,%s", stats_to_csv_string(&s));
-			tsdn_emit_status_line();
-
-#ifdef FLOW_HASH_MEASURE
-			flow_hash_stats_init();
-#endif
-		}
 #ifdef PKT_PROCESS_TIME_MEASURE
 		if (pkt_count % PKT_LOG_SAMPLE_CNT == 0)
 		{
@@ -1049,22 +1140,7 @@ int main(int argc, char *argv[])
 		}
 #endif
 #endif
-
-#ifdef HOST_LIVENESS_MONITOR
-		// Merge the two bitmap of host liveness
-		if (tv_sub_2(current_time, last_active_host_merge_time) >= ACTIVE_HOST_UPDATE_PERIOD)
-		{
-			last_active_host_merge_time = current_time;
-			merge_host_liveness();
-			// uint32_t count = count_active_hosts();
-			// printf("Active hosts: %d\n", count);
-		}
-#endif
-
-	} while (!g_stop &&
-		 (loop_ret = pread_tcpdump(&current_time, &len, &tlen, &phys, &phystype, &pip, &plast)) > 0);
-
-	ret = loop_ret;
+	}
 
 	if (ret < 0)
 		fprintf(stderr, "capture loop exited on pcap error, printing final stats\n");

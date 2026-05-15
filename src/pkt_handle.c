@@ -1,5 +1,55 @@
 #include "tsdn.h"
 
+unsigned char collector_dst_mac[ETH_ALEN];
+unsigned char switch_dst_mac[ETH_ALEN];
+
+/* Parse "aa:bb:cc:dd:ee:ff" or same with '-' separators. Returns 0 on success. */
+static int parse_hwaddr_string(const char *s, unsigned char *out) {
+  unsigned o0, o1, o2, o3, o4, o5;
+
+  if (sscanf(s, "%x:%x:%x:%x:%x:%x", &o0, &o1, &o2, &o3, &o4, &o5) != 6 &&
+      sscanf(s, "%x-%x-%x-%x-%x-%x", &o0, &o1, &o2, &o3, &o4, &o5) != 6)
+    return -1;
+  if (o0 > 255u || o1 > 255u || o2 > 255u || o3 > 255u || o4 > 255u || o5 > 255u)
+    return -1;
+  out[0] = (unsigned char)o0;
+  out[1] = (unsigned char)o1;
+  out[2] = (unsigned char)o2;
+  out[3] = (unsigned char)o3;
+  out[4] = (unsigned char)o4;
+  out[5] = (unsigned char)o5;
+  return 0;
+}
+
+static void require_env_hwaddr(const char *envname, unsigned char *out) {
+  const char *s = getenv(envname);
+
+  if (s == NULL || s[0] == '\0') {
+    fprintf(stderr,
+            "fatal: %s is not set (set via conf/tsdn.interfaces + "
+            "tsdn-multi.sh, or export manually)\n",
+            envname);
+    exit(1);
+  }
+  if (parse_hwaddr_string(s, out) != 0) {
+    fprintf(stderr, "fatal: invalid Ethernet address in %s=%s\n", envname, s);
+    exit(1);
+  }
+}
+
+static int load_optional_env_hwaddr(const char *envname, unsigned char *out) {
+  const char *s = getenv(envname);
+
+  if (s == NULL || s[0] == '\0') {
+    return 0;
+  }
+  if (parse_hwaddr_string(s, out) != 0) {
+    fprintf(stderr, "fatal: invalid Ethernet address in %s=%s\n", envname, s);
+    exit(1);
+  }
+  return 1;
+}
+
 int num_ip_packets = -1;           /* how many packets we've allocated */
 static ip_packet **pkt_arr = NULL; /* array of pointers to allocated packets */
 static pkt_desc_t **pkt_desc_arr = NULL;
@@ -11,6 +61,36 @@ static circular_buf_t *pkt_circ_buf;
 
 char ip_src_addr_print_buffer[INET_ADDRSTRLEN];
 char ip_dst_addr_print_buffer[INET_ADDRSTRLEN];
+
+static int bloom_update_enabled(void) {
+  static int inited = 0;
+  static int enabled = 1;
+  const char *mode;
+
+  if (inited) {
+    return enabled;
+  }
+  inited = 1;
+
+  mode = getenv("TSDN_UPDATE_MODE");
+  if (mode == NULL || mode[0] == '\0') {
+    enabled = 1;
+  } else if (strcmp(mode, "both") == 0) {
+    enabled = 1;
+  } else if (strcmp(mode, "rules-only") == 0) {
+    enabled = 0;
+  } else {
+    fprintf(fp_stderr,
+            "unknown TSDN_UPDATE_MODE=%s, fallback to both (valid: both, "
+            "rules-only)\n",
+            mode);
+    enabled = 1;
+  }
+
+  fprintf(fp_stderr, "runtime update mode: %s\n",
+          enabled ? "both (bloom + rules)" : "rules-only");
+  return enabled;
+}
 
 void print_pkt_arr() {
   for (int i = 0; i < PKT_BUF_SIZE; i++) {
@@ -149,7 +229,7 @@ void check_timeout_lazy() {
   flow_hash_t *to_clean[FLOW_HASH_TABLE_GC_SIZE * 4];
   int clean_idx = 0;
 
-  // 第一阶段：标记要清理的 flow（避免在遍历中破坏链表）
+  // Phase 1: mark flows for cleanup (avoid breaking the list while iterating)
   for (ix = entry_index; ix < entry_index + FLOW_HASH_TABLE_GC_SIZE; ix++) {
     flow_hash_head_ptr = flow_hash_table[ix];
     if (flow_hash_head_ptr == NULL) {
@@ -167,7 +247,7 @@ void check_timeout_lazy() {
     }
   }
 
-  // 第二阶段：真正清理 flow
+  // Phase 2: actually free flows
   for (int i = 0; i < clean_idx; ++i) {
     FreeFlowHash(to_clean[i]);
 #ifdef DO_STATS
@@ -342,19 +422,6 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
   //                  INET_ADDRSTRLEN),
   //        pip->ip_p);
 
-  /* Garbage Collection */
-  if (elapsed(last_pkt_cleaned_time, current_time) > PKT_BUF_GC_PERIOD) {
-    last_pkt_cleaned_time = current_time;
-    check_timeout_periodic();
-  }
-
-  /* Lazy Free */
-  if (elapsed(last_hash_cleaned_time, current_time) >
-      FLOW_HASH_TABLE_GC_PERIOD) {
-    last_hash_cleaned_time = current_time;
-    check_timeout_lazy();
-  }
-
   // gettimeofday(&current_pkt_time, NULL);
   flow_hash_t *flow_hash_ptr;
   int dir = 0;
@@ -387,11 +454,14 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
         //                  ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
         //        flow_hash_ptr->addr_pair.b_port,
         //        flow_hash_ptr->addr_pair.protocol);
-        int res = SendPktSwitch(
-            flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
-            flow_hash_ptr->addr_pair.a_port, flow_hash_ptr->addr_pair.protocol);
-        if (res == -1) {
-          bloom_rule_sending_error_count++;
+        if (bloom_update_enabled()) {
+          int res = SendPktSwitch(
+              flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
+              flow_hash_ptr->addr_pair.a_port,
+              flow_hash_ptr->addr_pair.protocol);
+          if (res == -1) {
+            bloom_rule_sending_error_count++;
+          }
         }
         /* Push rule to install queue (dedicated thread does actual install) */
         if (dedup_should_send(flow_hash_ptr->addr_pair.a_address.un.ip4.s_addr,
@@ -411,11 +481,14 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
         //                  ip_dst_addr_print_buffer, INET_ADDRSTRLEN),
         //        flow_hash_ptr->addr_pair.a_port,
         //        flow_hash_ptr->addr_pair.protocol);
-        int res = SendPktSwitch(
-            flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
-            flow_hash_ptr->addr_pair.b_port, flow_hash_ptr->addr_pair.protocol);
-        if (res == -1) {
-          bloom_rule_sending_error_count++;
+        if (bloom_update_enabled()) {
+          int res = SendPktSwitch(
+              flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
+              flow_hash_ptr->addr_pair.b_port,
+              flow_hash_ptr->addr_pair.protocol);
+          if (res == -1) {
+            bloom_rule_sending_error_count++;
+          }
         }
         /* Push rule to install queue (dedicated thread does actual install) */
         if (dedup_should_send(flow_hash_ptr->addr_pair.b_address.un.ip4.s_addr,
@@ -462,8 +535,9 @@ int pkt_handle(struct ether_header *peth, struct ip *pip, void *ptcp,
   }
 }
 
-void trace_init(void) {
+void trace_init(const char *capture_ifname) {
   static Bool initted = FALSE;
+  const char *e_cif;
 
   if (initted)
     return;
@@ -480,8 +554,30 @@ void trace_init(void) {
   flow_hash_table =
       (flow_hash_t **)MallocZ(FLOW_HASH_TABLE_SIZE * sizeof(flow_hash_t *));
 
+  e_cif = getenv("TSDN_COLLECTOR_INTF");
+  if (e_cif == NULL || e_cif[0] == '\0') {
+    fprintf(stderr,
+            "fatal: TSDN_COLLECTOR_INTF is not set (set via conf/tsdn.interfaces "
+            "+ tsdn-multi.sh, or export manually)\n");
+    exit(1);
+  }
+  strncpy(ifName_collector, e_cif, IFNAMSIZ - 1);
+  ifName_collector[IFNAMSIZ - 1] = '\0';
+
+  require_env_hwaddr("TSDN_COLLECTOR_DST_MAC", collector_dst_mac);
+  require_env_hwaddr("TSDN_SWITCH_DST_MAC", switch_dst_mac);
+
+  /* Switch egress uses the same NIC as capture (ingress). */
+  if (capture_ifname == NULL || capture_ifname[0] == '\0') {
+    fprintf(stderr,
+            "fatal: capture interface name is empty (pass <iface> on the "
+            "command line)\n");
+    exit(1);
+  }
+  strncpy(ifName_switch, capture_ifname, IFNAMSIZ - 1);
+  ifName_switch[IFNAMSIZ - 1] = '\0';
+
   /* Initialize the socket to send to collector */
-  strcpy(ifName_collector, COLLECTOR_INTF);
   /* Open RAW socket to send on */
   if ((sockfd_collector = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) ==
       -1) {
@@ -497,7 +593,6 @@ void trace_init(void) {
   socket_address_collector.sll_halen = ETH_ALEN;
 
   /* Initialize the socket to send to switch */
-  strcpy(ifName_switch, SWITCH_INTF);
   /* Open RAW socket to send on */
   if ((sockfd_switch = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == -1) {
     perror("socket");
@@ -511,19 +606,23 @@ void trace_init(void) {
   socket_address_switch.sll_ifindex = if_idx_switch.ifr_ifindex;
   socket_address_switch.sll_halen = ETH_ALEN;
   socket_address_switch.sll_protocol =
-      htons(ETH_P_ALL); /* 与 socket 创建时一致，不限制 ether type */
+      htons(ETH_P_ALL); /* Same as socket creation: no ether type filter */
 
-  /* 绑定到 VF 接口：SR-IOV VF 上仅靠 sendto 的 sll_ifindex 可能不生效，必须先
-   * bind */
+  /* Bind to VF: on SR-IOV VF, sendto with sll_ifindex alone may not work; bind
+   * first */
   if (bind(sockfd_switch, (struct sockaddr *)&socket_address_switch,
            sizeof(socket_address_switch)) < 0) {
     perror("bind(sockfd_switch)");
   }
 
-  /* Read source MAC from SWITCH_INTF dynamically */
-  init_sender_src_mac();
+  /* Read source MACs from collector/switch egress interfaces dynamically */
+  init_sender_src_macs();
 
-  /* 初始化全局发包上下文，供 SendPktSwitch 使用 */
+  /* Optional override for collector source MAC (e.g., strict VF anti-spoof). */
+  (void)load_optional_env_hwaddr("TSDN_COLLECTOR_SRC_MAC",
+                                 sender_src_mac_collector);
+
+  /* Init global send context for SendPktSwitch */
   pkt_ctx_init(&g_ctx);
 
 #ifdef HOST_LIVENESS_MONITOR

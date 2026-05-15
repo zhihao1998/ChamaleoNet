@@ -71,7 +71,7 @@ To install <span style="font-variant: small-caps;">ChamaleoNet</span>, follow:
 
 - Edit the `conf/net.internal` and `conf/net.responder` files to specify the subnets to monitor.
 - Edit the `src/param.h` file to set the parameters for the FSD-NF, such as sizing the data structures, and tuning hash-table behaviour.
-- **Multiple capture ports (optional):** copy `conf/tsdn.interfaces.example` to `conf/tsdn.interfaces` and list the Linux interface names (one per line, or space-separated on a line; `#` starts a comment). This file is used by `tsdn-multi.sh` when starting one `tsdn` process per NIC. Override the path with the environment variable `TSDN_INTERFACES_FILE` if needed.
+- **Multiple capture ports (optional):** copy `conf/tsdn.interfaces.example` to `conf/tsdn.interfaces`. List capture NICs and add static egress lines: `collector <iface> <dst_mac>` (legacy) or `collector <iface> <src_mac> <dst_mac>` (preferred), plus `switch_dst <aa:bb:cc:dd:ee:ff>`. Override with `TSDN_INTERFACES_FILE` or `TSDN_COLLECTOR_*` / `TSDN_SWITCH_DST_MAC` in the environment or `conf/controller.env`. Running `./bin/tsdn` alone still requires collector interface + destination MAC + switch destination MAC; collector source MAC is optional.
 - Edit the `p4_src/p4include/definition.p4` and `p4_src/bfrt_setup.py` to set P4-side parameters, such as the switch local port number, and target IP ranges.
 
 2. **Compile and start P4 program**

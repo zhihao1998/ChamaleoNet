@@ -128,7 +128,7 @@ class Bfrt_GRPC_Client:
                 pass
 
     def count_port_pkts(self, port_id: int) -> dict:
-        """统计 port 的收发包数"""
+        """Count rx/tx frames for a port."""
         port_stats = self.bfrt_info.table_get("$PORT_STAT")
         data, _ = next(
             port_stats.entry_get(

@@ -1,9 +1,37 @@
-# Used by: ./tsdn-multi.sh start   (with no interface arguments)
-# Copy to tsdn.interfaces and edit:
-#   cp conf/tsdn.interfaces.example conf/tsdn.interfaces
+# =============================================================================
+# Section 0 — File overview
+# =============================================================================
+# Used by: ./tsdn-multi.sh start (no iface args), or env TSDN_INTERFACES_FILE.
+# First-time: cp conf/tsdn.interfaces.example conf/tsdn.interfaces
 #
-# One interface per line, or several names separated by spaces.
-# Lines whose first non-blank character is # are ignored.
+# Parsed directives (non-# lines): collector, switch_dst, then capture iface names.
+# tsdn exits if TSDN_COLLECTOR_* / TSDN_SWITCH_DST_MAC are unset; tsdn-multi.sh exports them.
+
+# =============================================================================
+# Section 1 — Syntax summary
+# =============================================================================
+# · collector <local_iface> <dst_mac> — legacy format; dst_mac is Ethernet DESTINATION to collector path.
+# · collector <local_iface> <src_mac> <dst_mac> — preferred; configure source+destination MAC explicitly.
+#   src_mac is this host's Ethernet source MAC to place on outgoing frames from <local_iface>.
+#   dst_mac is peer collector NIC MAC (same L2) or next-hop MAC.
+# · switch_dst <aa:bb:...> — Ethernet DESTINATION toward P4 (peer / next-hop on capture side).
+# · Env overrides: TSDN_COLLECTOR_INTF, TSDN_COLLECTOR_SRC_MAC, TSDN_COLLECTOR_DST_MAC, TSDN_SWITCH_DST_MAC.
+
+# =============================================================================
+# Section 2 — Collector egress (one active collector line)
+# =============================================================================
+# Preferred: collector <iface> <src_mac> <dst_mac>
+collector enp8s0 52:54:00:33:c4:72 52:54:00:8e:da:c1
+
+# =============================================================================
+# Section 3 — Switch destination MAC
+# =============================================================================
+switch_dst 90:2d:77:3f:b5:a2
+
+# =============================================================================
+# Section 4 — Capture ifaces = one tsdn process per listed iface (multiple per line OK)
+# =============================================================================
+# Uncomment lines to add workers; # lines are templates only.
 
 enp10s0
 enp11s0

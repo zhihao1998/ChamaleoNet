@@ -14,8 +14,8 @@ def pad(pkt):
 def vm_rand_dst_ip_and_dport(l4: str):
     """
     l4: "TCP" or "UDP"
-    随机 dst ip: 130.192.0.1 - 130.192.255.254
-    随机 dst port: 1 - 65535
+    Random dst ip: 130.192.0.1 - 130.192.255.254
+    Random dst port: 1 - 65535
     """
     vm = STLVM()
 
@@ -26,13 +26,13 @@ def vm_rand_dst_ip_and_dport(l4: str):
     vm.var(name="dport", min_value=1, max_value=65535, size=2, op="random")
     vm.write(fv_name="dport", pkt_offset=f"{l4}.dport")
 
-    # 放最后：确保 IP + L4 checksum 都正确
+    # Last: fix IP + L4 checksums
     vm.fix_chksum()
     return vm
 
 
 def vm_rand_dst_ip_only():
-    """ICMP 没端口，只随机 dst ip"""
+    """ICMP has no ports; randomize dst ip only."""
     vm = STLVM()
     vm.var(name="ip_dst", min_value="130.192.0.1", max_value="130.192.255.254",
         size=4, op="random")
@@ -45,7 +45,7 @@ def tcp_stream():
     base = (
         Ether(dst=DST_MAC) /
         IP(src=SRC_IP) /
-        TCP(sport=SRC_PORT, dport=80, flags="S")  # dport 会被 VM 覆盖，这里写啥都行
+        TCP(sport=SRC_PORT, dport=80, flags="S")  # dport overwritten by VM; value here ignored
     )
     return STLStream(
         packet=STLPktBuilder(pkt=pad(base), vm=vm_rand_dst_ip_and_dport("TCP")),
@@ -57,7 +57,7 @@ def udp_stream():
     base = (
         Ether(dst=DST_MAC) /
         IP(src=SRC_IP) /
-        UDP(sport=SRC_PORT, dport=53)  # dport 会被 VM 覆盖
+        UDP(sport=SRC_PORT, dport=53)  # dport overwritten by VM
     )
     return STLStream(
         packet=STLPktBuilder(pkt=pad(base), vm=vm_rand_dst_ip_and_dport("UDP")),
@@ -81,7 +81,7 @@ class STLS1(object):
 
     def get_streams(self, tunables, **kwargs):
         argparse.ArgumentParser().parse_args(tunables)
-        # 这三个 stream 会混合发送；想调整比例就改 pps
+        # These streams are mixed; change pps to tune the blend
         return [
             tcp_stream(),
             udp_stream(),

@@ -6,8 +6,8 @@
 #define P4_VER   1
 #define P4_OP_INSTALL 1
 
-// 单个 datagram 建议 < 64KB，稳妥起见控制在 ~32KB
-// header 8B + N*8B => N=4000 时是 32008B，很安全
+// One datagram should stay < 64KB; ~32KB is a safe margin
+// header 8B + N*8B => N=4000 is 32008B, well within limits
 #define P4_MAX_RULES_PER_MSG 4000
 
 typedef struct __attribute__((packed)) {
@@ -28,7 +28,7 @@ typedef struct __attribute__((packed)) {
 _Static_assert(sizeof(p4_batch_hdr_t) == 8, "hdr must be 8");
 _Static_assert(sizeof(p4_rule_t) == 8, "rule must be 8");
 
-// 每线程一份 buffer：避免多线程锁竞争/缓存抖动
+// Per-thread buffer: avoids lock contention and cache-line bouncing
 static __thread int g_sock = -1;
 static __thread struct sockaddr_un g_addr;
 static __thread p4_rule_t g_rules[P4_MAX_RULES_PER_MSG];
@@ -82,18 +82,18 @@ static int p4_batch_add_rule_raw(uint32_t ip, uint16_t port, uint8_t proto)
     uint64_t last = (uint64_t)g_last_flush_ts.tv_sec * 1000000000ull
                   + g_last_flush_ts.tv_nsec;
 
-    /* 条件 1：时间到了，立马推 */
+    /* Condition 1: interval elapsed, flush immediately */
     if (g_count > 0 && now - last >= FLUSH_INTERVAL_NS) {
         int rc = p4_batch_flush();
         if (rc == 1) {
-            return 1;  // socket 满，保留队列
+            return 1;  // socket full, keep queued rules
         }
         if (rc < 0) {
             return rc;
         }
     }
 
-    /* 条件 2：队列满了，立马推 */
+    /* Condition 2: batch full, flush immediately */
     if (g_count >= P4_MAX_RULES_PER_MSG) {
         int rc = p4_batch_flush();
         if (rc != 0) {

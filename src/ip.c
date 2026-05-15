@@ -164,7 +164,7 @@ int getpayloadlength(struct ip *pip, void *plast)
 static inline void canonicalize_v4(uint32_t *ip1, uint16_t *p1,
                                    uint32_t *ip2, uint16_t *p2)
 {
-  // 如果 (ip1, p1) > (ip2, p2) 就交换
+  // Swap if (ip1, p1) > (ip2, p2)
   if ((*ip1 > *ip2) || (*ip1 == *ip2 && *p1 > *p2))
   {
     uint32_t tip = *ip1;

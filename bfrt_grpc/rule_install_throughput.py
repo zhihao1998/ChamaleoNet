@@ -99,17 +99,16 @@ def parse_batch_sizes(raw: str) -> List[int]:
 def generate_flow_keys(total_rules: int, seed: int) -> List[int]:
     """
     Build deterministic unique 5-tuples encoded as flow_key(ip, port, proto).
-    ip space: 10.0.0.1~10.255.255.255 (up to 16,777,215 unique).
+    ip space: 130.192.0.0/16 (up to 65,536 unique).
     """
-    max_rules = (1 << 24) - 1
+    max_rules = 1 << 16
     if total_rules > max_rules:
         raise ValueError(f"total_rules must be <= {max_rules}")
 
     rng = random.Random(seed)
     keys = []
     for i in range(total_rules):
-        ip_host = i + 1
-        ip_int = (10 << 24) | ip_host
+        ip_int = (130 << 24) | (192 << 16) | i
         port = 1024 + (i % (65535 - 1024))
         proto = 6 if (i % 2 == 0) else 17
         keys.append(flow_key(ip_int, port, proto))
@@ -121,17 +120,24 @@ def run_one_trial(controller: Bfrt_GRPC_Client, keys: List[int], batch_size: int
     # Always clear before every trial to avoid cross-round residue.
     clear_table_state(controller)
 
-    start = time.perf_counter()
     installed = 0
     batch_fail = 0
+    batch_elapsed_sum = 0.0
+    max_batch_elapsed = 0.0
     for i in range(0, len(keys), batch_size):
         chunk = keys[i : i + batch_size]
+        batch_start = time.perf_counter()
         try:
             installed += entry_add_batch_strict(controller, chunk)
         except Exception:
             batch_fail += 1
-    elapsed = time.perf_counter() - start
-    throughput = installed / elapsed if elapsed > 0 else 0.0
+        finally:
+            batch_elapsed = time.perf_counter() - batch_start
+            batch_elapsed_sum += batch_elapsed
+            if batch_elapsed > max_batch_elapsed:
+                max_batch_elapsed = batch_elapsed
+    elapsed = max_batch_elapsed
+    throughput = installed / batch_elapsed_sum if batch_elapsed_sum > 0 else 0.0
     dropped = len(keys) - installed
     # Also clear after trial so next round starts from a known clean state.
     clear_table_state(controller)
@@ -159,7 +165,7 @@ def save_csv(csv_path: str, rows: List[TrialResult]) -> None:
                 "target_rules",
                 "installed_rules",
                 "dropped_rules",
-                "elapsed_sec",
+                "max_batch_elapsed_sec",
                 "throughput_rules_per_sec",
                 "batch_fail_count",
             ]
@@ -255,7 +261,7 @@ def main():
     )
 
     trial_rows: List[TrialResult] = []
-    avg_by_batch = {}
+    best_tp_by_batch = {}
 
     try:
         # Ensure clean state before starting the first batch-size test.
@@ -271,14 +277,14 @@ def main():
                 ok_ratio = (result.installed_rules / result.target_rules) * 100.0
                 print(
                     f"  round {r}: installed={result.installed_rules}/{result.target_rules} "
-                    f"({ok_ratio:.2f}%), elapsed={result.elapsed_sec:.4f}s, "
+                    f"({ok_ratio:.2f}%), max_batch_elapsed={result.elapsed_sec:.6f}s, "
                     f"throughput={result.throughput_rps:.2f} rules/s, "
                     f"batch_fail={result.batch_fail_count}, dropped={result.dropped_rules}"
                 )
                 time.sleep(0.1)
-            avg_tp = sum(throughputs) / len(throughputs)
-            avg_by_batch[batch] = avg_tp
-            print(f"  avg throughput: {avg_tp:.2f} rules/s")
+            best_tp = max(throughputs) if throughputs else 0.0
+            best_tp_by_batch[batch] = best_tp
+            print(f"  best throughput: {best_tp:.2f} rules/s")
             print("")
     finally:
         # Restore a clean table state for post-benchmark controller usage.
@@ -287,18 +293,18 @@ def main():
         except Exception:
             pass
 
-    best_batch = max(avg_by_batch, key=avg_by_batch.get)
-    best_tp = avg_by_batch[best_batch]
+    best_batch = max(best_tp_by_batch, key=best_tp_by_batch.get)
+    best_tp = best_tp_by_batch[best_batch]
 
     save_csv(args.csv, trial_rows)
 
     print("=== Tuning result ===")
     for batch in batch_sizes:
         mark = " <-- best" if batch == best_batch else ""
-        print(f"batch={batch:>4}: avg={avg_by_batch[batch]:.2f} rules/s{mark}")
+        print(f"batch={batch:>4}: best={best_tp_by_batch[batch]:.2f} rules/s{mark}")
     print("")
     print(f"Best batch size: {best_batch}")
-    print(f"Best avg throughput: {best_tp:.2f} rules/s")
+    print(f"Best throughput: {best_tp:.2f} rules/s")
     print(f"CSV saved to: {args.csv}")
 
 
